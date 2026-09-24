@@ -58,7 +58,7 @@
   h2::after{content:"";flex:1;height:1px;background:var(--line)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 
-  /* Schwächen */
+  /* weaknesses */
   .weak{padding:18px 20px}
   .weak .lead{margin:0 0 16px;color:var(--txt2)}
   .weak .lead b{color:var(--txt)}
@@ -254,7 +254,7 @@
     <button id="themeBtn" class="hbtn" title="Hell/Dunkel umschalten">🌙</button>
     <button id="notifBtn" class="hbtn" title="Benachrichtigungen (Cooldown vorbei, Sperre, Ziel erreicht)">🔔</button>
     <button id="tradesBtn" class="hbtn" title="Trade-Akte: Einzelheiten, SL/TP-Chronik und Screenshots je Trade">📁</button>
-    <button id="reportBtn" class="hbtn" title="Wochen-Report öffnen (druckbar)">📄</button>
+    <button id="reportBtn" class="hbtn" title="Open weekly report (printable)">📄</button>
     <select id="acctSel" class="chip" style="display:none;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:4px 8px;font:inherit"></select>
     <span id="chip" class="chip">—</span>
     <div class="eq"><div class="l">KAPITAL</div><div class="v" id="equity">—</div></div>
@@ -289,7 +289,7 @@
       <div class="gauges" id="gauges"></div>
       <div class="gact">
         <button id="enddayBtn" class="endday">🛑 Tag beenden</button>
-        <span class="gnote">Freiwillige Selbstsperre bis Server-Mitternacht — kann <b>nicht</b> rückgängig gemacht werden (Tighten-Only).</span>
+        <span class="gnote">Voluntary self-lock until server midnight — <b>cannot</b> be undone (tighten-only).</span>
       </div>
     </div>
 
@@ -322,14 +322,14 @@
       <div class="hourcap" id="hourCap"></div>
     </div>
 
-    <h2 data-i18n="h2.weak">Deine Schwächen · wo die Regeln am häufigsten bremsen</h2>
+    <h2 data-i18n="h2.weak">Your weak spots · where the rules stop you most often</h2>
     <div class="card weak">
       <p class="lead" id="weakLead">…</p>
       <div id="weakBars"></div>
       <div class="totrow" id="totrow"></div>
     </div>
 
-    <h2>Kalender · Gewinn / Verlust pro Tag <span style="text-transform:none;font-weight:500;color:var(--txt3)">— Tag anklicken für Details</span></h2>
+    <h2>Calendar · profit / loss per day <span style="text-transform:none;font-weight:500;color:var(--txt3)">— click a day for details</span></h2>
     <div class="months" id="months"></div>
 
     <h2 data-i18n="h2.rules">Wo stehe ich · aktive Regeln (live)</h2>
@@ -346,7 +346,7 @@
 
   <div id="offline" class="empty" style="padding:70px 20px">
     <div style="font-size:17px;color:var(--txt2);margin-bottom:8px">Warte auf MetaTrader…</div>
-    <div>Noch keine Live-Daten. Bitte prüfen: MT4 läuft, EA <b>Mamal-Trading</b> auf einem Chart,
+    <div>No live data yet. Please check: MT4 is running, the EA <b>Mamal-Trading</b> is on a chart,
       <b>InpCockpit = true</b>, AutoTrading an.</div>
   </div>
 
@@ -390,30 +390,30 @@ const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ESCMAP[c]);
 
 const RULES = {
   R1:['Risiko / Trade','fester %-Satz pro Trade'], R2:['Idee-Cap','eine Idee = ein Budget, kein Nachladen'],
-  R3:['Tagesbudget','max. Risiko, das du pro Tag eröffnen darfst'], R4:['Tagesverlust','Tages-Verlust-Sperre'],
+  R3:['Tagesbudget','max. risk you may open per day'], R4:['Tagesverlust','Tages-Verlust-Sperre'],
   R4b:['Max-Verlust','harte Gesamt-Verlust-Grenze'], R5:['Cooldown','Zwangspause nach Verlusten'],
   R6:['Verlustserie','Sperre nach N Verlusten in Folge'], R7:['SL/TP-Pflicht','Trade ohne SL/TP wird geschlossen'],
   R8:['Mindest-CRV','zu wenig Chance/Risiko'], R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],
   R12:['Gesamtrisiko','zu viel gleichzeitiges Risiko offen'],
   R13:['Tagesziel','Gewinn sichern bei Ziel'], R14:['Mindestpause','zu schnelle Folge-Trades'],
-  R15:['Min-SL-Abstand','Stop zu eng am Preis'], R16:['Session/News','außerhalb Handelszeit'],
-  R17:['Korrelation','zu viel gleiche Währung'], R18:['Wochenlimit','Wochen-Verlust-Deckel'],
+  R15:['Min-SL-Abstand','Stop zu eng am Preis'], R16:['Session/News','outside trading hours'],
+  R17:['Korrelation','too much of the same currency'], R18:['Wochenlimit','Wochen-Verlust-Deckel'],
   R19:['De-Risk','Risiko runter nach Verlusten'], R25:['Revenge','Gegen-Trade direkt nach Verlust'],
-  R22:['Nur Panel-Trades','manuell/Handy geöffnet — wird zurückgenommen']
+  R22:['Nur Panel-Trades','opened manually/on phone — will be reverted']
 };
 const INSIGHT = {
-  R3:'Du willst öfter handeln, als dein Tagesbudget erlaubt — nach dem Limit ist Feierabend.',
+  R3:'You want to trade more often than your daily budget allows — once the limit is hit, you're done for the day.',
   R15:'Du setzt den Stop-Loss oft zu eng. (Diese Regel ist inzwischen ausgeschaltet.)',
   R12:'Du hast oft zu viel Risiko gleichzeitig offen — weniger parallele Trades.',
-  R2:'Du lädst dieselbe Idee nach, statt eine Position zu belassen.',
+  R2:'You keep adding to the same idea instead of leaving one position alone.',
   R6:'Verlustserien — halte die Pausen ein, statt weiterzumachen.',
-  R5:'Nach Verlusten drängst du gleich weiter — die Cooldown-Pause ist zum Abkühlen da.',
-  R22:'Du handelst am Panel vorbei (manuell/Handy). Diese Trades umgehen alle Regeln und werden zurückgenommen — der Trade füllt aber vorher real, Spread und Slippage bleiben dein Verlust.',
+  R5:'After losses you push straight on — the cooldown pause is there to cool off.',
+  R22:'You trade past the panel (manually/on phone). These trades bypass all rules and get reverted — but the trade fills for real first, so spread and slippage stay your loss.',
   R25:'Rache-Trades direkt nach einem Verlust.', R14:'Du feuerst Trades zu schnell hintereinander ab.',
-  R8:'Du nimmst Trades mit zu wenig Chance im Verhältnis zum Risiko.',
-  R17:'Du häufst zu viel derselben Währung an.', R4:'Tagesverlust-Grenze erreicht.', R18:'Wochen-Verlust-Grenze.'
+  R8:'You take trades with too little reward relative to the risk.',
+  R17:'You pile up too much of the same currency.', R4:'Tagesverlust-Grenze erreicht.', R18:'Wochen-Verlust-Grenze.'
 };
-const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const MONTHS = ['Januar','Februar','Mar','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 const DOW = ['Mo','Di','Mi','Do','Fr','Sa','So'];
 
 function lossCls(f){ return f>=1?'r':f>=0.8?'a':f>=0.5?'a':'g'; }
@@ -445,7 +445,7 @@ function info(id,name,ex,val){
 function cooldownCard(s){
   const a=s.cooldownSec>0, mm=String(Math.floor(s.cooldownSec/60)).padStart(2,'0'), ss=String(s.cooldownSec%60).padStart(2,'0');
   return `<div class="rc"><div class="top"><span class="rid">R5</span><span class="rn">Cooldown</span>
-    <span class="rs ${a?'a':'g'}">${a?'Pause läuft':'bereit'}</span></div>
+    <span class="rs ${a?'a':'g'}">${a?'pause running':'ready'}</span></div>
     <div class="ex">Nach ${esc(s.cooldownAfter)} Verlusten in Folge eine Zwangspause von ${esc(s.cooldownMin)} Min.</div>
     <div class="val ${a?'a':'g'}"><b>${a?mm+':'+ss:'—'}</b><span class="lim">${a?' bis wieder frei':' keine Pause aktiv'}</span></div>
     <div class="bar"><i class="${a?'bg-a':'bg-g'}" style="width:${a?clamp(s.cooldownSec/(s.cooldownMin*60))*100:0}%"></i></div></div>`;
@@ -487,20 +487,20 @@ function renderState(s,ageMs){
   const r=blockReason(s), bn=$('banner'); bn.style.display='block';
   const stale = ageMs!=null && ageMs>20000;   // MT4/EA no longer writes -> state no longer trustworthy
   if(r){ bn.className='banner '+(s.statusColor==='red'?'red':'amber'); bn.textContent='Aktuell keine neuen Trades: '+r; }
-  else if(stale){ bn.className='banner amber'; bn.textContent='Daten veraltet — MT4/EA prüfen.'; }
+  else if(stale){ bn.className='banner amber'; bn.textContent='Data stale — check MT4/EA.'; }
   else { bn.className='banner green'; bn.textContent='Alles frei — du kannst nach Plan handeln.'; }
 
   const c=[];
   c.push(meter('R4','Tagesverlust','Mehr Verlust am Tag als das Limit → gesperrt bis morgen.',s.dailyDD,s.dailyLimit,'%',{locked:s.dayLock}));
   c.push(meter('R4b','Max-Verlust','Gesamtverlust seit Kontostart. Markierung = Warnpuffer.',s.totalDD,s.maxLoss,'%',{locked:s.hardLock,warnAt:s.maxLossWarn}));
-  c.push(meter('R3','Tagesbudget','So viel Risiko darfst du pro Tag eröffnen.',s.dayRisk,s.dayBudget,'%',{extra:'noch '+de(Math.max(0,s.dayBudget-s.dayRisk))+'% frei'}));
+  c.push(meter('R3','Tagesbudget','This much risk you may open per day.',s.dayRisk,s.dayBudget,'%',{extra:'noch '+de(Math.max(0,s.dayBudget-s.dayRisk))+'% frei'}));
   c.push(meter('R12','Gesamtrisiko','Risiko aller offenen Trades zusammen.',s.heat,s.heatCap,'%',{}));
   c.push(meter('R6','Verlustserie','Nach so vielen Verlusten in Folge sperrt der Tag.',s.consec,s.lockAfter,'',{count:true,locked:s.consec>=s.lockAfter}));
   c.push(cooldownCard(s));
   c.push(progress('R13','Tagesziel','Bei diesem Gewinn ist Schluss — Gewinn sichern.',s.profitPct,s.targetPct,'%',s.targetHit));
-  c.push(meter('R18','Wochenlimit','Verlust-Deckel für die ganze Woche.',s.weekDD,s.weekLimit,'%',{locked:s.weekLock}));
+  c.push(meter('R18','Wochenlimit','Loss cap for the whole week.',s.weekDD,s.weekLimit,'%',{locked:s.weekLock}));
   c.push(info('R1','Risiko / Trade','Jeder Trade riskiert genau diesen festen Anteil.',de(s.riskPerTrade)+' %'));
-  c.push(info('R2','Idee-Cap','Eine Idee darf zusammen höchstens so viel riskieren.',de(s.ideaCap)+' %'));
+  c.push(info('R2','Idee-Cap','One idea may risk at most this much in total.',de(s.ideaCap)+' %'));
   c.push(info('R7','SL/TP-Pflicht','Jeder Trade braucht Stop-Loss und Take-Profit.','immer an'));
   $('rules').innerHTML=c.join('');
 
@@ -525,8 +525,8 @@ function renderCoach(a){
 
   const edge=a.edge||[], v=a.verdict||{};
   $('edgeVerdict').innerHTML= edge.length
-    ? `Dein <b>Edge</b>: ${v.best?`${esc(v.best.sym)} ${esc(v.best.s)} (${eur(v.best.net)})`:'—'}. Dein <b>Leck</b>: ${v.worst?`${esc(v.worst.sym)} ${esc(v.worst.s)} (${eur(v.worst.net)})`:'—'}. Handle bewusst dein Fenster — hör auf, dein Leck zu füttern.`
-    : 'Noch zu wenige geschlossene Trades für ein Muster (Zahlen werden schärfer, je mehr du handelst).';
+    ? `Dein <b>Edge</b>: ${v.best?`${esc(v.best.sym)} ${esc(v.best.s)} (${eur(v.best.net)})`:'—'}. Dein <b>Leck</b>: ${v.worst?`${esc(v.worst.sym)} ${esc(v.worst.s)} (${eur(v.worst.net)})`:'—'}. Trade your window deliberately — stop feeding your leak.`
+    : 'Still too few closed trades for a pattern (numbers get sharper the more you trade).';
   let rows=`<div class="erow ehead"><div>Symbol</div>${SESS.map(s=>`<div style="text-align:center">${s}</div>`).join('')}<div style="text-align:right">Gesamt</div></div>`;
   for(const e of edge){
     let cells='';
@@ -552,14 +552,14 @@ function renderCoach(a){
   $('hourStrip').innerHTML=strip;
   $('hourCap').innerHTML= hotH>=0&&hotV>0
     ? `Deine meisten Ablehnungen: <b>${hotH}:00 Uhr (${hotV}×)</b> — dann klickst du am impulsivsten. Dieses Fenster bewusst meiden.`
-    : 'Noch keine auffälligen Ablehnungs-Zeiten.';
+    : 'No conspicuous rejection times yet.';
 }
 const rankColor = i => i===0?'#dc2626':i===1?'#ea7317':i===2?'#d99a06':'#2563eb';
 function renderWeak(a){
   const rules=a.rules||[];
   if(!rules.length){ $('weakLead').textContent='Noch keine Regel-Eingriffe aufgezeichnet — sauber.'; $('weakBars').innerHTML=''; return; }
   const top=rules[0], topName=(RULES[top.id]||[top.id])[0];
-  $('weakLead').innerHTML=`Deine häufigste Bremse: <b>${esc(top.id)} · ${esc(topName)}</b> (${top.count}×). ${INSIGHT[top.id]||''}`;
+  $('weakLead').innerHTML=`Your most frequent brake: <b>${esc(top.id)} · ${esc(topName)}</b> (${top.count}×). ${INSIGHT[top.id]||''}`;
   const max=rules[0].count;
   $('weakBars').innerHTML=rules.map((r,i)=>{
     const meta=RULES[r.id]||[r.id,'']; const w=Math.max(4,Math.round(r.count/max*100));
@@ -695,7 +695,7 @@ function checkTransitions(s){
     // v0.39-fix (Verify): "wieder handeln" (trade again) only when NOTHING really blocks any more (same logic as the banner) —
     // otherwise the toast reported "frei" (free) while e.g. the weekly limit was still locking.
     if(prevS.cooldown && !s.cooldown && blockReason(s)==='') notifyMsg('Cooldown vorbei — du darfst wieder handeln.');
-    if(!prevS.dayLock && s.dayLock)   notifyMsg('Tagesverlust-Sperre aktiv — Feierabend für heute.');
+    if(!prevS.dayLock && s.dayLock)   notifyMsg('Daily loss lock active — done for today.');
     if(!prevS.hardLock && s.hardLock) notifyMsg('MAX-VERLUST-Sperre aktiv.');
     if(!prevS.weekLock && s.weekLock) notifyMsg('Wochenlimit erreicht — diese Woche ist beendet.');
     if(!prevS.targetHit && s.targetHit) notifyMsg('Tagesziel erreicht — Gewinn gesichert.');
@@ -730,7 +730,7 @@ function buildLock(s){
   if(s.dayLock || s.targetHit){
     const d=new Date(sn||now); const end=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1,0,0,0);
     return {kind:s.targetHit?'TAGESZIEL ERREICHT — Feierabend':'TAGESSPERRE',
-            why:s.targetHit?'Dein Tagesziel ist erreicht. Gewinn sichern — morgen weiter.':'Das Tages-Verlustlimit ist erreicht. Bis zum nächsten Handelstag gesperrt.',
+            why:s.targetHit?'Dein Tagesziel ist erreicht. Gewinn sichern — morgen weiter.':'The daily loss limit is reached. Locked until the next trading day.',
             endMs:now+Math.max(0,end-sn), totalSec:86400, crit:!s.targetHit};
   }
   return null;
@@ -747,7 +747,7 @@ function paintLock(){
   $('lmKind').textContent=LOCK.kind; $('lmWhy').textContent=LOCK.why;
   if(!LOCK.endMs){ $('lmVal').textContent='—'; $('lmUntil').textContent='bis manuell aufgehoben'; $('lmBar').style.width='100%'; return; }
   const rest=LOCK.endMs-Date.now();
-  if(rest<=0){ $('lmVal').textContent='00:00'; $('lmUntil').textContent='läuft aus…'; $('lmBar').style.width='0%'; return; }
+  if(rest<=0){ $('lmVal').textContent='00:00'; $('lmUntil').textContent='expiring…'; $('lmBar').style.width='0%'; return; }
   $('lmVal').textContent=hhmmss(rest);
   $('lmUntil').textContent='frei um '+new Date(LOCK.endMs).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' (lokal)';
   $('lmBar').style.width=(LOCK.totalSec>0?clamp(rest/1000/LOCK.totalSec)*100:100).toFixed(1)+'%';
@@ -779,9 +779,9 @@ function renderGauges(s){
 }
 $('enddayBtn').addEventListener('click',async()=>{
   const acct=ACCT||(LASTSTATE&&LASTSTATE.account)||'';
-  if(!confirm('Tag wirklich beenden?\n\nDer EA sperrt neue Trades bis Server-Mitternacht. Das kann NICHT rückgängig gemacht werden.')) return;
+  if(!confirm('Really end the day?\n\nThe EA blocks new trades until server midnight. This can NOT be undone.')) return;
   try{ const r=await fetch('/cmd/endday?acct='+encodeURIComponent(acct),{method:'POST'});
-    if(r.ok){ alert('Selbstsperre gesetzt — der EA übernimmt sie in wenigen Sekunden.'); }
+    if(r.ok){ alert('Self-lock set — the EA picks it up in a few seconds.'); }
     else alert('Fehler: '+await r.text());
   }catch(e){ alert('Server nicht erreichbar.'); }
 });
@@ -855,7 +855,7 @@ async function loadEquity(){
   try{
     const pts=await (await fetch('/equity'+AQ()+(AQ()?'&':'?')+'n=2000')).json();
     const svg=$('eqChart'); const W=1000,H=190; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-    if(!pts||pts.length<2){ svg.innerHTML=`<text x="20" y="30" fill="var(--txt3)" font-size="13">Noch keine Equity-Daten — entstehen automatisch, sobald der EA läuft.</text>`; $('eqCap').textContent=''; return; }
+    if(!pts||pts.length<2){ svg.innerHTML=`<text x="20" y="30" fill="var(--txt3)" font-size="13">No equity data yet — it appears automatically once the EA is running.</text>`; $('eqCap').textContent=''; return; }
     const eqs=pts.map(p=>p.eq);
     const floor=(LASTSTATE&&LASTSTATE.dayBase>0&&LASTSTATE.dailyLimit>0)?LASTSTATE.dayBase*(1-LASTSTATE.dailyLimit/100):null;
     let mn=Math.min(...eqs), mx=Math.max(...eqs);
@@ -908,16 +908,16 @@ function renderStats(a){
      <div class="stat"><div class="l">Profit-Factor</div><div class="v">${pf}</div></div>
      <div class="stat"><div class="l">Expectancy / Trade</div><div class="v ${st.expectancy>=0?'net-pos':'net-neg'}">${eur(st.expectancy||0)}</div></div>
      <div class="stat"><div class="l">Beste Stunde</div><div class="v">${bi>=0?bi+':00':'—'}</div><div class="gnote">${bi>=0?eur(bv):''}</div></div>
-     <div class="stat"><div class="l">Schwächste Stunde</div><div class="v">${wi>=0?wi+':00':'—'}</div><div class="gnote">${wi>=0?eur(wv):''}</div></div>
+     <div class="stat"><div class="l">Weakest hour</div><div class="v">${wi>=0?wi+':00':'—'}</div><div class="gnote">${wi>=0?eur(wv):''}</div></div>
      ${(function(){   // v0.52: entry timing within the candle — early/middle/late
         const th=(a.stats&&a.stats.thirds)||[0,0,0], tn=(a.stats&&a.stats.thirdNet)||[0,0,0];
         const ges=th[0]+th[1]+th[2];
         if(!ges) return '';
-        const lbl=['früh','mittig','spät'], col=['var(--good)','var(--warn)','var(--crit)'];
+        const lbl=['early','mittig','late'], col=['var(--good)','var(--warn)','var(--crit)'];
         let best=0; for(let i=1;i<3;i++) if(tn[i]>tn[best]) best=i;
         const bars=th.map((n,i)=>`<span style="color:${col[i]}" title="${lbl[i]}es Drittel: ${n} Einstiege, ${eur(tn[i])}">${n}</span>`).join('<span style="color:var(--txt3)"> · </span>');
         return `<div class="stat"><div class="l">Einstieg in der Kerze</div><div class="v" style="font-size:17px">${bars}</div>
-          <div class="gnote">früh · mittig · spät — am besten läuft <b style="color:${col[best]}">${lbl[best]}</b> (${eur(tn[best])})</div></div>`;
+          <div class="gnote">early · middle · late — best results in <b style="color:${col[best]}">${lbl[best]}</b> (${eur(tn[best])})</div></div>`;
      })()}
      <div class="stat"><div class="l">Davon manuell</div><div class="v" style="color:${(a.totals&&a.totals.manualN)?'var(--amber)':'var(--txt2)'}">${(a.totals&&a.totals.manualN)||0}</div>
        <div class="gnote">${(a.totals&&a.totals.manualN)?eur(a.totals.manualNet||0)+' · am Panel vorbei':'keine erkannt (ab EA v0.44, laufender Tag)'}</div></div>`;
@@ -938,12 +938,12 @@ async function tick(){
     renderState(j.state,j.ageMs);
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
     LOCK=buildLock(j.state); paintLock();   // v0.46: Sperr-Monitor mit jedem Poll neu synchronisieren
-    const age=j.ageMs==null?9e9:j.ageMs; const cls=age<6000?'live':age<20000?'stale':'off'; const txt=age<6000?'live':age<20000?'verzögert':'MT4 gestoppt?';
+    const age=j.ageMs==null?9e9:j.ageMs; const cls=age<6000?'live':age<20000?'stale':'off'; const txt=age<6000?'live':age<20000?'delayed':'MT4 stopped?';
     // Show the real server port (j.serverPort); state.port is only the EA input InpCockpitPort.
     const srvPort=j.serverPort!=null?j.serverPort:j.state.port;
     const mism=j.serverPort!=null&&j.state.port!=null&&Number(j.state.port)!==Number(j.serverPort);
     const portTx='localhost:'+esc(srvPort)+(mism
-      ? ` <span class="stale" title="Der EA-Panel-Button öffnet localhost:${esc(j.state.port)} — dort läuft nichts. InpCockpitPort auf ${esc(srvPort)} setzen.">⚠ EA-Input ${esc(j.state.port)}</span>`
+      ? ` <span class="stale" title="The EA panel button opens localhost:${esc(j.state.port)} — nothing is running there. Set InpCockpitPort to ${esc(srvPort)}.">⚠ EA input ${esc(j.state.port)}</span>`
       : '');
     st.innerHTML=`<span class="${cls}">●</span> Stand ${esc(j.state.srvtime)} · ${txt} · EA v${esc(j.state.v||'?')} · Profil ${esc(j.state.profile)}${j.state.funded?' (FUNDED)':''} · ${portTx}`;
   }catch(e){ fetchFail(); }

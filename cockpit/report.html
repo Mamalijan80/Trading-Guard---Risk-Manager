@@ -91,9 +91,9 @@ async function load(){
     +(bl===0
         ? (man===0 ? 'Kein einziger Regel-Block — sehr diszipliniert gehandelt.'
                    : `Keine Regel-Blocks — aber ${man} Trade(s) liefen am Panel vorbei; dort greift KEINE Regel.`)
-        : `${bl}× hat dich eine Regel gestoppt${top?` — am häufigsten ${top.id} (${RN[top.id]||''})`:''}. Jeder Block war ein Moment, in dem dein Plan dich vor dir selbst geschützt hat.`)
-    +(man>0&&bl>0?` ${man} Trade(s) liefen zusätzlich am Panel vorbei (ungeschützt).`:'')
-    +(disc>0&&disc<40?' Nimm dir für nächste Woche WENIGER Versuche vor — Qualität statt Frequenz.':'');
+        : `${bl}× a rule stopped you${top?` — most often ${top.id} (${RN[top.id]||''})`:''}. Every block was a moment where your plan protected you from yourself.`)
+    +(man>0&&bl>0?` ${man} trade(s) also bypassed the panel (unprotected).`:'')
+    +(disc>0&&disc<40?' Plan FEWER attempts for next week — quality over frequency.':'');
 }
 load();
 </script>

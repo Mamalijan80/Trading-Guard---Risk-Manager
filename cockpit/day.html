@@ -59,7 +59,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="back"><a href="/">← zurück zum Cockpit</a></div>
+  <div class="back"><a href="/">← back to the cockpit</a></div>
   <div class="hero">
     <div class="day"><small>Handelstag</small><span id="dtitle">…</span></div>
     <div class="net"><div class="l">Netto an diesem Tag</div><div class="v" id="net">—</div></div>
@@ -89,8 +89,8 @@ const eur=v=>(v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumF
 // Defuse foreign text (broker symbols, free journal tags) before innerHTML.
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
-const RULES={R1:['Risiko / Trade','fester %-Satz'],R2:['Idee-Cap','kein Nachladen derselben Idee'],R3:['Tagesbudget','Tages-Risiko-Budget aufgebraucht'],R4:['Tagesverlust','Tages-Verlust-Sperre'],R4b:['Max-Verlust','harte Gesamt-Grenze'],R5:['Cooldown','Zwangspause nach Verlusten'],R6:['Verlustserie','N Verluste in Folge'],R7:['SL/TP-Pflicht','Trade ohne SL/TP geschlossen'],R8:['Mindest-CRV','zu wenig Chance/Risiko'],R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],R12:['Gesamtrisiko','zu viel gleichzeitig offen'],R13:['Tagesziel','Ziel erreicht'],R14:['Mindestpause','zu schnelle Folge-Trades'],R15:['Min-SL-Abstand','Stop zu eng'],R16:['Session/News','außerhalb Handelszeit'],R17:['Korrelation','zu viel gleiche Währung'],R18:['Wochenlimit','Wochen-Verlust-Deckel'],R19:['De-Risk','Risiko runter nach Verlusten'],R22:['Nur Panel-Trades','manuell/Handy geöffnet — wird zurückgenommen'],R25:['Revenge','Gegen-Trade nach Verlust']};
-const MON=['Jan','Feb','März','Apr','Mai','Juni','Juli','Aug','Sep','Okt','Nov','Dez'];
+const RULES={R1:['Risiko / Trade','fester %-Satz'],R2:['Idee-Cap','kein Nachladen derselben Idee'],R3:['Tagesbudget','Tages-Risiko-Budget aufgebraucht'],R4:['Tagesverlust','Tages-Verlust-Sperre'],R4b:['Max-Verlust','harte Gesamt-Grenze'],R5:['Cooldown','Zwangspause nach Verlusten'],R6:['Verlustserie','N Verluste in Folge'],R7:['SL/TP-Pflicht','Trade ohne SL/TP geschlossen'],R8:['Mindest-CRV','zu wenig Chance/Risiko'],R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],R12:['Gesamtrisiko','zu viel gleichzeitig offen'],R13:['Tagesziel','Ziel erreicht'],R14:['Mindestpause','zu schnelle Folge-Trades'],R15:['Min-SL-Abstand','Stop zu eng'],R16:['Session/News','outside trading hours'],R17:['Korrelation','too much of the same currency'],R18:['Wochenlimit','Wochen-Verlust-Deckel'],R19:['De-Risk','Risiko runter nach Verlusten'],R22:['Nur Panel-Trades','opened manually/on phone — will be reverted'],R25:['Revenge','Gegen-Trade nach Verlust']};
+const MON=['Jan','Feb','Mar','Apr','Mai','Juni','Juli','Aug','Sep','Okt','Nov','Dez'];
 function fmtDay(d){ const p=d.split('.'); if(p.length!==3)return d; return `${Number(p[2])}. ${MON[Number(p[1])-1]} ${p[0]}`; }
 function badgeFor(ev){const e=(ev||'').toUpperCase();if(e==='CLOSE_MAN')return 'bd-man';if(e==='OPEN')return 'bd-open';if(e==='CLOSE')return 'bd-close';if(e==='BLOCKED')return 'bd-block';if(e.indexOf('PROTECT')>=0)return 'bd-prot';if(['TEST','INFO','PROFILE'].includes(e))return 'bd-test';return 'bd-lock';}
 

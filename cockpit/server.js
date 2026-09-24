@@ -498,7 +498,18 @@ function tradeDossier(ticket, acct) {
   let slWorse = 0, slBetter = 0, tpShorter = 0, tpLonger = 0;
   for (const m of moves) {
     const t = m.tag || '';
-    if (/Risiko ERHOEHT|Risiko unbegrenzt/i.test(t)) slWorse++;
+    // v0.67: read the MACHINE CODE, not the prose. The EA prefixes every verdict with a stable
+    //   token ([SL_WORSE], [TP_LONGER], ...). Before that, this classification matched German wording,
+    //   which meant translating the journal would silently zero these counters with no error at all.
+    //   The German patterns stay as a fallback so journals written before v0.67 still evaluate.
+    const code = (t.match(/^\[([A-Z_]+)\]/) || [])[1] || '';
+    if (code) {
+      if (code === 'SL_WORSE'   || code === 'SL_GONE')   slWorse++;
+      else if (code === 'SL_BETTER')                     slBetter++;
+      else if (code === 'TP_SHORTER')                    tpShorter++;
+      else if (code === 'TP_LONGER')                     tpLonger++;
+    }
+    else if (/Risiko ERHOEHT|Risiko unbegrenzt/i.test(t)) slWorse++;
     else if (/Risiko gesenkt/i.test(t))              slBetter++;
     else if (/Gewinn abgekuerzt|Gewinn abgekürzt/i.test(t)) tpShorter++;
     else if (/Ziel vergroessert|Ziel vergrößert/i.test(t))  tpLonger++;
@@ -511,40 +522,40 @@ function tradeDossier(ticket, acct) {
   // ---- Zusammenfassung formulieren -----------------------------------------
   const S = [];
   if (open) {
-    S.push(`${open.dir} ${open.symbol} mit ${num(open.raw[9]).toFixed(2)} Lot um ${(open.time||'').slice(11)} eröffnet` +
-           (plannedRisk ? ` — geplantes Risiko ${plannedRisk.toFixed(2)}.` : '.'));
-    if (third) S.push(third === '1' ? 'Einstieg im ersten Kerzendrittel — früh, nicht hinterhergelaufen.'
+    S.push(`${open.dir} ${open.symbol} opened with ${num(open.raw[9]).toFixed(2)} lots at ${(open.time||'').slice(11)}` +
+           (plannedRisk ? ` — planned risk ${plannedRisk.toFixed(2)}.` : '.'));
+    if (third) S.push(third === '1' ? 'Entry in the first third of the candle — early, not chasing.'
                     : third === '2' ? 'Einstieg im mittleren Kerzendrittel.'
-                    : 'Einstieg im letzten Kerzendrittel — spät; oft eine Reaktion auf eine schon gelaufene Bewegung.');
+                    : 'Entry in the last third of the candle — late; often a reaction to a move that already happened.');
   }
-  if (!moves.length) S.push('SL und TP blieben unverändert — der Plan wurde eingehalten.');
+  if (!moves.length) S.push('SL and TP stayed unchanged — the plan was followed.');
   else {
-    S.push(`SL/TP wurde ${moves.length}× verschoben (${slBetter}× risikosenkend, ${slWorse}× risikoerhöhend` +
-           `${tpShorter ? `, ${tpShorter}× Ziel verkürzt` : ''}${tpLonger ? `, ${tpLonger}× Ziel erweitert` : ''}).`);
-    if (slWorse) S.push('Achtung: Der Stop wurde vom Einstieg weg bewegt — das erhöht den Verlust über den Plan hinaus. Das ist das teuerste wiederkehrende Muster im Trading.');
-    if (slBetter && !slWorse) S.push('Der Stop wurde nur enger gezogen — sauberes Risikomanagement.');
-    if (tpShorter) S.push('Das Ziel wurde näher geholt: Gewinne werden dadurch systematisch kleiner als die Verluste.');
+    S.push(`SL/TP was moved ${moves.length}× (${slBetter}× lowering risk, ${slWorse}× raising risk` +
+           `${tpShorter ? `, ${tpShorter}× target shortened` : ''}${tpLonger ? `, ${tpLonger}× target extended` : ''}).`);
+    if (slWorse) S.push('Warning: the stop was moved away from the entry — that pushes the loss beyond the plan. It is the most expensive recurring pattern in trading.');
+    if (slBetter && !slWorse) S.push('The stop was only tightened — clean risk management.');
+    if (tpShorter) S.push('The target was pulled closer: this makes your wins systematically smaller than your losses.');
   }
-  if (be.length) S.push('Position wurde per RISK-FREE auf Break-Even abgesichert.');
-  if (panel.length) S.push(`${panel.length}× per Panel-Knopf geschlossen (${panel.map(x => (x.tag||'').split(' ')[0]).join(', ')}).`);
+  if (be.length) S.push('Position was secured at break-even via RISK FREE.');
+  if (panel.length) S.push(`${panel.length}× closed via a panel button (${panel.map(x => (x.tag||'').split(' ')[0]).join(', ')}).`);
   if (net !== null) {
-    S.push(net >= 0 ? `Ergebnis: +${net.toFixed(2)} — im Plus.` : `Ergebnis: ${net.toFixed(2)}.`);
-    if (backfilled) S.push('Dieses Ergebnis stammt aus der MT4-Kontohistorie (Nachtrag) — Ticket und Betrag exakt wie beim Broker.');
-    if (inferred) S.push('Hinweis: Dieses Ergebnis wurde über Symbol und Reihenfolge zugeordnet, nicht über die Ticket-Nummer — bis EA v0.64 fehlte sie in der Close-Zeile. Bei mehreren gleichzeitigen Positionen im selben Symbol kann die Zuordnung danebenliegen; maßgeblich bleibt der Kontoauszug.');
+    S.push(net >= 0 ? `Result: +${net.toFixed(2)} — in profit.` : `Result: ${net.toFixed(2)}.`);
+    if (backfilled) S.push('This result comes from the MT4 account history (backfill) — ticket and amount exactly as at the broker.');
+    if (inferred) S.push('Note: this result was matched by symbol and order, not by ticket number — up to EA v0.64 it was missing from the close line. With several open positions in the same symbol the match can be wrong; the broker statement is authoritative.');
     if (net < 0 && plannedRisk > 0 && Math.abs(net) > plannedRisk * 1.15)
-      S.push(`Der Verlust liegt ${(Math.abs(net) / plannedRisk).toFixed(1)}× über dem geplanten Risiko — Ursache prüfen (verschobener Stop, Slippage oder Gap).`);
+      S.push(`The loss is ${(Math.abs(net) / plannedRisk).toFixed(1)}× above the planned risk — check the cause (moved stop, slippage or gap).`);
     if (net < 0 && plannedRisk > 0 && Math.abs(net) <= plannedRisk * 1.15)
-      S.push('Der Verlust blieb im geplanten Rahmen — genau so soll ein Stop wirken.');
+      S.push('The loss stayed within the planned range — that is exactly how a stop should work.');
   } else {
     // v0.65: up to EA v0.64 the group path of the close resolution wrote the CLOSE line with ticket 0. A
     //   result could therefore never be attributed to its entry — the file claimed for EVERY trade
     //   "noch offen" (still open). For entries from that period this can no longer be repaired from the journal; better
-    //   ehrlich benennen als weiter „offen" behaupten.
+    //   journal; naming that honestly beats going on claiming "open".
     const openTs = open && open.time ? Date.parse(open.time.replace(/\./g, '-').replace(' ', 'T')) : NaN;
     const stale  = Number.isFinite(openTs) && (Date.now() - openTs > 6 * 3600 * 1000);
     S.push(stale
-      ? 'Ergebnis nicht zuordenbar: Der Einstieg liegt länger zurück, und bis EA v0.64 wurde in der Close-Zeile kein Ticket mitgeschrieben. Der echte Ausgang steht im Kontoauszug des Brokers. Ab v0.65 wird das Ergebnis wieder verbucht.'
-      : 'Position ist noch offen — das Ergebnis wird verbucht, sobald sie geschlossen ist.');
+      ? 'Result cannot be matched: the entry is further back, and up to EA v0.64 no ticket was written to the close line. The real outcome is in your broker statement. From v0.65 on, the result is booked again.'
+      : 'Position is still open — the result is recorded once it closes.');
   }
 
   return { ok: true, ticket, open, close, moves, panel, be,
@@ -580,7 +591,10 @@ function tradeList(acct) {
 }
 
 function sendJson(res, obj) {
-  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  // v0.67: charset explicitly. Without it an HTTP client is entitled to fall back to ISO-8859-1,
+  //   which turns every em dash and umlaut in the dossier into mojibake. Browsers guess UTF-8 for
+  //   JSON and got away with it; anything else reading this API did not.
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(obj));
 }
 // Host-Header pruefen (DNS-Rebinding-Schutz).
@@ -615,7 +629,7 @@ const server = http.createServer((req, res) => {
   if (p === '/journal')   return sendJson(res, parseAll(acct)
     .filter(e => ['OPEN','CLOSE','CLOSE_MAN','BLOCKED'].includes(e.event)
               || /PROTECT/i.test(e.event || '')
-              || /SPERRE|Cooldown|Ziel|GESPERRT/i.test(e.tag || ''))
+              || /SPERRE|GESPERRT|Cooldown|Ziel|LOCK|LOCKED|target|cooldown/i.test(e.tag || ''))
     .slice(-120).reverse());
   if (p === '/analytics') return sendJson(res, analytics(acct));
   if (p === '/day')       return sendJson(res, dayDetail(u.searchParams.get('d') || '', acct));
@@ -689,7 +703,7 @@ server.listen(PORT, '127.0.0.1', () => {
   const accts = accountsList();
   if (accts.length) console.log('  Konten: ' + accts.map(a => a.account).join(', '));
   if (stateAgeMs('') === null) {
-    console.log('  Hinweis: noch keine mamal_cockpit.json — MT4 + EA (InpCockpit=true) noetig.');
+    console.log('  Note: no mamal_cockpit.json yet — needs MT4 + the EA with InpCockpit=true.');
   }
   console.log('');
   // v0.38: MAMAL_QUIETSTART=1 (autostart) -> NO browser popup at boot;

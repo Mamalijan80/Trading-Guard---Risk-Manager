@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="back"><a href="/">← zurück zum Cockpit</a></div>
+  <div class="back"><a href="/">← back to the cockpit</a></div>
   <div id="view"></div>
 </div>
 <div id="lb"><img id="lbimg" alt=""></div>
@@ -95,14 +95,14 @@ function zoom(src){ $('lbimg').src=src; $('lb').style.display='flex'; }
 async function renderList(){
   let rows; try{ rows=await (await fetch('/trades'+AQ())).json(); }catch(e){ $('view').innerHTML='<div class="empty">Server nicht erreichbar.</div>'; return; }
   if(!rows.length){ $('view').innerHTML='<h2>Trades</h2><div class="card empty">Noch keine Trades mit Ticket-Bezug aufgezeichnet.<br><small>Die Akte entsteht ab EA v0.47 mit jedem Panel-Trade.</small></div>'; return; }
-  const T3=['','früh','mittig','spät'], C3=['','var(--green)','var(--amber)','var(--red)'];
+  const T3=['','early','mittig','late'], C3=['','var(--green)','var(--amber)','var(--red)'];
   $('view').innerHTML='<h2>Trades · Akte</h2><div class="card"><table><thead><tr>'
     +'<th>Zeit</th><th>Symbol</th><th>Richtung</th><th>Kerze</th><th>SL/TP bewegt</th><th>Bilder</th><th>Netto</th></tr></thead><tbody>'
     +rows.map(r=>`<tr class="click" onclick="location.href='/trade.html${AQ('ticket='+r.ticket)}'">
         <td class="mono">${esc((r.time||'').slice(5,16))}</td><td>${esc(r.symbol||'')}</td><td>${esc(r.dir||'')}</td>
         <td style="color:${C3[r.third||0]}">${T3[r.third||0]||'—'}</td>
         <td${r.moves?' class="warn"':''}>${r.moves||'—'}</td><td>${r.shots||'—'}</td>
-        <td class="${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?'title="über Symbol und Reihenfolge zugeordnet — nicht ticketgenau"':(r.backfilled?'title="aus der MT4-Kontohistorie nachgetragen"':'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
+        <td class="${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?'title="matched by symbol and order — not ticket-exact"':(r.backfilled?'title="aus der MT4-Kontohistorie nachgetragen"':'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
     +'</tbody></table></div>';
 }
 
@@ -112,7 +112,7 @@ async function renderOne(ticket){
   const o=d.open, s=d.stats;
   const netTxt=s.net==null?netUnknown(o?o.time:null):(s.inferred?'≈ ':'')+eur(s.net);
   const netCls=s.net==null?'':(s.net>=0?'pos':'neg');
-  const T3=['','erstes Drittel (früh)','mittleres Drittel','letztes Drittel (spät)'];
+  const T3=['','first third (early)','mittleres Drittel','last third (late)'];
   let h=`<div class="card hero">
       <div class="net"><div style="font-size:10.5px;letter-spacing:.08em;color:var(--txt3)">ERGEBNIS</div>
         <div class="v ${netCls}">${netTxt}</div></div>
@@ -143,7 +143,9 @@ async function renderOne(ticket){
   if(d.moves.length){
     h+='<h2>Chronik der Verschiebungen</h2><div class="card"><table><thead><tr>'
       +'<th>Zeit</th><th>SL</th><th>TP</th><th>Bewertung</th></tr></thead><tbody>'
-      +d.moves.map(m=>{const bad=/ERHOEHT|unbegrenzt|abgekuerzt|abgekürzt/i.test(m.tag||'');
+      +d.moves.map(m=>{// v0.67: read the machine code; the German patterns remain only for journals written before v0.67.
+        const bad=/^\[(SL_WORSE|SL_GONE|TP_SHORTER)\]/.test(m.tag||'')
+                  || /ERHOEHT|unbegrenzt|abgekuerzt|abgekürzt/i.test(m.tag||'');
         return `<tr><td class="mono">${esc((m.time||'').slice(11))}</td><td class="mono">${esc(m.raw[11])}</td>
           <td class="mono">${esc(m.raw[12])}</td><td class="${bad?'neg':'pos'}">${esc(m.tag||'')}</td></tr>`;}).join('')
       +'</tbody></table></div>';
