@@ -1,84 +1,84 @@
-# Bug-Hunt v0.17 — Befunde (2026-06-27)
+# Bug Hunt v0.17 — Findings (2026-06-27)
 
-Mehr-Agenten-Bug-Hunt (10 Jäger-Lenten + 2 Tiefenbohrungen, je Kandidat 2 unabhängige Skeptiker). 31 Kandidaten → **20 bestätigt, 4 wahrscheinlich**. Zeilennummern beziehen sich auf den Stand zum Hunt-Zeitpunkt.
+Multi-agent bug hunt (10 hunter lanes + 2 deep dives, 2 independent skeptics per candidate). 31 candidates → **20 confirmed, 4 probable**. Line numbers refer to the state of the code at the time of the hunt.
 
-> **✅ GEFIXT in v0.18 (adversarial verifiziert, 0 Probleme, brace-sanity 247/247 1779/1779, F7 ausstehend):** B1, B2, B3 (+B9-Warnung), B4+B6, B5+B8, B16, B17, B20. Fix-Verify-Workflow bestätigte je Fix: korrekt + MQL4-valide (`MqlDateTime`/`day_of_week` explizit geprüft) + keine Regression.
-> **✅ GEFIXT in v0.19 (statischer Review-Batch, fix-verifiziert, F7 ausstehend):** **B11** (R1 stabile Tagesbasis statt Live-Equity), **B19** (SplitCcy ISO-Check), **L4** (net==0 setzt Serie zurück) — **plus neue Review-Befunde:** P0 SafeCloseAll-vs-TOOL_ONLY (Warnung bei fremden offenen Positionen unter Lock), P0 Division-durch-0 bei `g_initialBalance<=0` (TotalDDpct-guarded + fail-closed), P0/P1 Prop-Firm-Zeitprofil (`InpDayResetHour`/`InpWeekStartDay`), P1 ResolveHistory chronologisch sortiert, P1 `ERR_MARKET_CLOSED` 15-min-Backoff (kein Request-Storm), P1 `InpRR<InpMinRR` hart geklemmt.
-> **⏳ OFFEN (in Rule-Test-Matrix beweisen):** B7 (PC-TZ bei `TimeCurrent==0`), B10 (HasOpenRemainder Same-Second), B12, B13, B15 (RollNewDay vor ResolveHistory), B18 (Throttle bei Context-Busy), L3 (FILE_SHARE bei Mehrfach-Charts). *Begründung der Zurückstellung: niedrige Eintrittswahrscheinlichkeit bzw. semantische Entscheidung, die sich besser am Live-Verhalten zeigt.*
-> **Semantik-Notiz B4/6:** Bei gemischtem Close (Trader-Teil + EA-Rest) zählt bewusst NUR der vom Trader geschlossene Netto-Anteil für Serie/Cooldown/Revenge (Disziplin-Tool wertet die Entscheidung des Traders, nicht die Positions-P/L).
+> **✅ FIXED in v0.18 (adversarially verified, 0 issues, brace sanity 247/247 1779/1779, F7 pending):** B1, B2, B3 (+B9 warning), B4+B6, B5+B8, B16, B17, B20. The fix-verify workflow confirmed for each fix: correct + valid MQL4 (`MqlDateTime`/`day_of_week` explicitly checked) + no regression.
+> **✅ FIXED in v0.19 (static review batch, fix-verified, F7 pending):** **B11** (R1 uses a stable daily base instead of live equity), **B19** (SplitCcy ISO check), **L4** (net==0 resets the streak) — **plus new review findings:** P0 SafeCloseAll vs TOOL_ONLY (warning when foreign positions are open while locked), P0 division by 0 when `g_initialBalance<=0` (TotalDDpct guarded + fail-closed), P0/P1 prop-firm time profile (`InpDayResetHour`/`InpWeekStartDay`), P1 ResolveHistory sorted chronologically, P1 `ERR_MARKET_CLOSED` 15-minute backoff (no request storm), P1 `InpRR<InpMinRR` hard-clamped.
+> **⏳ OPEN (to be proven in the rule test matrix):** B7 (PC timezone when `TimeCurrent==0`), B10 (HasOpenRemainder same-second), B12, B13, B15 (RollNewDay before ResolveHistory), B18 (throttle on context busy), L3 (FILE_SHARE with multiple charts). *Reason for deferral: low probability of occurrence, or a semantic decision that is better settled by observing live behavior.*
+> **Semantics note B4/6:** On a mixed close (trader part + EA remainder), deliberately ONLY the net portion closed by the trader counts toward streak/cooldown/revenge (a discipline tool judges the trader's decision, not the position's P/L).
 
-Legende Severity: 🔴 kritisch · 🟠 hoch · 🟡 mittel · ⚪ niedrig
-
----
-
-## 🔴 KRITISCH
-
-### B1 — Max-Loss-Basis hängt am Default 20000 → R4b-Schutz auf Nicht-20k-Konten still abgeschaltet
-**Wo:** `OnInit` (g_initialBalance-Auswahl) → `TotalDDpct()` → R4b Hard-Lock + Warn-Gate.
-**Problem:** `InpInitialBalance` hat Default **20000** (immer >0), daher gewinnt `if(InpInitialBalance>0) g_initialBalance=InpInitialBalance;` IMMER; die Fallbacks (GV_INIT_BAL / AccountBalance) sind tot. g_initialBalance ist die Basis des Gesamt-Drawdowns.
-**Auslöser:** Konto ≠ 20.000 € ohne manuelles Setzen. **100k-Konto bei 95k (5% echt) → TotalDDpct = (20000−95000)/20000 = −375% → auf 0 geklemmt → R4b feuert NIE** (Haupt-Schutz aus). **10k-Konto → DD ~2× überschätzt → Fehl-Sperre** ab erstem Tick.
-**Fix:** Default `InpInitialBalance=0` (→ echte Konto-Basis via GV_INIT_BAL/AccountBalance) **+** lautes Warnen, wenn explizit gesetzter Wert stark von AccountBalance abweicht.
+Severity legend: 🔴 critical · 🟠 high · 🟡 medium · ⚪ low
 
 ---
 
-## 🟠 HOCH
+## 🔴 CRITICAL
 
-### B2 — R18 Wochenlimit resettet mitten in der Woche (Donnerstag 00:00)
-**Wo:** `WeekIdx()` = `SrvTime()/(7*86400)` (Epoch-Grid = Donnerstag-Grenze); Wochen-Reset in `Cycle()`.
-**Problem/Auslöser:** Mi-Nacht −4,9% (knapp unter 5%) → Do 00:00 wird Wochenbasis + Wochensperre zurückgesetzt → Do–Fr nochmal volle 5% möglich → real ~10% Wochenverlust ohne dass R18 greift. Umgekehrt: Di/Mi gesetzte Sperre wird Do 00:00 aufgehoben.
-**Fix:** Woche am echten Wochenende ankern, z. B. `WeekIdx(){ datetime t=SrvTime(); return (long)(t/86400) - TimeDayOfWeek(t); }` (Sonntag-Mitternacht-Grenze).
-
-### B3 — R8 (EnforceRR) schließt frisch eröffnete Tool-Trades wegen Fill-Slippage
-**Wo:** `EnforceRR()` vs `DoEntry()` TP-Berechnung.
-**Problem/Auslöser:** TP wird am *angefragten* Entry gesetzt, das CRV aber aus `OrderOpenPrice()` (echter Fill) berechnet. Bei engem Stop + Slippage kann CRV < InpMinRR → der gerade eröffnete In-Plan-Trade wird sofort wieder geschlossen.
-**Fix:** Tool-Trades (`Magic==InpMagic`) von R8 ausnehmen (sind per Konstruktion RR-konform) — zusammen mit B9 (InpRR≥InpMinRR validieren).
-
-### B4 + B6 — Teil-Close durch Trader wird als EA-Close fehletikettiert → Verlust fällt aus der Serie
-**Wo:** `ResolveHistory()` `gEa`-Aggregation (ODER-Semantik) + Skip.
-**Problem/Auslöser:** Alle Teil-Closes einer Position werden gruppiert; `gEa` wird TRUE, sobald **ein** Bein einen EA-Marker trägt → die GANZE Gruppe gilt als „EA-Schutz-Close (zählt nicht)". Schließt der Trader einen Teil mit Verlust und der EA den Rest → Trader-Verlust verschwindet aus Cooldown/Serie/Revenge.
-**Fix:** EA-Netto und Manuell-Netto je Gruppe **getrennt** summieren; `ApplyResult` auf den manuellen Anteil, nur den EA-Anteil ausschließen.
-
-### B5 + B8 — EA-Close-Marker: false-negative-Unmark + Mark-vor-Close-Fenster → Schutz-Close zählt als Trader-Verlust (Fehl-Sperre)
-**Wo:** `ProcessCloseQueue()` (MarkEaClosed vor OrderClose; UnmarkEaClosed bei OrderClose==false).
-**Problem/Auslöser:** (B5) OrderClose kann `false` liefern, obwohl die Position serverseitig schloss (Requote/Timeout) → Code unmarkt → echter EA-Close zählt als Trader-Verlust → falsche Tagessperre/Cooldown. (B8) Mark-vor-Close-Crash-Fenster → echter Verlust evtl. als EA-Close ausgeschlossen.
-**Fix:** Marker erst **nach bestätigtem** Close setzen: OrderClose→true → MarkEaClosed; OrderClose→false → Ticket neu selektieren, wenn `OrderCloseTime()!=0` (doch geschlossen) → MarkEaClosed+entfernen, sonst Retry ohne Marker. Pre-Mark + Unmark-on-fail entfernen.
+### B1 — Max-loss base is tied to the default 20000 → R4b protection silently disabled on non-20k accounts
+**Where:** `OnInit` (g_initialBalance selection) → `TotalDDpct()` → R4b hard lock + warning gate.
+**Problem:** `InpInitialBalance` has the default **20000** (always >0), so `if(InpInitialBalance>0) g_initialBalance=InpInitialBalance;` ALWAYS wins; the fallbacks (GV_INIT_BAL / AccountBalance) are dead code. g_initialBalance is the base of the total drawdown.
+**Trigger:** Any account ≠ 20,000 € without setting the value manually. **100k account at 95k (5% in reality) → TotalDDpct = (20000−95000)/20000 = −375% → clamped to 0 → R4b NEVER fires** (main protection off). **10k account → DD overestimated by ~2× → false lock** from the very first tick.
+**Fix:** Default `InpInitialBalance=0` (→ real account base via GV_INIT_BAL/AccountBalance) **plus** a loud warning when an explicitly set value deviates strongly from AccountBalance.
 
 ---
 
-## 🟡 MITTEL
+## 🟠 HIGH
 
-### B7 — Locks/Tagesschlüssel in PC-Zeitzone, wenn `TimeCurrent()==0` bei OnInit
-**Wo:** OnInit + `SrvTime()`-Fallback. Brandneuer Chart ohne Quote → Offset ungesetzt → SrvTime = PC-Zeit (lokale TZ) → Tagesschlüssel/Locks falsch, springen beim ersten Tick.
-**Fix:** Schwere Init (RollNewDay/Reconcile/GV_LAST_CLOSE-Seed) erst ausführen, wenn Serverzeit bekannt (`g_srvOffsetSet`/TimeCurrent>0); sonst auf ersten Tick verschieben.
+### B2 — R18 weekly limit resets in the middle of the week (Thursday 00:00)
+**Where:** `WeekIdx()` = `SrvTime()/(7*86400)` (epoch grid = Thursday boundary); weekly reset in `Cycle()`.
+**Problem/trigger:** Wednesday night at −4.9% (just under 5%) → Thursday 00:00 the weekly base and the weekly lock are reset → another full 5% is possible Thu–Fri → in reality ~10% weekly loss without R18 ever kicking in. Conversely: a lock set on Tue/Wed is lifted on Thursday 00:00.
+**Fix:** Anchor the week at the real weekend, e.g. `WeekIdx(){ datetime t=SrvTime(); return (long)(t/86400) - TimeDayOfWeek(t); }` (Sunday-midnight boundary).
 
-### B9 — Keine `InpRR ≥ InpMinRR`-Prüfung → Öffnen-dann-Sofort-Schließen-Schleife bei Fehlkonfiguration
-**Wo:** OnInit (fehlende Validierung); DoEntry-TP vs EnforceRR.
-**Fix:** In OnInit prüfen: `InpMinRR<=0 || InpRR>=InpMinRR`; sonst InpRR hochklemmen + Notify oder Entries sperren.
+### B3 — R8 (EnforceRR) closes freshly opened tool trades because of fill slippage
+**Where:** `EnforceRR()` vs `DoEntry()` TP calculation.
+**Problem/trigger:** The TP is set at the *requested* entry, but the risk/reward ratio is computed from `OrderOpenPrice()` (the actual fill). With a tight stop plus slippage the RR can fall below InpMinRR → the in-plan trade that was just opened is immediately closed again.
+**Fix:** Exempt tool trades (`Magic==InpMagic`) from R8 (they are RR-compliant by construction) — together with B9 (validate InpRR≥InpMinRR).
 
-### B10 — `HasOpenRemainder` kann bei Same-Second-Re-Entry false-positiv → realer Verlust unendlich aufgeschoben
-**Wo:** `HasOpenRemainder()` matcht OpenTime+Type+Symbol+Magic+OpenPrice (nicht eindeutig).
-**Fix:** Identität verschärfen (Entry-Ticket-Lineage je Position), statt nur die ProcKey-Felder.
+### B4 + B6 — A partial close by the trader is mislabeled as an EA close → the loss drops out of the streak
+**Where:** `ResolveHistory()` `gEa` aggregation (OR semantics) + skip.
+**Problem/trigger:** All partial closes of a position are grouped; `gEa` becomes TRUE as soon as **one** leg carries an EA marker → the WHOLE group counts as an "EA protective close (does not count)". If the trader closes one part at a loss and the EA closes the remainder → the trader's loss disappears from cooldown/streak/revenge.
+**Fix:** Sum EA net and manual net **separately** per group; run `ApplyResult` on the manual portion and exclude only the EA portion.
 
-### B11 — Live-Equity-Nenner in EnforceRisk schließt korrekt dimensionierte Positionen, wenn Equity fällt
-**Wo:** `EnforceRisk()` via `RiskPctOf()` (Nenner AccountEquity). Fallende Equity erhöht das gemessene %-Risiko → R1 schließt eine bei Eröffnung korrekte Position.
-**Fix:** R1-Enforcement gegen stabile Basis (Entry-Equity/DayRiskBase) statt Live-Equity rechnen.
-
----
-
-## ⚪ NIEDRIG (Auswahl)
-
-- **B12** — `nowMs=GetTickCount()` wird in `ProcessCloseQueue` einmal vor der Schleife gesampelt; nach langsamem OrderClose ist der Backoff für Folge-Tickets verzerrt. *Fix:* nowMs je Iteration neu lesen.
-- **B13** — Bei FINAL-FAIL wird ein noch offenes Ticket aus der Queue entfernt; Re-Enqueue hängt am Detektor. *Fix:* `Notify`/Alert bei FINAL-FAIL (nicht nur Journal).
-- **B15** — `RollNewDay()` (resettet GV_CONSEC) läuft VOR `ResolveHistory()` → ein kurz vor Mitternacht geschlossener Verlust wird dem neuen Tag zugeschlagen und verliert Cooldown/Serie. *Fix:* ResolveHistory vor dem Consec-Reset.
-- **B16** — `MODE_MAXLOT`==0 vom Broker → `if(lot>mx) lot=mx` setzt Lot auf 0 → Entry blockiert. *Fix:* `if(mx<=0) mx=lot;`.
-- **B17 (+L1/L2)** — Close-Queue-Backoff-Gate nutzt nicht-wrap-sicheren Vergleich `nowMs < g_qNextMs[i]`; bei GetTickCount-Wrap (~49,7 Tage) friert der Close ein. *Fix:* wrap-sicher `(int)(nowMs - g_qNextMs[i]) < 0`.
-- **B18** — `g_lastEnforceMs` wird auch verbraucht, wenn `IsTradeContextBusy` alles blockt → 300ms-Fenster „verschenkt". *Fix:* Throttle nur setzen, wenn wirklich enforced wurde.
-- **B19** — `SplitCcy` steckt 6-buchstabige Nicht-FX-Symbole in Phantom-Währungs-Buckets (R17). *Fix:* Währungs-Code-Plausibilität/FX-Check vor dem Split.
-- **B20** — `OnInit` `ObjectsDeleteAll(0,"RG_")` nutzt falschen Präfix; Panel-Objekte heißen `MMT_` → Cleanup ist ein No-Op. *Fix:* `ObjectsDeleteAll(0,PFX)`.
-- **L3** — Journal/Lockstate-`FileOpen` ohne `FILE_SHARE_*` → bei mehreren Charts desselben Kontos Schreib-/Leseverlust. *Fix:* `FILE_SHARE_READ|FILE_SHARE_WRITE`; leeren Read als „busy" statt „CORRUPT" behandeln.
-- **L4** — `ApplyResult` behandelt `net==0` (Break-even) weder Reset noch Verlust → Serie bleibt unverändert. *Fix:* `net>=0`-Semantik explizit machen.
+### B5 + B8 — EA close marker: false-negative unmark + mark-before-close window → a protective close counts as a trader loss (false lock)
+**Where:** `ProcessCloseQueue()` (MarkEaClosed before OrderClose; UnmarkEaClosed when OrderClose==false).
+**Problem/trigger:** (B5) OrderClose can return `false` even though the position did close server-side (requote/timeout) → the code unmarks it → a genuine EA close counts as a trader loss → wrong daily lock/cooldown. (B8) Mark-before-close crash window → a real loss may be excluded as an EA close.
+**Fix:** Set the marker only **after a confirmed** close: OrderClose→true → MarkEaClosed; OrderClose→false → reselect the ticket, and if `OrderCloseTime()!=0` (it did close after all) → MarkEaClosed + remove, otherwise retry without a marker. Remove the pre-mark and the unmark-on-fail.
 
 ---
 
-## Einordnung
-Keiner dieser Bugs verhindert das Kompilieren (F7=0) — es sind **Laufzeit-/Logik-Bugs**, genau die Klasse, die F7 nicht fängt und die Tests/Reviews fangen. **B1 (kritisch)** und **B2/B4+B6/B5+B8 (hoch)** betreffen direkt Geld/Schutz und sollten vor jedem Demo-Test gefixt werden.
+## 🟡 MEDIUM
+
+### B7 — Locks/day keys in the PC timezone when `TimeCurrent()==0` at OnInit
+**Where:** OnInit + the `SrvTime()` fallback. A brand-new chart without a quote → offset unset → SrvTime = PC time (local TZ) → day keys/locks are wrong and jump on the first tick.
+**Fix:** Run heavy init (RollNewDay/Reconcile/GV_LAST_CLOSE seed) only once server time is known (`g_srvOffsetSet`/TimeCurrent>0); otherwise defer it to the first tick.
+
+### B9 — No `InpRR ≥ InpMinRR` check → open-then-close-immediately loop on misconfiguration
+**Where:** OnInit (missing validation); DoEntry TP vs EnforceRR.
+**Fix:** Check in OnInit: `InpMinRR<=0 || InpRR>=InpMinRR`; otherwise clamp InpRR upward + notify, or block entries.
+
+### B10 — `HasOpenRemainder` can be a false positive on a same-second re-entry → a real loss is deferred indefinitely
+**Where:** `HasOpenRemainder()` matches OpenTime+Type+Symbol+Magic+OpenPrice (not unique).
+**Fix:** Tighten identity (entry-ticket lineage per position) instead of relying on the ProcKey fields alone.
+
+### B11 — The live-equity denominator in EnforceRisk closes correctly sized positions when equity drops
+**Where:** `EnforceRisk()` via `RiskPctOf()` (denominator AccountEquity). Falling equity raises the measured % risk → R1 closes a position that was correctly sized at open.
+**Fix:** Compute R1 enforcement against a stable base (entry equity/DayRiskBase) instead of live equity.
+
+---
+
+## ⚪ LOW (selection)
+
+- **B12** — `nowMs=GetTickCount()` is sampled once before the loop in `ProcessCloseQueue`; after a slow OrderClose the backoff for subsequent tickets is skewed. *Fix:* re-read nowMs on each iteration.
+- **B13** — On FINAL-FAIL a still-open ticket is removed from the queue; re-enqueueing depends on the detector. *Fix:* `Notify`/alert on FINAL-FAIL (not just the journal).
+- **B15** — `RollNewDay()` (which resets GV_CONSEC) runs BEFORE `ResolveHistory()` → a loss closed shortly before midnight is attributed to the new day and loses cooldown/streak. *Fix:* run ResolveHistory before the consec reset.
+- **B16** — `MODE_MAXLOT`==0 from the broker → `if(lot>mx) lot=mx` sets the lot to 0 → entry blocked. *Fix:* `if(mx<=0) mx=lot;`.
+- **B17 (+L1/L2)** — The close-queue backoff gate uses the non-wrap-safe comparison `nowMs < g_qNextMs[i]`; on a GetTickCount wrap (~49.7 days) the close freezes. *Fix:* wrap-safe `(int)(nowMs - g_qNextMs[i]) < 0`.
+- **B18** — `g_lastEnforceMs` is consumed even when `IsTradeContextBusy` blocks everything → the 300 ms window is wasted. *Fix:* set the throttle only when enforcement actually happened.
+- **B19** — `SplitCcy` puts 6-letter non-FX symbols into phantom currency buckets (R17). *Fix:* currency-code plausibility/FX check before the split.
+- **B20** — `OnInit` `ObjectsDeleteAll(0,"RG_")` uses the wrong prefix; panel objects are named `MMT_` → the cleanup is a no-op. *Fix:* `ObjectsDeleteAll(0,PFX)`.
+- **L3** — Journal/lockstate `FileOpen` without `FILE_SHARE_*` → with several charts on the same account, writes/reads are lost. *Fix:* `FILE_SHARE_READ|FILE_SHARE_WRITE`; treat an empty read as "busy" rather than "CORRUPT".
+- **L4** — `ApplyResult` treats `net==0` (break-even) as neither a reset nor a loss → the streak stays unchanged. *Fix:* make the `net>=0` semantics explicit.
+
+---
+
+## Assessment
+None of these bugs prevents compilation (F7=0) — they are **runtime/logic bugs**, exactly the class that F7 does not catch and that tests/reviews do. **B1 (critical)** and **B2/B4+B6/B5+B8 (high)** directly affect money/protection and should be fixed before any demo test.

@@ -1,18 +1,18 @@
-// TradingGuard — Risiko- und Disziplin-Tool fuer MetaTrader 4
+// TradingGuard — risk and discipline tool for MetaTrader 4
 // Copyright (C) 2026 Mohammadreza Tavakoli — https://itavakoli.com/
 //
-// Dieses Programm ist freie Software: Sie koennen es weitergeben und/oder
-// veraendern unter den Bedingungen der GNU Affero General Public License,
-// Version 3 oder (nach Ihrer Wahl) jeder spaeteren Version.
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License,
+// version 3 or (at your option) any later version.
 //
-// Die Veroeffentlichung erfolgt in der Hoffnung, dass es nuetzlich ist, aber
-// OHNE JEDE GEWAEHRLEISTUNG — sogar ohne die implizite Gewaehrleistung der
-// MARKTGAENGIGKEIT oder EIGNUNG FUER EINEN BESTIMMTEN ZWECK. Einzelheiten in
-// der GNU Affero General Public License: <https://www.gnu.org/licenses/>.
+// It is published in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY — without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. Details in
+// the GNU Affero General Public License: <https://www.gnu.org/licenses/>.
 //
-// KEINE ANLAGEBERATUNG. Handel mit Hebelprodukten kann zum Totalverlust
-// fuehren. Dieses Werkzeug erzwingt Regeln, es trifft keine Marktentscheidung
-// und uebernimmt keine Verantwortung fuer Handelsergebnisse.
+// NOT INVESTMENT ADVICE. Trading leveraged products can lead to a total
+// loss. This tool enforces rules, it makes no market decision
+// and takes no responsibility for trading results.
 //+------------------------------------------------------------------+
 //|  RiskGuard.mq5  —  TradingGuard EA-Boden, v0.4                    |
 //|  Erzwingt:  R4  Tagesverlust-Hard-Lock (2%)                       |
@@ -21,7 +21,7 @@
 //|             R1  Risiko pro Trade (max %, schliesst zu grosse)     |
 //|  Crash-hardened, Tamper-Warnung, LIVE-Panel (Floating-P/L,Risiko).|
 //|                                                                  |
-//|  ⚠ NUR DEMO. Gilt als UNGETESTET bis im MetaEditor kompiliert.   |
+//|  ⚠ DEMO ONLY. Counts as UNTESTED until compiled in MetaEditor.   |
 //+------------------------------------------------------------------+
 #property copyright "Mohammadreza Tavakoli"
 #property link      "https://itavakoli.com/"
@@ -31,14 +31,14 @@
 input double InpInitialBalance   = 20000;  // FTMO-Startbalance (z.B. 20000). 0 = automatisch/persistiert
 input double InpDailyLossPct     = 2.0;    // R4:  Tagesverlust-Sperre in % (< FTMO 5%)
 input double InpMaxLossPct       = 8.0;    // R4b: Gesamtverlust-Sperre in % (< FTMO 10%)
-input double InpRiskPerTradePct  = 0.5;    // R1:  max Risiko pro Trade in % der Equity
+input double InpRiskPerTradePct  = 0.5;    // R1:  max risk per trade in % of equity
 input double InpRiskTolFactor    = 1.10;   // R1:  Toleranz gegen Rundung/Spread (1.10 = 10%)
 input bool   InpRequireSL        = true;   // R7:  SL Pflicht
 input bool   InpRequireTP        = true;   // R7:  TP Pflicht
-input int    InpSLTPGraceSeconds = 10;     // R7:  Frist zum Nachtragen von SL/TP
+input int    InpSLTPGraceSeconds = 10;     // R7:  deadline for adding SL/TP later
 input int    InpTimerSeconds     = 1;      // Poll-Intervall
 input int    InpMinActionMs      = 400;    // Drossel gegen Request-Storm (Crash-Schutz)
-input bool   InpUseAlert         = false;  // Alert kann unter Wine instabil sein -> default aus
+input bool   InpUseAlert         = false;  // Alert can be unstable under Wine -> default off
 
 CTrade trade;
 
@@ -162,7 +162,7 @@ void EnforceRisk()   // R1: zu grosse Positionen schliessen
    {
       ulong ticket=PositionGetTicket(i);
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
-      double sl=PositionGetDouble(POSITION_SL); if(sl==0.0) continue;   // ohne SL -> R7
+      double sl=PositionGetDouble(POSITION_SL); if(sl==0.0) continue;   // without SL -> R7
       string s=PositionGetString(POSITION_SYMBOL);
       double ts=SymbolInfoDouble(s,SYMBOL_TRADE_TICK_SIZE), tv=SymbolInfoDouble(s,SYMBOL_TRADE_TICK_VALUE);
       if(ts<=0.0 || tv<=0.0) continue;
@@ -181,7 +181,7 @@ void SafeCloseAll()
    for(int i=OrdersTotal()-1;i>=0;i--){ ulong t=OrderGetTicket(i); if(t>0) trade.OrderDelete(t); }
 }
 
-//--- Live-Kennzahlen fuer das Panel ---------------------------------
+//--- Live metrics for the panel -------------------------------------
 double OpenFloatingPL(){ return AccountInfoDouble(ACCOUNT_PROFIT); }
 double OpenRiskPct(int &count)
 {

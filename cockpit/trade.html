@@ -83,8 +83,8 @@ const ACCT=Q.get('acct')||localStorage.getItem('mamalAcct')||'';
 const AQ=(x)=>{const p=[];if(ACCT)p.push('acct='+encodeURIComponent(ACCT));if(x)p.push(x);return p.length?'?'+p.join('&'):'';};
 const KIND={open:['EINSTIEG','b-open'],close:['AUSSTIEG','b-close'],slmove:['SL VERSCHOBEN','b-move'],tpmove:['TP VERSCHOBEN','b-move']};
 
-// v0.65: „offen" nur behaupten, wenn es plausibel ist. Bis EA v0.64 fehlte in der Close-Zeile das Ticket,
-//   deshalb bleibt bei älteren Einträgen das Ergebnis unzuordenbar — das ist etwas anderes als „läuft noch".
+// v0.65: only claim "offen" (open) when that is plausible. Up to EA v0.64 the close line carried no ticket,
+//   so for older entries the result stays unassignable — which is something else than "still running".
 function netUnknown(t){
   const ts = t ? Date.parse(String(t).replace(/\./g,'-').replace(' ','T')) : NaN;
   return (Number.isFinite(ts) && Date.now()-ts > 6*3600*1000) ? 'unbekannt' : 'offen';

@@ -1,50 +1,50 @@
 # Mamal-Trading Cockpit (localhost)
 
-Live-Dashboard, das zeigt **wo du bei jeder Regel stehst** — dynamisch auf dein
-Konto/deine Einstellungen zugeschnitten, plus Klartext-Erklärungen und ein Journal.
+Live dashboard that shows **where you stand on every rule** — tailored dynamically to your
+account and your settings, plus plain-language explanations and a journal.
 
-DLL-frei: Der MT4-EA schreibt seinen Zustand als JSON in `MQL4/Files/`, dieser
-kleine Node-Server liest das und serviert die Seite. Kein Eingriff in den Handel.
+DLL-free: the MT4 EA writes its state as JSON into `MQL4/Files/`, this small
+Node server reads that and serves the page. No interference with trading.
 
-## Einmal einrichten
-1. MT4 öffnen, EA **Mamal-Trading** auf einen Chart ziehen (v0.26+), AutoTrading an.
-   Der EA-Input **`InpCockpit` muss `true`** sein (Standard).
-2. Server starten:
-   - **Windows:** Doppelklick auf **`start.bat`**.
-   - **macOS:** Doppelklick auf **`start.command`**.
-   - oder im Terminal: `node server.js`.
+## One-time setup
+1. Open MT4, drag the EA **Mamal-Trading** onto a chart (v0.26+), enable AutoTrading.
+   The EA input **`InpCockpit` must be `true`** (default).
+2. Start the server:
+   - **Windows:** double-click **`start.bat`**.
+   - **macOS:** double-click **`start.command`**.
+   - or in the terminal: `node server.js`.
 
-   Beim Start öffnet sich der Browser auf `http://localhost:8730`. Das Server-Fenster
-   zeigt oben, **welche MT4-Ordner gefunden wurden** — bleibt es bei „keiner gefunden",
-   siehe *Troubleshooting* (Portable-Mode).
+   On startup the browser opens at `http://localhost:8730`. The server window
+   shows at the top **which MT4 folders were found** — if it stays at "keiner gefunden"
+   (none found), see *Troubleshooting* (portable mode).
 
-## Danach
-- Im MT4-Panel auf **„COCKPIT: REGELN & FORTSCHRITT"** klicken → der Browser öffnet
-  sich automatisch (bzw. der Tab wird angesteuert).
-- Das Dashboard aktualisiert sich alle 1–2 Sekunden von selbst.
+## After that
+- In the MT4 panel, click **"COCKPIT: REGELN & FORTSCHRITT"** (cockpit: rules & progress) → the browser
+  opens automatically (or the existing tab is focused).
+- The dashboard refreshes itself every 1–2 seconds.
 
-## Was es zeigt
-- **Status & Sperren** oben (grün = handeln erlaubt, rot = gesperrt + Grund).
-- **Pro Regel** (R1–R18, R25): dein Wert + aktueller Stand + Ampel/Fortschrittsbalken.
-- **Bewusst ausgeschaltete Regeln** als graue Chips.
-- **Journal**: die letzten Trades, Blocks, Sperren und Cooldowns.
+## What it shows
+- **Status and locks** at the top (green = trading allowed, red = locked + reason).
+- **Per rule** (R1–R18, R25): your value + current state + traffic light / progress bar.
+- **Deliberately disabled rules** as grey chips.
+- **Journal**: the most recent trades, blocks, locks and cooldowns.
 
 ## Troubleshooting
-- **Klick auf „COCKPIT" öffnet nichts?** Läuft evtl. noch eine **alte** Server-Instanz?
-  Der Server merkt sich den MT4-Ordner **beim Start** — eine vor dem EA gestartete alte
-  Instanz sieht den Klick nie. **Altes Server-Fenster schließen und `start.bat` neu starten.**
-  (Eine zweite Instanz kann Port 8730 nicht binden und beendet sich mit „Port belegt".)
-- **„Warte auf MetaTrader…"** → MT4 läuft nicht, EA nicht auf dem Chart, oder
-  `InpCockpit=false`. Prüfe im MT4-Reiter *Experten* die Zeile `Cockpit=an`.
-- **„Ordner: — keiner gefunden" / Portable-Mode?** Startet MT4 mit `/portable`, liegen die
-  Dateien unter `<Installationsordner>\MQL4\Files` statt unter `%APPDATA%\MetaQuotes\…`.
-  Dann den Ordner explizit setzen — in `start.bat` die `set MAMAL_FILES=…`-Zeile einkommentieren,
-  z. B. `set MAMAL_FILES=C:\MT4\MQL4\Files`, oder im Terminal `MAMAL_FILES="…/MQL4/Files" node server.js`.
-- **Port belegt?** `MAMAL_PORT=8731 node server.js` (dann auch `InpCockpitPort` im EA angleichen).
-- Der Server läuft rein lokal (127.0.0.1), nichts geht ins Internet.
+- **Clicking "COCKPIT" opens nothing?** Maybe an **old** server instance is still running?
+  The server remembers the MT4 folder **at startup** — an old instance started before the EA
+  never sees the click. **Close the old server window and restart `start.bat`.**
+  (A second instance cannot bind port 8730 and exits with "Port belegt" / port in use.)
+- **"Warte auf MetaTrader…"** (waiting for MetaTrader) → MT4 is not running, the EA is not on the chart, or
+  `InpCockpit=false`. Check the line `Cockpit=an` (cockpit=on) in the MT4 *Experts* tab.
+- **"Ordner: — keiner gefunden" (folder: none found) / portable mode?** If MT4 starts with `/portable`, the
+  files live under `<installation folder>\MQL4\Files` instead of under `%APPDATA%\MetaQuotes\…`.
+  Then set the folder explicitly — uncomment the `set MAMAL_FILES=…` line in `start.bat`,
+  e.g. `set MAMAL_FILES=C:\MT4\MQL4\Files`, or in the terminal `MAMAL_FILES="…/MQL4/Files" node server.js`.
+- **Port in use?** `MAMAL_PORT=8731 node server.js` (then also adjust `InpCockpitPort` in the EA).
+- The server runs purely locally (127.0.0.1), nothing goes out to the internet.
 
-## Dateien
-- `server.js` — der lokale Server (zero-dependency, Node).
-- `dashboard.html` — die Oberfläche.
-- `start.bat` — Doppelklick-Starter (Windows).
-- `start.command` — Doppelklick-Starter (macOS).
+## Files
+- `server.js` — the local server (zero-dependency, Node).
+- `dashboard.html` — the user interface.
+- `start.bat` — double-click starter (Windows).
+- `start.command` — double-click starter (macOS).

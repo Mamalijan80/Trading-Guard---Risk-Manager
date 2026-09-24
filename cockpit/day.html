@@ -80,13 +80,13 @@
     <tbody id="tl"><tr><td colspan="5" class="empty">lade…</td></tr></tbody></table></div>
 </div>
 <script>
-// v0.39: Theme aus dem Dashboard uebernehmen
+// v0.39: take over the theme from the dashboard
 (function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
   document.documentElement.dataset.theme=t; })();
 const $=id=>document.getElementById(id);
 const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
 const eur=v=>(v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
-// Fremdtext (Broker-Symbole, freie Journal-Tags) vor innerHTML entschaerfen.
+// Defuse foreign text (broker symbols, free journal tags) before innerHTML.
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
 const RULES={R1:['Risiko / Trade','fester %-Satz'],R2:['Idee-Cap','kein Nachladen derselben Idee'],R3:['Tagesbudget','Tages-Risiko-Budget aufgebraucht'],R4:['Tagesverlust','Tages-Verlust-Sperre'],R4b:['Max-Verlust','harte Gesamt-Grenze'],R5:['Cooldown','Zwangspause nach Verlusten'],R6:['Verlustserie','N Verluste in Folge'],R7:['SL/TP-Pflicht','Trade ohne SL/TP geschlossen'],R8:['Mindest-CRV','zu wenig Chance/Risiko'],R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],R12:['Gesamtrisiko','zu viel gleichzeitig offen'],R13:['Tagesziel','Ziel erreicht'],R14:['Mindestpause','zu schnelle Folge-Trades'],R15:['Min-SL-Abstand','Stop zu eng'],R16:['Session/News','außerhalb Handelszeit'],R17:['Korrelation','zu viel gleiche Währung'],R18:['Wochenlimit','Wochen-Verlust-Deckel'],R19:['De-Risk','Risiko runter nach Verlusten'],R22:['Nur Panel-Trades','manuell/Handy geöffnet — wird zurückgenommen'],R25:['Revenge','Gegen-Trade nach Verlust']};
@@ -96,14 +96,14 @@ function badgeFor(ev){const e=(ev||'').toUpperCase();if(e==='CLOSE_MAN')return '
 
 const QS=new URLSearchParams(location.search);
 const D=QS.get('d')||'';
-const ACCT=QS.get('acct')||'';   // v0.38: Multi-Konto — Tagesansicht des gewaehlten Kontos
+const ACCT=QS.get('acct')||'';   // v0.38: multi-account — day view of the selected account
 document.title='Mamal · '+D;
 async function load(){
   let x; try{ x=await (await fetch('/day?d='+encodeURIComponent(D)+(ACCT?'&acct='+encodeURIComponent(ACCT):''))).json(); }catch(e){ $('dtitle').textContent='Fehler'; return; }
   $('dtitle').textContent=fmtDay(x.date||D);
   const nv=$('net'); nv.textContent=eur(x.net||0); nv.className='v '+((x.net||0)>0.005?'pos':(x.net||0)<-0.005?'neg':'flat');
   $('k-trades').textContent=x.closes||0; $('k-wins').textContent=x.wins||0; $('k-losses').textContent=x.losses||0; $('k-blocks').textContent=x.blocks||0;
-  // v0.45: manuelle Trades auf der Zielseite ausweisen (die Kalenderzelle wirbt mit "✋ N")
+  // v0.45: mark manual trades on the target page (the calendar cell advertises "✋ N")
   const mk=$('k-manual'); if(mk){ mk.textContent=x.manual||0; mk.style.color=(x.manual||0)?'var(--amber)':'var(--txt3)'; }
 
   const rr=x.rules||[];

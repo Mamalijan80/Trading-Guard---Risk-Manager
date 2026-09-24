@@ -61,16 +61,16 @@ async function load(){
   try{ a=await (await fetch('/analytics'+AQ)).json(); s=(await (await fetch('/state'+AQ)).json()).state||{}; }
   catch(e){ $('head').textContent='Server nicht erreichbar.'; return; }
   const cal=a.calendar||{}; const dates=Object.keys(cal).sort();
-  // v0.39-fix (Verify): erst AKTIVE Tage filtern, DANN die letzten 7 nehmen — sonst fressen
-  // reine Info-/Sperr-Tage die Slots und der Report zeigt weniger als 7 Handelstage.
+  // v0.39-fix (Verify): first filter for ACTIVE days, THEN take the last 7 — otherwise plain
+  // info/lock days eat up the slots and the report shows fewer than 7 trading days.
   const last7=dates.filter(d=>(cal[d].fills||0)+(cal[d].blocks||0)+(cal[d].closes||0)>0).slice(-7);
   const acct=s.account?('Konto '+s.account+' · '):'';
   $('head').textContent=acct+(last7.length?('Zeitraum '+last7[0]+' – '+last7[last7.length-1]):'noch keine aktiven Tage')+' · erstellt '+new Date().toLocaleString('de-DE');
   let net=0,tr=0,bl=0,w=0,l=0,f=0,man=0;
   for(const d of last7){ const c=cal[d]; net+=c.net||0; tr+=c.closes||0; bl+=c.blocks||0; w+=c.wins||0; l+=c.losses||0; f+=c.fills||0; man+=c.manual||0; }
-  // v0.45-fix (Verify): Disziplin = Panel-Trades/(Panel-Trades+Blocks) — identisch zum Dashboard.
-  //   Vorher floss `closes` ein, das seit v0.44 auch MANUELLE Trades enthaelt: Handeln am Panel vorbei
-  //   haette die Disziplin-Quote im Report ERHOEHT.
+  // v0.45-fix (Verify): discipline = panel trades/(panel trades+blocks) — identical to the dashboard.
+  //   Before, `closes` fed into it, which since v0.44 also contains MANUAL trades: trading past the panel
+  //   would have RAISED the discipline rate in the report.
   const disc=(f+bl)?Math.round(f/(f+bl)*100):0;
   $('kpis').innerHTML=
     `<div class="kpi"><div class="l">Netto (Zeitraum)</div><div class="v ${net>=0?'pos':'neg'}">${eur(net)}</div></div>
@@ -84,8 +84,8 @@ async function load(){
     `<tr><td>${esc(r.id)} · ${esc(RN[r.id]||'')}</td><td>${r.count}×</td><td>${r.blocked||0}×</td><td>${r.closed||0}×</td></tr>`).join('')
     || '<tr><td colspan="4" style="color:var(--txt3)">keine Eingriffe — sauber</td></tr>';
   const top=(a.rules||[])[0];
-  // v0.45-fix (Verify): "sehr diszipliniert" darf NICHT stehen, wenn am Panel vorbei gehandelt wurde —
-  //   dort greift keine Regel, also kann es auch keine Blocks geben.
+  // v0.45-fix (Verify): "sehr diszipliniert" (very disciplined) must NOT appear when trading happened past the panel —
+  //   no rule applies there, so there cannot be any blocks either.
   $('fazit').textContent=
     (net>=0?'Positive Woche. ':'Negative Woche. ')
     +(bl===0

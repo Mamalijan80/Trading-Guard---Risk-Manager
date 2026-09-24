@@ -1,107 +1,106 @@
 # TradingGuard
 
-**Lizenz:** AGPL-3.0 · **Stand:** EA v0.66, Cockpit v0.65 · **Reifegrad:** Demo — noch nicht prop-firm-ready
-**Autor:** Mohammadreza Tavakoli — [itavakoli.com](https://itavakoli.com/)
+**License:** AGPL-3.0 · **Version:** EA v0.66, Cockpit v0.65 · **Maturity:** demo — not prop-firm-ready yet
+**Author:** Mohammadreza Tavakoli — [itavakoli.com](https://itavakoli.com/)
 
-> ⚠️ **Bevor du es auf ein echtes oder Funded-Konto lässt: nicht.** Der Code kompiliert fehlerfrei
-> und ist mehrfach adversarial reviewt, aber von 258 Testfällen sind erst rund ein Dutzend live
-> geprüft, und ein Demo-Forward-Test über mehrere Wochen steht komplett aus. Verbindliche
-> Einstufung: [`docs/STATUS.md`](docs/STATUS.md). **Keine Anlageberatung, keine Gewährleistung.**
+> ⚠️ **Before you let it near a real or funded account: don't.** The code compiles without errors
+> and has been through several adversarial reviews, but out of 258 test cases only about a dozen have been
+> verified live, and a demo forward test over several weeks is still completely missing. The binding
+> classification: [`docs/STATUS.md`](docs/STATUS.md). **No investment advice, no warranty.**
 
 
-Persönliches **Risiko-/Disziplin-Tool** für MetaTrader 4 (MT5-Spiegel geplant). Zweck: **nicht** Strategie finden, sondern Risiko- und Ausführungsverhalten **erzwingen**. Kein Strategie-Bot — ein Disziplin-Werkzeug für **Prop-Firm-Challenges** (FTMO als Default-Profil, **Multi-Prop-Firm** geplant). Konto-Basis Beispiel 20.000 € (FTMO).
+A personal **risk/discipline tool** for MetaTrader 4 (an MT5 mirror is planned). Its purpose is **not** to find a strategy, but to **enforce** risk and execution behavior. Not a strategy bot — a discipline tool for **prop-firm challenges** (FTMO as the default profile, **multi-prop-firm** planned). Example account base: 20,000 € (FTMO).
 
-> **Source of Truth = [`RULES.md`](RULES.md).** Alle anderen Dokumente leiten sich davon ab.
+> **Source of truth = [`RULES.md`](RULES.md).** Every other document is derived from it.
 
-## Was es tatsächlich ist (Stand v0.35)
-Die **gesamte Durchsetzung** steckt in einem **einzigen Expert Advisor** (`ea/mt4/MamalTrading.mq4`) im MT4-Terminal mit:
-- **On-Chart-Panel** (Status, Verlust-/Risiko-Balken, BUY/SELL-Buttons) als Haupt-Bedienung. **Ergänzend seit v0.26:** ein optionales localhost-Cockpit (`cockpit/`, Node-Server + `dashboard.html` + `day.html`) — reine **Ansicht** über die DLL-freie Datei-Brücke (EA schreibt JSON), **keine** Regel-Logik, abschaltbar per `InpCockpit=false`.
-- **Risk-basiertem One-Click-Entry:** rote SL-Linie ziehen/klicken → Tool berechnet das Lot für ein festes Risiko → BUY/SELL eröffnet den Trade (SL an der Linie, TP bei RR).
-- **Nur Panel-Trades (R22, seit v0.35, Default an):** von Hand im MT4-Fenster eröffnete Orders (Magic 0) werden **kontoweit** erkannt und **nachträglich geschlossen** — Positionen zu Marktpreis, Pendings gelöscht. Grund: nur der Panel-Weg durchläuft die Entry-Gates (R1/R2/R3/R7/R12/R17 …). **Ehrliche Grenze:** das ist *detect-and-revert*, kein Verhindern — der Trade geht auf und wird danach zurückgedreht, **Spread und Slippage trägt der Trader**; Erkennung typisch Bruchteile einer Sekunde bis mehrere Sekunden. Fremde EAs (eigene Magic ≠ 0) bleiben unangetastet. Abschaltbar per `InpCloseManualTrades=false`.
-- **Regelwerk R1–R19 + R22 + R25** (R9 aus), **Auto-Scale-Caps**, Verlust-/Wochen-Sperren, Cooldown, Revenge-Fenster, CSV-Journal.
-- Persistenz über `GlobalVariables` + Lockstate-Datei (fail-closed); Enforcement aus `OnTick` **und** `OnTimer` (tickunabhängig, ab v0.15) + echte Close-Queue (v0.16); tickunabhängige Server-Zeit (`SrvTime()` = PC-Uhr + am Tick gepflegtem Server-Offset; MQL4 hat **kein** `TimeTradeServer`).
+## What it actually is (as of v0.35)
+**All enforcement** lives in a **single Expert Advisor** (`ea/mt4/MamalTrading.mq4`) inside the MT4 terminal, with:
+- An **on-chart panel** (status, loss/risk bars, BUY/SELL buttons) as the main interface. **Additionally since v0.26:** an optional localhost cockpit (`cockpit/`, Node server + `dashboard.html` + `day.html`) — a pure **view** over the DLL-free file bridge (the EA writes JSON), with **no** rule logic, switchable off via `InpCockpit=false`.
+- **Risk-based one-click entry:** drag/click the red SL line → the tool calculates the lot size for a fixed risk → BUY/SELL opens the trade (SL at the line, TP at the RR target).
+- **Panel trades only (R22, since v0.35, on by default):** orders opened by hand in the MT4 window (Magic 0) are detected **account-wide** and **closed after the fact** — positions at market price, pendings deleted. Reason: only the panel path passes through the entry gates (R1/R2/R3/R7/R12/R17 …). **Honest limitation:** this is *detect-and-revert*, not prevention — the trade does open and is reversed afterwards, and **the trader pays the spread and slippage**; detection typically takes a fraction of a second up to several seconds. Foreign EAs (with their own Magic ≠ 0) are left untouched. Switchable off via `InpCloseManualTrades=false`.
+- **Rule set R1–R19 + R22 + R25** (R9 off), **auto-scale caps**, loss/week locks, cooldown, revenge window, CSV journal.
+- Persistence via `GlobalVariables` + a lockstate file (fail-closed); enforcement runs from `OnTick` **and** `OnTimer` (tick-independent, since v0.15) plus a real close queue (v0.16); tick-independent server time (`SrvTime()` = PC clock + a server offset maintained on each tick; MQL4 has **no** `TimeTradeServer`).
 
-## ⚠️ Wichtiger Hinweis (Compliance)
-Anders als ursprünglich geplant **öffnet das Tool Trades selbst** — per **One-Click `OrderSend`** mit berechnetem Lot und eigenem TP. Das ist **klick-ausgelöst** (kein autonomes Auto-Trading, **keine Signal-Generierung**) + autonomes Risk-Management (Schließen/Blocken). Damit sitzt es in der **meist-erlaubten** Prop-Firm-Automations-Kategorie. **Compliance-Check (5 Firmen, mit Quellen): [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md)** — FTMO/The5ers/FundedNext/FundingPips „likely-allowed" (Bedingungen), **Alpha Capital verlangt schriftliche Pre-Approval**. Vor jedem Real-/Funded-Konto firmenspezifisch verifizieren; `InpFundedMode=true` setzen.
-**Seit v0.35 zusätzlich zu prüfen:** R22 schließt **auch im FundedMode** Orders, die der EA **nicht selbst geöffnet** hat — es ist die einzige Enforcement-Funktion, die den `InScope()`-Filter umgeht. Ob eine Firma das akzeptiert, ist firmenspezifisch zu klären.
+## ⚠️ Important note (compliance)
+Contrary to the original plan, **the tool opens trades itself** — via a one-click `OrderSend` with a calculated lot size and its own TP. This is **click-triggered** (no autonomous auto-trading, **no signal generation**) plus autonomous risk management (closing/blocking). That puts it in the **most widely permitted** prop-firm automation category. **Compliance check (5 firms, with sources): [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md)** — FTMO/The5ers/FundedNext/FundingPips are "likely-allowed" (with conditions), **Alpha Capital requires written pre-approval**. Verify firm-specifically before any real/funded account; set `InpFundedMode=true`.
+**Additional item to check since v0.35:** R22 closes orders that the EA did **not open itself** — **even in FundedMode**. It is the only enforcement function that bypasses the `InScope()` filter. Whether a firm accepts that has to be clarified firm by firm.
 
-## Status & Sicherheit
-- **v0.35 ist NUR DEMO und nicht Prop-Firm-ready.** Reifegrad = **fix-verifiziert (KI-Review), aber LIVE-UNGETESTET** — verbindliches Reifegrad-Modell: [`docs/STATUS.md`](docs/STATUS.md). Die P0/P1 des Ausgangs-Reviews [`docs/REVIEW-v0.14.md`](docs/REVIEW-v0.14.md) (eingefroren, beschreibt v0.14, Entscheidung **C**) sind in v0.15–v0.18 abgearbeitet + per Bug-Hunt ([`docs/BUGHUNT-v0.17.md`](docs/BUGHUNT-v0.17.md)) nachgehärtet. Roadmap: [`docs/PROP-FIRM-READINESS.md`](docs/PROP-FIRM-READINESS.md).
-- **Sicherheitsregel Nr. 1:** Nichts berührt ein echtes/Funded-Konto, bevor die Roadmap grün ist: F7 + **Rule-Test-Harness/Regelmatrix** + Demo-Forward-Test + **Prop-Firm-Regel-Compliance** + Windows-VPS.
-- **Deployment:** erst lokal (Demo). Für Stabilität *und* echtes „No-Override" → **Windows-VPS** (MT4 über Wine auf Apple Silicon ist instabil).
+## Status & safety
+- **v0.35 is DEMO ONLY and not prop-firm-ready.** Maturity = **fix-verified (AI review), but UNTESTED LIVE** — the binding maturity model: [`docs/STATUS.md`](docs/STATUS.md). The P0/P1 items from the initial review [`docs/REVIEW-v0.14.md`](docs/REVIEW-v0.14.md) (frozen, describes v0.14, decision **C**) were worked off in v0.15–v0.18 and hardened further by a bug hunt ([`docs/BUGHUNT-v0.17.md`](docs/BUGHUNT-v0.17.md)). Roadmap: [`docs/PROP-FIRM-READINESS.md`](docs/PROP-FIRM-READINESS.md).
+- **Safety rule no. 1:** nothing touches a real/funded account before the roadmap is green: F7 + **rule test harness/rule matrix** + demo forward test + **prop-firm rule compliance** + Windows VPS.
+- **Deployment:** locally first (demo). For stability *and* a genuine "No-Override" → a **Windows VPS** (MT4 via Wine on Apple Silicon is unstable).
 
-## Schnellstart
+## Quick start
 
-1. **EA installieren:** `ea/mt4/MamalTrading.mq4` nach `<MT4-Datenordner>/MQL4/Experts/` kopieren,
-   in MetaEditor mit **F7** kompilieren, dann auf einen Chart ziehen. AutoTrading einschalten.
-2. **Basis setzen:** `InpInitialBalance` auf die echte Challenge-Startbalance — **ohne Tausender-Trennzeichen**
-   (`10000`, nicht `10.000`; MetaTrader liest sonst 10,0).
-3. **Wochen-Risiko festlegen:** Im Panel den Prozentwert eintippen und **SETZEN** drücken. Ohne
-   bewusste Wochenentscheidung wird nicht gehandelt (Regel R23) — das ist Absicht, kein Fehler.
-4. **Cockpit (optional):** `cockpit/start.bat` (Windows) bzw. `cockpit/start.command` (macOS) starten,
-   dann `http://localhost:8730`. Node.js genügt, keine Abhängigkeiten, keine DLL. Abschaltbar per
+1. **Install the EA:** copy `ea/mt4/MamalTrading.mq4` to `<MT4 data folder>/MQL4/Experts/`,
+   compile it in MetaEditor with **F7**, then drag it onto a chart. Turn AutoTrading on.
+2. **Set the base:** set `InpInitialBalance` to the real challenge starting balance — **without a thousands separator**
+   (`10000`, not `10.000`; otherwise MetaTrader reads 10.0).
+3. **Define the weekly risk:** type the percentage into the panel and press **SETZEN** (set). Without
+   a deliberate weekly decision, no trading happens (rule R23) — that is intentional, not a bug.
+4. **Cockpit (optional):** start `cockpit/start.bat` (Windows) or `cockpit/start.command` (macOS),
+   then open `http://localhost:8730`. Node.js is enough — no dependencies, no DLL. Switchable off via
    `InpCockpit=false`.
 
-Das Cockpit ist **reine Ansicht**. Die gesamte Regel-Durchsetzung steckt im EA und läuft auch dann
-weiter, wenn der Server aus ist.
+The cockpit is a **pure view**. All rule enforcement sits in the EA and keeps running even when
+the server is off.
 
-## Mitmachen
+## Contributing
 
-Fehlerberichte sind willkommen — besonders aus dem echten Demo-Betrieb, denn genau dort fehlt die
-Abdeckung. Wer einen Befund meldet, hilft am meisten mit: MT4-Build, EA-Version aus der
-`BootDiag`-Zeile im Journal, die betroffenen Journal-Zeilen und was du erwartet hättest.
+Bug reports are welcome — especially from real demo operation, because that is exactly where coverage is
+missing. Whoever reports a finding helps most by including: the MT4 build, the EA version from the
+`BootDiag` line in the journal, the affected journal lines, and what you would have expected.
 
-## Lizenz
+## License
 
-**GNU Affero General Public License v3.0** — siehe [`LICENSE`](LICENSE).
+**GNU Affero General Public License v3.0** — see [`LICENSE`](LICENSE).
 
-Kostenlos für alle, auch kommerziell. Die einzige Bedingung, die zählt: **Urheberangabe bleibt
-erhalten.** Wer TradingGuard weitergibt, verändert oder als Netzwerkdienst betreibt, muss den
-Quelltext unter derselben Lizenz offenlegen und Autor und Herkunft nennen:
+Free for everyone, commercial use included. The only condition that matters: **attribution stays
+intact.** Anyone who redistributes, modifies, or operates TradingGuard as a network service must
+disclose the source code under the same license and name the author and the origin:
 
 > TradingGuard — © Mohammadreza Tavakoli, [itavakoli.com](https://itavakoli.com/)
 
-Die AGPL wurde bewusst gewählt: Sie verhindert, dass jemand dieses Werkzeug als geschlossenes
-Abo-Produkt weiterverkauft. Für Prop-Trader ist offener Quelltext ohnehin ein Vorteil — The5ers
-etwa untersagt EAs, deren Quelltext der Trader nicht besitzt (siehe [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md)).
+The AGPL was chosen deliberately: it prevents anyone from reselling this tool as a closed
+subscription product. For prop traders, open source is an advantage anyway — The5ers, for
+instance, forbids EAs whose source code the trader does not own (see [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md)).
 
-**Haftungsausschluss:** Dieses Werkzeug erzwingt Regeln. Es trifft keine Marktentscheidung, gibt
-keine Anlageberatung und übernimmt keine Verantwortung für Handelsergebnisse. Handel mit
-Hebelprodukten kann zum Totalverlust führen. Die Software wird ohne jede Gewährleistung
-bereitgestellt.
+**Disclaimer:** This tool enforces rules. It makes no market decision, gives no investment advice and
+takes no responsibility for trading results. Trading leveraged products can lead to a total loss. The
+software is provided without any warranty whatsoever.
 
-## Dokumente
-- [`RULES.md`](RULES.md) — Regel-Vertrag (Source of Truth)
-- [`docs/REGELN-EINFACH.md`](docs/REGELN-EINFACH.md) — **Regeln einfach erklärt** (ohne Technik, mit ausführlichen Beispielen)
-- [`docs/REGELN.md`](docs/REGELN.md) — ausführliche Regel-Beschreibung
-- [`docs/REGELN-TABELLE.md`](docs/REGELN-TABELLE.md) — Spickzettel
-- [`docs/TECHNISCHE-DOKU.md`](docs/TECHNISCHE-DOKU.md) — technische Umsetzung
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Architektur-Entscheidung
-- [`docs/REVIEW-v0.14.md`](docs/REVIEW-v0.14.md) — kritische Review + v0.15-Patchplan (eingefrorenes Artefakt)
-- [`docs/PROP-FIRM-READINESS.md`](docs/PROP-FIRM-READINESS.md) — Roadmap zu „Prop-Firm-ready" (Multi-Prop-Firm)
-- [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) — Prop-Firm-Compliance-Check (5 Firmen, mit Quellen)
-- [`docs/STATUS.md`](docs/STATUS.md) — **Reifegrad-Modell** (gebaut/kompiliert/fix-verifiziert/getestet) — gilt für „wie fertig"
-- [`docs/BUGHUNT-v0.17.md`](docs/BUGHUNT-v0.17.md) — Bug-Hunt-Befunde (gefixt vs. offen)
+## Documents
+- [`RULES.md`](RULES.md) — the rule contract (source of truth)
+- [`docs/RULES-PLAIN.md`](docs/RULES-PLAIN.md) — **rules explained in plain language** (no technical detail, with extensive examples)
+- [`docs/RULES-DETAILED.md`](docs/RULES-DETAILED.md) — detailed rule description
+- [`docs/RULES-CHEATSHEET.md`](docs/RULES-CHEATSHEET.md) — cheat sheet
+- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — technical implementation
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture decision
+- [`docs/REVIEW-v0.14.md`](docs/REVIEW-v0.14.md) — critical review + v0.15 patch plan (frozen artifact)
+- [`docs/PROP-FIRM-READINESS.md`](docs/PROP-FIRM-READINESS.md) — roadmap to "prop-firm-ready" (multi-prop-firm)
+- [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) — prop-firm compliance check (5 firms, with sources)
+- [`docs/STATUS.md`](docs/STATUS.md) — **maturity model** (built/compiled/fix-verified/tested) — governs "how finished is it"
+- [`docs/BUGHUNT-v0.17.md`](docs/BUGHUNT-v0.17.md) — bug hunt findings (fixed vs. open)
 
-## Ordnerstruktur
+## Folder structure
 ```
 TradingGuard/
 ├─ README.md
-├─ RULES.md                     # Source of Truth
+├─ RULES.md                     # source of truth
 ├─ LICENSE                      # AGPL-3.0
 ├─ ea/
-│  ├─ mt4/MamalTrading.mq4      # der aktive EA — die gesamte Regel-Durchsetzung (v0.66)
-│  ├─ mt5/RiskGuard.mq5         # obsoleter Vorgänger, bleibt als Referenz liegen
-│  └─ shared/CORE-PLAN.md       # geteilte Logik + Plan
-├─ cockpit/                     # localhost-Ansicht (Node, ohne Abhängigkeiten)
-│  ├─ server.js                 # Datei-Brücke + HTTP-Endpunkte
-│  ├─ dashboard.html            # Live-Cockpit (DE/EN/FA)
-│  ├─ trade.html                # Trade-Akte: Screenshots, SL/TP-Chronik, Auswertung
-│  ├─ day.html · report.html    # Tagesdetail und Wochenbericht
-│  └─ i18n.js                   # Übersetzungen
-└─ docs/                        # Regeln, Technik, Reifegrad, Compliance, Roadmap
+│  ├─ mt4/MamalTrading.mq4      # the active EA — all rule enforcement (v0.66)
+│  ├─ mt5/RiskGuard.mq5         # obsolete predecessor, kept around for reference
+│  └─ shared/CORE-PLAN.md       # shared logic + plan
+├─ cockpit/                     # localhost view (Node, no dependencies)
+│  ├─ server.js                 # file bridge + HTTP endpoints
+│  ├─ dashboard.html            # live cockpit (DE/EN/FA)
+│  ├─ trade.html                # trade file: screenshots, SL/TP history, evaluation
+│  ├─ day.html · report.html    # daily detail and weekly report
+│  └─ i18n.js                   # translations
+└─ docs/                        # rules, technical details, maturity, compliance, roadmap
 ```
-*Hinweis: `ea/mt5/RiskGuard.mq5` ist ein obsoleter Vorgänger (durch MamalTrading ersetzt) und kann gelöscht werden. Das früher hier genannte `ea/mt4/RiskGuard.mq4` existiert nicht (mehr) — nur die MT5-Datei ist noch da.*
+*Note: `ea/mt5/RiskGuard.mq5` is an obsolete predecessor (replaced by MamalTrading) and can be deleted. The `ea/mt4/RiskGuard.mq4` previously listed here does not exist (any more) — only the MT5 file is still there.*
 
-## Regel-Kurzüberblick (Details in RULES.md)
-R1 Risiko/Trade (Auto-Lot, 0,25 %) · R2 Idee-Cap · R3 Tagesbudget · R4 Tagesverlust · R4b Max-Loss · R5 Cooldown · R6 Verlustserie-Sperre · R7 SL/TP-Pflicht · R8 Min-CRV · R9 Anti-FOMO (aus) · R10 No-Override · R11 Journal · R12 Gesamtrisiko · R13 Tagesziel+Giveback · R14 Mindestpause · R15 Min-SL/Max-Lot · R16 Session/News · R17 Korrelation · R18 Wochenlimit · R19 De-Risk · **R22 Nur Panel-Trades** (manuelle Orders werden geschlossen, seit v0.35) · **R23 Wochen-Risiko-Pflicht** (ohne bewusste Wochenentscheidung kein Trade, seit v0.49) · R25 Revenge-Fenster.
+## Rules at a glance (details in RULES.md)
+R1 risk per trade (auto lot, 0.25 %) · R2 idea cap · R3 daily budget · R4 daily loss · R4b max loss · R5 cooldown · R6 losing-streak lock · R7 SL/TP mandatory · R8 min. RRR · R9 anti-FOMO (off) · R10 no-override · R11 journal · R12 total risk · R13 daily target + giveback · R14 minimum break · R15 min. SL/max. lot · R16 session/news · R17 correlation · R18 weekly limit · R19 de-risk · **R22 panel trades only** (manual orders are closed, since v0.35) · **R23 mandatory weekly risk** (no trade without a deliberate weekly decision, since v0.49) · R25 revenge window.

@@ -356,8 +356,8 @@
 <script src="/i18n.js"></script>
 <script>
 // ==== v0.53: Mehrsprachigkeit (de / en / fa) ==============================
-// Die Tabelle liegt in /i18n.js. t(key, params) liefert den Text der aktiven Sprache;
-// fehlt ein Schluessel, faellt es auf Deutsch zurueck (nie leere Oberflaeche).
+// The table lives in /i18n.js. t(key, params) returns the text of the active language;
+// if a key is missing it falls back to German (never an empty UI).
 let LANG = localStorage.getItem('mamalLang') || 'de';
 function t(key, params){
   const T = (window.MAMAL_I18N||{});
@@ -368,12 +368,12 @@ function t(key, params){
 function applyLang(){
   const root=document.documentElement;
   root.lang = LANG;
-  root.dir  = (LANG==='fa') ? 'rtl' : 'ltr';       // Persisch laeuft von rechts nach links
+  root.dir  = (LANG==='fa') ? 'rtl' : 'ltr';       // Persian runs right to left
   document.querySelectorAll('[data-i18n]').forEach(el=>{
     const v=t(el.dataset.i18n); if(v) el.textContent=v;
   });
   const ls=$('langSel'); if(ls) ls.value=LANG;
-  // Alles neu zeichnen, damit auch die dynamischen Texte umschalten
+  // Redraw everything so the dynamic texts switch over too
   prevS=null; g_forceRedraw=true; tick(); loadAnalytics(); loadEquity();
 }
 let g_forceRedraw=false;
@@ -381,10 +381,10 @@ let g_forceRedraw=false;
 const $ = id => document.getElementById(id);
 const de = (n,d=2)=> (n==null||isNaN(n)) ? '—' : Number(n).toFixed(d).replace('.',',');
 const clamp = x => Math.max(0, Math.min(1, x));
-const money = (v,ccy)=>{ if(!/^[A-Z]{3}$/.test(ccy||'')) ccy='';   // v0.39-fix: Fremdtext aus der JSON nie ungefiltert in innerHTML
+const money = (v,ccy)=>{ if(!/^[A-Z]{3}$/.test(ccy||'')) ccy='';   // v0.39-fix: never put foreign text from the JSON into innerHTML unfiltered
   const s=ccy==='EUR'?'€':ccy==='USD'?'$':ccy==='GBP'?'£':(ccy?ccy+' ':''); return s+Math.round(v).toLocaleString('de-DE'); };
 const eur = v => (v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
-// Fremdtext (Broker-Symbole, EA-Strings, freie Journal-Tags) vor innerHTML entschaerfen.
+// Defuse foreign text (broker symbols, EA strings, free-form journal tags) before innerHTML.
 const ESCMAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ESCMAP[c]);
 
@@ -454,24 +454,24 @@ function pillStyle(c){
   if(c==='green')return ['var(--green-bg)','#c6ecd3','#127a37'];
   if(c==='red')  return ['var(--red-bg)','#f6cccc','#b42121'];
   if(c==='amber')return ['var(--amber-bg)','#f2ddba','#a95e08'];
-  if(c==='blue') return ['var(--accent-bg)','#bcd6f7','#1a5fb4'];   // v0.62: R23 — Entscheidung faellig, kein Fehler
+  if(c==='blue') return ['var(--accent-bg)','#bcd6f7','#1a5fb4'];   // v0.62: R23 — decision due, not an error
   return ['#eef1f6','#dfe4ec','#5a6373'];
 }
-// Reihenfolge identisch zur Status-Leiter im EA (WriteCockpit/DrawPanel) — sonst nennt das Banner
-// einen anderen Grund als die Status-Pille daneben.
+// Order identical to the status ladder in the EA (WriteCockpit/DrawPanel) — otherwise the banner names
+// a different reason than the status pill next to it.
 function blockReason(s){
   if(s.protectOff)return t('block.protectOff');
-  if(s.hardLock)return t('block.hardLock');   // Grund steckt schon im Text
+  if(s.hardLock)return t('block.hardLock');   // reason is already in the text
   // v0.65: Sieben Ursachen setzen dieselbe Tagessperre. Vorher stand hier pauschal „Tagesverlust-Sperre" —
-  //   auch wenn die Verlustserie oder der Historie-Wachhund gesperrt hatte. Das war schlicht falsch.
+  //   even when the losing streak or the history watchdog had locked. That was simply wrong.
   if(s.dayLock){
     var why = ['','why.r4','why.r6','why.r13','why.self','why.history','why.tamper','why.test','why.maxloss','why.week'][s.lockWhy||0];
     return t('block.dayLock') + (why ? ' — ' + t(why) : '');
   }
   if(s.weekLock)return t('block.weekLock');
   if(s.baseWarn)return t('block.baseWarn');
-  if(s.weekRiskPending)return t('block.weekRisk');   // v0.62: R23 — Wochenentscheidung steht aus
-  // R4b-Warn-Gate: EA blockt jeden neuen Trade. Fallback ueber s.status fuer aeltere EA-Versionen ohne maxWarn.
+  if(s.weekRiskPending)return t('block.weekRisk');   // v0.62: R23 — weekly decision is pending
+  // R4b warn gate: EA blocks every new trade. Fallback via s.status for older EA versions without maxWarn.
   if(s.maxWarn || s.status==='MAX-LOSS WARNUNG')return t('block.maxWarn');
   if(s.cooldown)return t('block.cooldown');
   if(s.targetHit)return t('block.targetHit');
@@ -485,7 +485,7 @@ function renderState(s,ageMs){
   pill.querySelector('.dot').style.background=fg; $('pillTx').textContent=s.status;
   $('chip').textContent=(s.account?('Konto '+s.account+' · '):'')+s.symbol+' · '+s.tf; $('equity').textContent=money(s.equity,s.ccy);   // v0.37: Kontonummer zeigen (bei mehreren Terminals)
   const r=blockReason(s), bn=$('banner'); bn.style.display='block';
-  const stale = ageMs!=null && ageMs>20000;   // MT4/EA schreibt nicht mehr -> Zustand nicht mehr vertrauenswuerdig
+  const stale = ageMs!=null && ageMs>20000;   // MT4/EA no longer writes -> state no longer trustworthy
   if(r){ bn.className='banner '+(s.statusColor==='red'?'red':'amber'); bn.textContent='Aktuell keine neuen Trades: '+r; }
   else if(stale){ bn.className='banner amber'; bn.textContent='Daten veraltet — MT4/EA prüfen.'; }
   else { bn.className='banner green'; bn.textContent='Alles frei — du kannst nach Plan handeln.'; }
@@ -510,7 +510,7 @@ function renderState(s,ageMs){
   $('content').style.display='block'; $('offline').style.display='none';
 }
 
-// ---- Schwächen ----
+// ---- Weaknesses ----
 // ---- Coach: Disziplin-Hero + Edge + Stunden ----
 const SESS=['Nacht','Vormittag','Nachmittag'];
 function renderCoach(a){
@@ -539,8 +539,8 @@ function renderCoach(a){
   }
   $('edgeGrid').innerHTML=rows;
 
-  // Sequenzielle Blau-Rampe (eine Farbe, hell→dunkel) statt Rot-Transparenz:
-  // Ablehnungen sind Schutz, kein Fehler — und diskrete Stufen bleiben CVD-sicher.
+  // Sequential blue ramp (one color, light→dark) instead of red transparency:
+  // Rejections are protection, not an error — and discrete steps stay CVD-safe.
   const bh=a.blockByHour||[]; const mx=Math.max(1,...bh);
   let hotH=-1,hotV=0; bh.forEach((c,h)=>{ if(c>hotV){hotV=c;hotH=h;} });
   const RAMP=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)','var(--s6)'];
@@ -583,7 +583,7 @@ function renderCalendar(a){
   const [fy,fm]=dates[0].split('.').map(Number); const [ly,lm]=dates[dates.length-1].split('.').map(Number);
   const blocks=[];
   let y=fy,m=fm;
-  const guard=[]; // sammeln, dann neueste zuerst
+  const guard=[]; // collect, then newest first
   while(y<ly || (y===ly && m<=lm)){ guard.push([y,m]); m++; if(m>12){m=1;y++;} }
   for(const [yy,mm] of guard.reverse()){
     const first=new Date(yy,mm-1,1); let startDow=(first.getDay()+6)%7; // Mo=0
@@ -625,7 +625,7 @@ function renderJournal(rows){
     const sym=r.symbol&&r.symbol!=='-'?r.symbol+(r.dir&&r.dir!=='-'?' '+r.dir:''):'';
     const isMan=(r.event||'').toUpperCase()==='CLOSE_MAN';   // v0.44: klar als manuell kennzeichnen
     const lbl=isMan?'MANUELL':esc(r.event||'');
-    const tk=(r.ticket||'').replace(/\D/g,'');   // v0.62: Zeile mit Ticket -> direkt zur Trade-Akte
+    const tk=(r.ticket||'').replace(/\D/g,'');   // v0.62: row with ticket -> straight to the trade record
     const clk=tk?` style="cursor:pointer" title="Trade-Akte oeffnen" onclick="window.open('/trade.html'+AQ('ticket=${tk}'),'_blank')"`:'';
     return `<tr${isMan?' style="background:var(--amber-bg)"':''}${clk}><td>${esc(time)}</td><td><span class="badge ${badgeFor(r.event)}">${lbl}</span></td>
       <td>${esc(sym)}</td><td>${nt}</td><td style="white-space:normal;color:var(--txt2)">${esc((r.tag||'').slice(0,70))}</td></tr>`;
@@ -633,7 +633,7 @@ function renderJournal(rows){
 }
 
 let anaTimer=0;
-// Fetch-Fehler zaehlen: erst nach mehreren Fehlversuchen (~5 s) auf Offline schalten, nicht bei jedem Aussetzer.
+// Count fetch errors: switch to offline only after several failed attempts (~5 s), not on every hiccup.
 let failStreak=0; const FAIL_LIMIT=3;
 function showOffline(){
   const bn=$('banner'); bn.style.display='block'; bn.className='banner red';
@@ -641,32 +641,32 @@ function showOffline(){
   $('stand').innerHTML='<span class="off">●</span> Server offline? · keine Antwort vom Cockpit-Server';
 }
 function fetchFail(){ if(++failStreak>=FAIL_LIMIT) showOffline(); }
-// v0.38: Multi-Konto — Auswahl bleibt im Browser gespeichert; alle Abfragen laufen mit ?acct=
+// v0.38: multi-account — the selection stays stored in the browser; all queries run with ?acct=
 let ACCT = localStorage.getItem('mamalAcct') || '';
-// v0.62: nimmt zusaetzlich einen Parameter auf (z.B. ticket=...), damit Links zur Trade-Akte
-// das gewaehlte Konto mitnehmen: AQ('ticket=123') -> "?acct=…&ticket=123"
+// v0.62: additionally takes a parameter (e.g. ticket=...), so that links to the trade record
+// carry the chosen account along: AQ('ticket=123') -> "?acct=…&ticket=123"
 const AQ = (x) => { const p=[]; if(ACCT) p.push('acct='+encodeURIComponent(ACCT)); if(x) p.push(x);
                     return p.length ? '?'+p.join('&') : ''; };
-let acctMiss=0;   // v0.38-fix (Verify): gewaehltes Konto erst nach mehreren Ticks aufgeben (transienter Lesefehler != Konto weg)
+let acctMiss=0;   // v0.38-fix (Verify): give up the chosen account only after several ticks (transient read error != account gone)
 function renderAccounts(list){
   const sel=$('acctSel'); list=list||[];
-  // Stale-Auswahl pruefen BEVOR der Selector ggf. versteckt wird — sonst haengt eine alte
-  // localStorage-Wahl fuer immer auf "Warte auf MetaTrader", ohne sichtbaren Ausweg.
+  // Check the stale selection BEFORE the selector may get hidden — otherwise an old
+  // localStorage choice hangs forever on "Warte auf MetaTrader" (waiting for MetaTrader), with no visible way out.
   if(ACCT && list.length){
     if(!list.some(a=>String(a.account)===ACCT)){ if(++acctMiss>=5){ ACCT=''; localStorage.removeItem('mamalAcct'); acctMiss=0; } }
     else acctMiss=0;
   }
   if(list.length<2){ sel.style.display='none'; return; }
-  // Auswahl festnageln: ohne explizite Wahl springt die Anzeige sonst zwischen zwei live schreibenden Konten.
+  // Pin the selection down: without an explicit choice the display jumps between two accounts writing live.
   if(!ACCT){ ACCT=String(list[0].account); localStorage.setItem('mamalAcct',ACCT); }
   const cur=ACCT;
-  // Stabil nach Kontonummer sortieren — sonst baut die Frische-Sortierung das Dropdown alle 1,5s um.
+  // Sort stably by account number — otherwise the freshness sorting rebuilds the dropdown every 1.5s.
   const opts=[...list].sort((a,b)=>String(a.account).localeCompare(String(b.account),undefined,{numeric:true}));
   const html=opts.map(a=>`<option value="${esc(a.account)}"${String(a.account)===cur?' selected':''}>Konto ${esc(a.account)}${a.historic?' · nur Historie':(a.profile?' · '+esc(a.profile):'')}</option>`).join('');
   if(sel.dataset.h!==html){ sel.innerHTML=html; sel.dataset.h=html; }
   sel.style.display='';
 }
-$('acctSel').addEventListener('change',function(){ ACCT=this.value; localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); });   // v0.39-fix: prevS zuruecksetzen — sonst falsche Benachrichtigungen beim Kontowechsel
+$('acctSel').addEventListener('change',function(){ ACCT=this.value; localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); });   // v0.39-fix: reset prevS — otherwise wrong notifications on account switch
 
 // ==== v0.39: Dark Mode ====
 (function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
@@ -684,7 +684,7 @@ $('notifBtn').addEventListener('click',async()=>{
   if(NOTIF) beep();
 });
 function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)();
-  if(ctx.state==='suspended') ctx.resume();   // v0.39-fix: Autoplay-Policy — sonst bleibt der Ton nach Reload stumm
+  if(ctx.state==='suspended') ctx.resume();   // v0.39-fix: autoplay policy — otherwise the sound stays muted after a reload
   const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination);
   o.frequency.value=880; g.gain.value=.06; o.start(); setTimeout(()=>{ o.stop(); ctx.close(); },300); }catch(e){} }
 function notifyMsg(m){ if(!NOTIF) return; beep();
@@ -692,8 +692,8 @@ function notifyMsg(m){ if(!NOTIF) return; beep();
 let prevS=null;
 function checkTransitions(s){
   if(prevS){
-    // v0.39-fix (Verify): "wieder handeln" nur, wenn WIRKLICH nichts mehr blockt (gleiche Logik wie das Banner) —
-    // sonst meldete der Toast "frei", waehrend z.B. das Wochenlimit noch sperrt.
+    // v0.39-fix (Verify): "wieder handeln" (trade again) only when NOTHING really blocks any more (same logic as the banner) —
+    // otherwise the toast reported "frei" (free) while e.g. the weekly limit was still locking.
     if(prevS.cooldown && !s.cooldown && blockReason(s)==='') notifyMsg('Cooldown vorbei — du darfst wieder handeln.');
     if(!prevS.dayLock && s.dayLock)   notifyMsg('Tagesverlust-Sperre aktiv — Feierabend für heute.');
     if(!prevS.hardLock && s.hardLock) notifyMsg('MAX-VERLUST-Sperre aktiv.');
@@ -704,10 +704,10 @@ function checkTransitions(s){
 }
 
 // ==== v0.46: Sperr-Monitor ====
-// Der EA liefert cooldownSec alle 2s; dazwischen zaehlt der Browser selbst herunter,
-// damit die Uhr fluessig laeuft. Sekundenwert wird bei jedem /state neu synchronisiert.
+// The EA delivers cooldownSec every 2s; in between the browser counts down itself,
+// so the clock runs smoothly. The seconds value is re-synced on every /state.
 let LOCK=null;   // {kind, why, endMs, totalSec, crit}
-function srvNow(s){ // Server-Zeit als ms (aus "YYYY.MM.DD HH:MM:SS")
+function srvNow(s){ // server time as ms (from "YYYY.MM.DD HH:MM:SS")
   const m=String(s&&s.srvtime||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
   return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]):0;
 }
@@ -752,7 +752,7 @@ function paintLock(){
   $('lmUntil').textContent='frei um '+new Date(LOCK.endMs).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' (lokal)';
   $('lmBar').style.width=(LOCK.totalSec>0?clamp(rest/1000/LOCK.totalSec)*100:100).toFixed(1)+'%';
 }
-setInterval(paintLock,1000);   // fluessige Uhr zwischen den Polls
+setInterval(paintLock,1000);   // smooth clock between the polls
 
 // ==== v0.39: Puffer-Tacho ====
 let LASTSTATE=null, LASTA=null, CCY='EUR';
@@ -788,7 +788,7 @@ $('enddayBtn').addEventListener('click',async()=>{
 $('reportBtn').addEventListener('click',()=>window.open('/report.html'+AQ(),'_blank'));
 $('tradesBtn').addEventListener('click',()=>window.open('/trade.html'+AQ(),'_blank'));   // v0.62: Trade-Akte
 
-// ==== v0.39: Challenge-Tracker (Ziel frei wählbar, Standard FTMO Phase 1 = 10%) ====
+// ==== v0.39: challenge tracker (target freely selectable, default FTMO phase 1 = 10%) ====
 let CH_T=parseFloat(localStorage.getItem('mamalChTarget'))||10;
 function renderChallenge(s){
   const base=s.initBal>0?s.initBal:0;
@@ -826,7 +826,7 @@ function renderAcctGrid(list){
   const cur=ACCT||String(list[0].account);
   const cards=[...list].sort((a,b)=>String(a.account).localeCompare(String(b.account),undefined,{numeric:true})).map(a=>{
     const live=a.ageMs<15000;
-    const colr=a.statusColor==='red'?'var(--red)':a.statusColor==='amber'?'var(--amber)':a.statusColor==='blue'?'var(--accent)':'var(--green)';   // v0.62: blau = Entscheidung faellig (R23), sonst faelscht es grün
+    const colr=a.statusColor==='red'?'var(--red)':a.statusColor==='amber'?'var(--amber)':a.statusColor==='blue'?'var(--accent)':'var(--green)';   // v0.62: blue = decision due (R23), otherwise it fakes green
     const dayRem=(a.dayBase>0&&a.dailyLimit>0)?a.equity-a.dayBase*(1-a.dailyLimit/100):null;
     return `<div class="acard ${String(a.account)===cur?'sel':''}" onclick="pickAcct('${String(a.account).replace(/\D/g,'')}')">
       <div style="display:flex;align-items:center;gap:8px"><span class="an">Konto ${esc(a.account)}</span>
@@ -838,13 +838,13 @@ function renderAcctGrid(list){
 }
 function pickAcct(a){ ACCT=String(a); localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); }   // v0.39-fix: prevS-Reset gegen falsche Kontowechsel-Benachrichtigungen
 
-// ==== v0.39: Tilt-Radar (Ablehnungs-Häufung in 10 Minuten, Server-Zeitbasis) ====
+// ==== v0.39: tilt radar (cluster of rejections within 10 minutes, server time base) ====
 function parseSrv(t){ const m=String(t||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
   return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]):0; }
 function renderTilt(rows){
   rows=rows||[]; let newest=0;
   for(const r of rows){ const t=parseSrv(r.time); if(t>newest) newest=t; }
-  const n=rows.filter(r=>String(r.event||'').trim().toUpperCase()==='BLOCKED'&&newest-parseSrv(r.time)<=10*60*1000).length;   // v0.39-fix: gleiche Normalisierung wie im Journal
+  const n=rows.filter(r=>String(r.event||'').trim().toUpperCase()==='BLOCKED'&&newest-parseSrv(r.time)<=10*60*1000).length;   // v0.39-fix: same normalization as in the journal
   const el=$('tilt');
   if(n>=4){ el.style.display='block'; el.textContent=`🚨 Tilt-Radar: ${n} Ablehnungen in 10 Minuten — steh auf, hol Wasser, komm in 15 Minuten wieder.`; }
   else el.style.display='none';
@@ -877,10 +877,10 @@ async function loadEquity(){
 // ==== v0.39: Disziplin-Trend + Streak ====
 function renderTrend(a){
   const cal=a.calendar||{}; const dates=Object.keys(cal).sort();
-  // v0.45-fix (Verify): auch Tage zaehlen, an denen NUR manuell gehandelt wurde (kein OPEN, kein Block) —
-  //   sonst lief die Streak "ohne Regel-Block" weiter, obwohl der Trader den ganzen Tag am Tool vorbei handelte.
+  // v0.45-fix (Verify): also count days on which trading was ONLY manual (no OPEN, no block) —
+  //   otherwise the "no rule block" streak kept running although the trader traded past the tool all day long.
   const act=dates.filter(d=>(cal[d].fills||0)+(cal[d].blocks||0)+(cal[d].closes||0)>0);
-  const clean=d=>((cal[d].blocks||0)===0 && (cal[d].manual||0)===0);   // sauberer Tag = kein Block UND nichts am Panel vorbei
+  const clean=d=>((cal[d].blocks||0)===0 && (cal[d].manual||0)===0);   // clean day = no block AND nothing past the panel
   let bars='';
   for(const d of act.slice(-30)){
     const c=cal[d], at=(c.fills||0)+(c.blocks||0), ratio=at?c.fills/at:0;
@@ -909,7 +909,7 @@ function renderStats(a){
      <div class="stat"><div class="l">Expectancy / Trade</div><div class="v ${st.expectancy>=0?'net-pos':'net-neg'}">${eur(st.expectancy||0)}</div></div>
      <div class="stat"><div class="l">Beste Stunde</div><div class="v">${bi>=0?bi+':00':'—'}</div><div class="gnote">${bi>=0?eur(bv):''}</div></div>
      <div class="stat"><div class="l">Schwächste Stunde</div><div class="v">${wi>=0?wi+':00':'—'}</div><div class="gnote">${wi>=0?eur(wv):''}</div></div>
-     ${(function(){   // v0.52: Einstiegs-Timing innerhalb der Kerze — früh/mittig/spät
+     ${(function(){   // v0.52: entry timing within the candle — early/middle/late
         const th=(a.stats&&a.stats.thirds)||[0,0,0], tn=(a.stats&&a.stats.thirdNet)||[0,0,0];
         const ges=th[0]+th[1]+th[2];
         if(!ges) return '';
@@ -928,9 +928,9 @@ async function tick(){
   let ok=false;
   try{
     const j=await (await fetch('/state'+AQ())).json(); const st=$('stand'); ok=true;
-    // v0.48-fix: Ohne ausdrueckliche Wahl IMMER das live laufende Konto zeigen. Vorher lieferte der Server
-    // ohne ?acct die Summe ALLER Konten desselben Terminals — nach einem Kontowechsel klebten die alten
-    // Zahlen (Netto, Kalender, Bloecke) am neuen Konto.
+    // v0.48-fix: without an explicit choice ALWAYS show the live running account. Previously the server
+    // without ?acct delivered the sum of ALL accounts of the same terminal — after an account switch the old
+    // numbers (net, calendar, blocks) stuck to the new account.
     if(!ACCT && j.state && j.state.account){ ACCT=String(j.state.account); localStorage.setItem('mamalAcct',ACCT); loadAnalytics(); loadEquity(); }
     renderAccounts(j.accounts); renderAcctGrid(j.accounts);
     if(!j.state){ $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML='<span class="off">● keine Verbindung zu MT4</span>'; failStreak=0; return; }
@@ -939,7 +939,7 @@ async function tick(){
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
     LOCK=buildLock(j.state); paintLock();   // v0.46: Sperr-Monitor mit jedem Poll neu synchronisieren
     const age=j.ageMs==null?9e9:j.ageMs; const cls=age<6000?'live':age<20000?'stale':'off'; const txt=age<6000?'live':age<20000?'verzögert':'MT4 gestoppt?';
-    // Echten Server-Port zeigen (j.serverPort); state.port ist nur der EA-Input InpCockpitPort.
+    // Show the real server port (j.serverPort); state.port is only the EA input InpCockpitPort.
     const srvPort=j.serverPort!=null?j.serverPort:j.state.port;
     const mism=j.serverPort!=null&&j.state.port!=null&&Number(j.state.port)!==Number(j.serverPort);
     const portTx='localhost:'+esc(srvPort)+(mism

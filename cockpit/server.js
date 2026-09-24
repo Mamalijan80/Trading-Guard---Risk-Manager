@@ -1,24 +1,24 @@
 #!/usr/bin/env node
-// TradingGuard — Risiko- und Disziplin-Tool fuer MetaTrader 4
+// TradingGuard — risk and discipline tool for MetaTrader 4
 // Copyright (C) 2026 Mohammadreza Tavakoli — https://itavakoli.com/
 //
-// Dieses Programm ist freie Software: Sie koennen es weitergeben und/oder
-// veraendern unter den Bedingungen der GNU Affero General Public License,
-// Version 3 oder (nach Ihrer Wahl) jeder spaeteren Version.
+// This program is free software: you may redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License,
+// version 3 or (at your option) any later version.
 //
-// Die Veroeffentlichung erfolgt in der Hoffnung, dass es nuetzlich ist, aber
-// OHNE JEDE GEWAEHRLEISTUNG — sogar ohne die implizite Gewaehrleistung der
-// MARKTGAENGIGKEIT oder EIGNUNG FUER EINEN BESTIMMTEN ZWECK. Einzelheiten in
-// der GNU Affero General Public License: <https://www.gnu.org/licenses/>.
+// It is published in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY — not even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. Details in
+// the GNU Affero General Public License: <https://www.gnu.org/licenses/>.
 //
-// KEINE ANLAGEBERATUNG. Handel mit Hebelprodukten kann zum Totalverlust
-// fuehren. Dieses Werkzeug erzwingt Regeln, es trifft keine Marktentscheidung
-// und uebernimmt keine Verantwortung fuer Handelsergebnisse.
+// NOT INVESTMENT ADVICE. Trading leveraged products can lead to total
+// loss. This tool enforces rules, it makes no market decision
+// and takes no responsibility for trading results.
 // Mamal-Trading Cockpit — lokaler Server (Node, zero-dependency).
-// Liest den Live-Zustand + das Journal, das der MT4-EA in MQL4/Files schreibt,
-// und serviert daraus ein Live-Dashboard (Kalender, Schwächen, Tagesdetails). DLL-frei.
-// v0.38: Multi-Konto — der EA legt pro Login einen Wegweiser (mamal_files_<login>.txt)
-// in den Common-Ordner; der Server bietet daraus einen Konto-Umschalter (?acct=...).
+// Reads the live state + the journal that the MT4 EA writes into MQL4/Files,
+// and serves a live dashboard from it (calendar, weaknesses, day details). DLL-free.
+// v0.38: multi-account — the EA drops one signpost per login (mamal_files_<login>.txt)
+// into the Common folder; from these the server offers an account switcher (?acct=...).
 'use strict';
 const http = require('http');
 const fs   = require('fs');
@@ -27,11 +27,11 @@ const { exec } = require('child_process');
 
 const PORT = Number(process.env.MAMAL_PORT) || 8730;
 
-// §07-fix: Der Default-Pfad war fest auf macOS/Wine verdrahtet (und nutzte $HOME, das es unter Windows so nicht gibt).
-// v0.37-fix: Ordner DYNAMISCH ermitteln statt einmalig beim Start (sonst zeigt der Server dauerhaft
-// auf einen falschen/leeren Ordner, wenn node vor dem EA startet oder mehrere Terminals laufen).
-// v0.38-fix (Verify): kurzlebiger Cache — das Dashboard pollt alle 1,5s und jeder /state-Aufruf
-// loeste sonst mehrere Verzeichnis-Scans + Datei-Reads aus (auf OneDrive/AV-gescannten Pfaden teuer).
+// §07-fix: the default path was hard-wired to macOS/Wine (and used $HOME, which does not exist that way on Windows).
+// v0.37-fix: determine the folder DYNAMICALLY instead of once at startup (otherwise the server points
+// permanently at a wrong/empty folder when node starts before the EA or several terminals are running).
+// v0.38-fix (Verify): short-lived cache — the dashboard polls every 1.5s and every /state call
+// otherwise triggered several directory scans + file reads (expensive on OneDrive/AV-scanned paths).
 function memo(fn, ttlMs) {
   let t = 0, v = null;
   return () => { const now = Date.now(); if (now - t < ttlMs && v !== null) return v; v = fn(); t = now; return v; };
@@ -42,7 +42,7 @@ const winAllFilesDirs = memo(() => {
     return fs.readdirSync(base)
       .map(h => path.join(base, h, 'MQL4', 'Files'))
       .filter(p => fs.existsSync(p));
-  } catch (e) { return []; }   // Basisordner fehlt -> keine Kandidaten
+  } catch (e) { return []; }   // base folder missing -> no candidates
 }, 1500);
 function commonFilesDir() {
   return path.join(process.env.APPDATA || '', 'MetaQuotes', 'Terminal', 'Common', 'Files');
@@ -85,10 +85,10 @@ function allFilesDirs() {
   );
   return fs.existsSync(d) ? [d] : [];
 }
-// Aktives Terminal OHNE Konto-Angabe: Override -> frischeste cockpit.json.
-// v0.38-fix (Verify): der Legacy-Wegweiser hat KEINE Prioritaet mehr — bei zwei live schreibenden
-// Terminals gewann sonst abwechselnd der letzte Schreiber und die Anzeige sprang zwischen den Konten.
-// (Portable-Mode bleibt abgedeckt: die Beacon-Ordner stecken in allFilesDirs.)
+// Active terminal WITHOUT an account given: override -> freshest cockpit.json.
+// v0.38-fix (Verify): the legacy signpost has NO priority any more — with two terminals writing live,
+// the last writer used to win in turn and the display jumped back and forth between the accounts.
+// (Portable mode stays covered: the beacon folders sit in allFilesDirs.)
 function currentFiles() {
   if (process.env.MAMAL_FILES) return process.env.MAMAL_FILES;
   const dirs = allFilesDirs();
@@ -101,13 +101,13 @@ function currentFiles() {
   }
   return best;
 }
-// v0.38: Ordner fuer ein BESTIMMTES Konto: Konto-Wegweiser (verifiziert) -> cockpit.json-Inhalt -> leer.
+// v0.38: folder for a SPECIFIC account: account signpost (verified) -> cockpit.json content -> empty.
 function dirForAccount(acct) {
   if (!acct) return currentFiles();
   const hit = accountBeacons().find(x => x.account === String(acct));
   if (hit) {
-    // v0.38-fix (Verify): Stale-Beacon abfangen — nach einem Login-Wechsel im selben Terminal zeigt der
-    // alte Wegweiser auf einen Ordner, dessen cockpit.json inzwischen einem ANDEREN Konto gehoert.
+    // v0.38-fix (Verify): catch a stale beacon — after a login change in the same terminal the
+    // old signpost points at a folder whose cockpit.json meanwhile belongs to a DIFFERENT account.
     try {
       const s = JSON.parse(fs.readFileSync(path.join(hit.dir, 'mamal_cockpit.json'), 'latin1'));
       if (String(s.account) === String(acct)) return hit.dir;
@@ -121,7 +121,7 @@ function dirForAccount(acct) {
   }
   return '';
 }
-// v0.38: Liste aller bekannten Konten (fuer den Umschalter) — frischeste zuerst.
+// v0.38: list of all known accounts (for the switcher) — freshest first.
 function accountsList() {
   const seen = new Map();
   const add = (dir) => {
@@ -141,9 +141,9 @@ function accountsList() {
   };
   for (const b of accountBeacons()) add(b.dir);
   for (const d of allFilesDirs()) add(d);
-  // v0.48-fix: Konten, die NUR noch im Journal stehen (z.B. altes Konto im selben Terminal — die
-  // cockpit.json wurde vom neuen Login ueberschrieben), zusaetzlich als "offline" auffuehren.
-  // Ohne das erschien kein Umschalter, und die Kennzahlen mischten beide Konten.
+  // v0.48-fix: accounts that only exist in the journal any more (e.g. the old account in the same terminal — the
+  // cockpit.json was overwritten by the new login) are additionally listed as "offline".
+  // Without that no switcher appeared, and the metrics mixed both accounts.
   try {
     for (const d of allFilesDirs()) {
       const jf = path.join(d, 'MamalTrading_Journal.csv');
@@ -162,9 +162,9 @@ function accountsList() {
   return [...seen.values()].sort((a, b) => a.ageMs - b.ageMs);
 }
 const stateFile   = (acct) => { const d = dirForAccount(acct); return d ? path.join(d, 'mamal_cockpit.json') : ''; };
-// v0.48-fix: Das Journal eines Kontos liegt dort, wo seine Zeilen stehen — NICHT zwingend dort, wo eine
-// passende cockpit.json liegt. Nach einem Login-Wechsel im selben Terminal gehoert die JSON dem neuen Konto,
-// das alte Konto fand sein eigenes Journal dadurch nicht mehr (Historie erschien leer).
+// v0.48-fix: an account's journal lies where its lines are — NOT necessarily where a
+// matching cockpit.json lies. After a login change in the same terminal the JSON belongs to the new account,
+// so the old account no longer found its own journal (history appeared empty).
 const journalFile = (acct) => {
   const d = dirForAccount(acct);
   if (d) return path.join(d, 'MamalTrading_Journal.csv');
@@ -177,7 +177,7 @@ const journalFile = (acct) => {
   return '';
 };
 
-// §07-fix: 'open' ist macOS-only — unter Windows/Linux schlug der Browser-Start still fehl.
+// §07-fix: 'open' is macOS-only — on Windows/Linux the browser launch failed silently.
 function openBrowser() {
   if (process.env.MAMAL_NOOPEN) return;
   const url = `http://localhost:${PORT}`;
@@ -192,7 +192,7 @@ function readState(acct) {
   const f = stateFile(acct); if (!f) return null;
   try {
     const s = JSON.parse(fs.readFileSync(f, 'latin1'));
-    // v0.38-fix (Verify): nie Daten eines FREMDEN Kontos unter angefragtem Label liefern.
+    // v0.38-fix (Verify): never deliver data of a FOREIGN account under the requested label.
     if (acct && String(s.account) !== String(acct)) return null;
     return s;
   }
@@ -204,7 +204,7 @@ function stateAgeMs(acct) {
   catch (e) { return null; }
 }
 
-// Fallback: RuleId aus dem Tag-Text ableiten, wenn die Spalte leer ist.
+// Fallback: derive RuleId from the tag text when the column is empty.
 function ruleFromTag(tag) {
   const t = (tag || '').trim();
   if (!t) return '';
@@ -218,12 +218,12 @@ function ruleFromTag(tag) {
   return '';
 }
 
-// Journal robust parsen (alte 10-Spalten- und neue 18-Spalten-Zeilen gemischt).
-// v0.38: optional nach Konto filtern — falls in einem Terminal frueher ein anderes Login aktiv war,
-// bleiben dessen Zeilen aussen vor (Spalte 3 = Kontonummer; alte Kurzzeilen ohne Konto bleiben drin).
-// v0.45-fix (Verify): Ergebnis-Cache. Das Dashboard pollt /journal alle 1,5s und /analytics alle 15s —
-// vorher wurde die (taeglich wachsende) CSV bei JEDEM Request komplett neu gelesen und geparst, auf einem
-// OneDrive-/AV-gescannten Pfad spuerbar teuer. Invalidierung ueber mtime+size der Datei.
+// Parse the journal robustly (old 10-column and new 18-column lines mixed).
+// v0.38: optionally filter by account — if another login was active earlier in a terminal,
+// its lines stay out (column 3 = account number; old short lines without an account stay in).
+// v0.45-fix (Verify): result cache. The dashboard polls /journal every 1.5s and /analytics every 15s —
+// before, the (daily growing) CSV was completely re-read and re-parsed on EVERY request, noticeably
+// expensive on a OneDrive-/AV-scanned path. Invalidation via mtime+size of the file.
 const parseCache = new Map();
 function parseAll(acct) {
   let raw;
@@ -242,21 +242,21 @@ function parseAll(acct) {
     if (c[0] === 'ServerTime') continue;
     let ev;
     if (c.length >= 17) {
-      if (want && c[2] && c[2].trim() !== want) continue;   // fremdes Konto im selben Terminal-Journal
-      // v0.38-fix (Verify): Tag ist Freitext und kann ';' enthalten -> Rest wieder zusammensetzen,
-      // sonst verliert die "net X"-Erkennung den Betrag und der Close fehlt im Kalender.
+      if (want && c[2] && c[2].trim() !== want) continue;   // foreign account in the same terminal journal
+      // v0.38-fix (Verify): tag is free text and may contain ';' -> reassemble the rest,
+      // otherwise the "net X" detection loses the amount and the close is missing from the calendar.
       ev = { time: c[0], event: c[6], symbol: c[7], dir: c[8],
-             ticket: (c[14] || '').trim(),   // v0.52: Ticket mitführen — Grundlage der Trade-Akte
-             raw: c,                         // v0.62: Rohspalten (Balance, Lot, Entry, SL, TP, Risk%) für die Trade-Akte
+             ticket: (c[14] || '').trim(),   // v0.52: carry the ticket along — basis of the trade file
+             raw: c,                         // v0.62: raw columns (Balance, Lot, Entry, SL, TP, Risk%) for the trade file
              net: parseFloat(c[15]) || 0, ruleId: (c[16] || '').trim(), tag: c.slice(17).join(';') };
     } else {
-      if (want) continue;   // v0.38-fix (Verify): Kurzzeilen ohne Kontospalte nicht JEDEM Konto zurechnen
+      if (want) continue;   // v0.38-fix (Verify): do not attribute short lines without an account column to EVERY account
       ev = { time: c[0], event: c[1] || '', symbol: c[2] || '', dir: c[3] || '',
              net: 0, ruleId: '', tag: c[c.length - 1] || '' };
     }
     ev.date = (ev.time || '').slice(0, 10);
     ev.hour = parseInt((ev.time || '').slice(11, 13), 10); if (isNaN(ev.hour)) ev.hour = -1;
-    const m = (ev.tag || '').match(/net\s+(-?\d+(?:\.\d+)?)/);   // echtes realisiertes Netto steht (auch) im Tag
+    const m = (ev.tag || '').match(/net\s+(-?\d+(?:\.\d+)?)/);   // the real realized net is (also) in the tag
     ev.tagNet = m ? parseFloat(m[1]) : null;
     if (!ev.ruleId) ev.ruleId = ruleFromTag(ev.tag);
     out.push(ev);
@@ -266,35 +266,35 @@ function parseAll(acct) {
   return out;
 }
 
-// Session-Bucket aus der Stunde (grob: Nacht / Vormittag / Nachmittag).
+// Session bucket from the hour (roughly: night / morning / afternoon).
 function sess(h) { return (h < 0 || h >= 22 || h < 7) ? 'Nacht' : (h < 14 ? 'Vormittag' : 'Nachmittag'); }
 
-// Aggregation: Kalender + Regel-Schwächen + Disziplin + Edge (Symbol×Session) + Block-Stunden-Heatmap.
+// Aggregation: calendar + rule weaknesses + discipline + edge (symbol×session) + blocked-hours heatmap.
 function analytics(acct) {
   const all = parseAll(acct);
   const cal = {}, rules = {}, edge = {};
   const blockByHour = new Array(24).fill(0);
-  const netByHour = new Array(24).fill(0);   // v0.39: wann wird wirklich Geld verdient/verloren
+  const netByHour = new Array(24).fill(0);   // v0.39: when money is really earned/lost
   let netTotal = 0, tradesTotal = 0, blocksTotal = 0, fillsTotal = 0;
   let winSum = 0, winN = 0, lossSum = 0, lossN = 0;   // v0.39: Expectancy/Profit-Factor
   let manualN = 0, manualNet = 0;
-  const thirds = [0,0,0];            // v0.52: Einstiege je Kerzendrittel (früh/mittig/spät)
-  const byTicketThird = {};          // Ticket -> Drittel, damit der CLOSE das Ergebnis zuordnen kann
-  const thirdNet = [0,0,0];          // Netto je Drittel: zahlt sich frühes Einsteigen aus?                     // v0.44: manuelle/fremde Trades separat ausweisen
+  const thirds = [0,0,0];            // v0.52: entries per candle third (early/middle/late)
+  const byTicketThird = {};          // ticket -> third, so that the CLOSE can attribute the result
+  const thirdNet = [0,0,0];          // Net per third: does entering early pay off?                     // v0.44: report manual/foreign trades separately
   for (const e of all) {
     if (!e.date) continue;
     if (!cal[e.date]) cal[e.date] = { date: e.date, net: 0, closes: 0, wins: 0, losses: 0, blocks: 0, fills: 0, rules: 0, manual: 0, thirds: [0,0,0] };
     const d = cal[e.date];
     if (e.event === 'OPEN') {
       d.fills++; fillsTotal++;
-      // v0.52: In welchem Drittel der laufenden Kerze wurde eingestiegen? Der EA schreibt "K1/3".."K3/3"
-      // in den Tag. Spätes Einsteigen (K3/3) heisst meist: der Bewegung hinterhergelaufen.
+      // v0.52: in which third of the running candle was the entry? The EA writes "K1/3".."K3/3"
+      // into the tag. Entering late (K3/3) usually means: chasing the move.
       const km = (e.tag || '').match(/\bK([123])\/3\b/);
       if (km) { const i = +km[1] - 1; thirds[i]++; d.thirds[i]++; byTicketThird[e.ticket] = i; }
     }
-    // Nur ECHTE Positions-Ergebnisse (Tag "net X"), nicht mechanische Queue-/DELETE-Closes.
-    // v0.44: CLOSE_MAN = manueller/fremder Trade (nicht vom Panel) — zaehlt fuer die Konto-Wahrheit
-    //   (Netto/Kalender/Statistik) und wird zusaetzlich separat als "manuell" ausgewiesen.
+    // Only REAL position results (tag "net X"), not mechanical queue/DELETE closes.
+    // v0.44: CLOSE_MAN = manual/foreign trade (not from the panel) — counts toward the account truth
+    //   (net/calendar/statistics) and is additionally reported separately as "manuell" (manual).
     const isMan = (e.event === 'CLOSE_MAN');
     if ((e.event === 'CLOSE' && e.tagNet !== null) || isMan) {
       const nt = isMan ? (e.net || 0) : e.tagNet;
@@ -331,7 +331,7 @@ function analytics(acct) {
     discipline: { fills: fillsTotal, blocks: blocksTotal, attempts, ratio: attempts ? fillsTotal / attempts : 0 },
     verdict: { best, worst },
     totals: { days: dates.length, netTotal, tradesTotal, blocksTotal, fillsTotal, manualN, manualNet },   // v0.44: manuelle Trades getrennt sichtbar
-    // v0.39: Kennzahlen fuer die Trade-Statistik-Karte
+    // v0.39: metrics for the trade statistics card
     stats: {
       winN, lossN,
       winRate: (winN + lossN) ? winN / (winN + lossN) : 0,
@@ -340,13 +340,13 @@ function analytics(acct) {
       profitFactor: lossSum < 0 ? winSum / -lossSum : (winSum > 0 ? Infinity : 0),
       expectancy: (winN + lossN) ? netTotal / (winN + lossN) : 0,
       netByHour,
-      thirds, thirdNet          // v0.52: Einstiegs-Timing innerhalb der Kerze
+      thirds, thirdNet          // v0.52: entry timing within the candle
     },
     range: { first: dates[0] || null, last: dates[dates.length - 1] || null }
   };
 }
 
-// Ein Tag im Detail (fuer die Tagesseite).
+// One day in detail (for the day page).
 function dayDetail(d, acct) {
   const all = parseAll(acct).filter(e => e.date === d);
   let net = 0, closes = 0, wins = 0, losses = 0, blocks = 0, manual = 0;
@@ -375,10 +375,10 @@ setInterval(() => {
     const f = path.join(dir, 'mamal_cockpit_open.txt');
     fs.stat(f, (err, st) => {
       if (err) return;
-      // v0.38-fix (Verify): uralte Trigger (Klick waehrend der Server tot war) nur aufraeumen,
-      // NICHT oeffnen — sonst poppt beim naechsten Windows-Login unerwartet der Browser auf.
+      // v0.38-fix (Verify): only clean up ancient triggers (a click while the server was dead),
+      // do NOT open — otherwise the browser pops up unexpectedly at the next Windows login.
       const stale = st && (Date.now() - st.mtimeMs > 120000);
-      // NUR oeffnen, wenn die Datei tatsaechlich entfernt wurde (sonst Endlosschleife bei unlink-Fehler).
+      // Open ONLY if the file was actually removed (otherwise an endless loop on an unlink error).
       fs.unlink(f, (uerr) => {
         if (uerr || stale) return;
         const now = Date.now();
@@ -390,21 +390,21 @@ setInterval(() => {
   }
 }, 600);
 
-// v0.39: Equity-Zeitreihe — der Server sampelt alle 5s die Equity jedes LIVE schreibenden Kontos
-// in cockpit/data/equity_<konto>.csv (epochMs;equity;dayBase). Der EA bleibt unveraendert.
+// v0.39: equity time series — the server samples the equity of every LIVE writing account every 5s
+// into cockpit/data/equity_<account>.csv (epochMs;equity;dayBase). The EA stays unchanged.
 const DATA_DIR = path.join(__dirname, 'data');
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { /* existiert */ }
 function equityFile(acct) { return path.join(DATA_DIR, 'equity_' + String(acct).replace(/\D/g, '') + '.csv'); }
 setInterval(() => {
   for (const a of accountsList()) {
-    if (a.ageMs > 15000) continue;              // nur live schreibende Konten samplen
+    if (a.ageMs > 15000) continue;              // sample only accounts writing live
     if (typeof a.equity !== 'number') continue;
-    if (!/^\d+$/.test(String(a.account))) continue;   // v0.39-fix (Verify): sonst kollidieren nicht-numerische IDs in equity_.csv (und der Trim greift nie)
+    if (!/^\d+$/.test(String(a.account))) continue;   // v0.39-fix (Verify): otherwise non-numeric IDs collide in equity_.csv (and the trim never kicks in)
     const line = Date.now() + ';' + a.equity + ';' + (a.dayBase != null ? a.dayBase : '') + '\n';
     fs.appendFile(equityFile(a.account), line, () => {});
   }
 }, 5000);
-// Datei begrenzen: 1x pro Stunde auf die letzten ~20k Punkte (~1 Tag bei 5s) + Rest der Woche kuerzen.
+// Cap the file: 1x per hour down to the last ~20k points (~1 day at 5s) + trim the rest of the week.
 setInterval(() => {
   try {
     for (const f of fs.readdirSync(DATA_DIR)) {
@@ -428,9 +428,9 @@ function equitySeries(acct, n) {
 }
 
 // ===== v0.62: Trade-Akte =====================================================
-// Baut aus den Journalzeilen EINES Tickets eine vollstaendige Akte und formuliert
-// daraus eine Zusammenfassung im Klartext — inklusive der Frage, ob das Verschieben
-// von SL/TP dem Trade genutzt oder geschadet hat.
+// Builds a complete file out of the journal lines of ONE ticket and formulates
+// a plain-text summary from it — including the question whether moving
+// SL/TP helped or hurt the trade.
 function shotsFor(ticket, acct) {
   const dir = dirForAccount(acct) || currentFiles();
   if (!dir) return [];
@@ -442,11 +442,11 @@ function shotsFor(ticket, acct) {
 }
 function num(x) { const v = parseFloat(String(x).replace(',', '.')); return isFinite(v) ? v : 0; }
 
-// v0.65: Altbestand retten. Bis EA v0.64 schrieb der Gruppen-Pfad der Close-Aufloesung die CLOSE-Zeile mit
-//   Ticket 0 — das Ergebnis war seinem Einstieg nicht zuzuordnen, die Akte zeigte JEDEN Trade als "offen".
-//   Nachtraeglich geht nur noch SCHLIESSEN: gleiches Symbol, gleiche Richtung, aelteste noch offene Position
-//   zuerst (FIFO). Das ist eine begruendete Vermutung, keine Tatsache — jede so gewonnene Zahl wird als
-//   "zugeordnet" markiert, damit niemand sie fuer ticketgenau haelt. Neue Closes brauchen das nicht mehr.
+// v0.65: rescue legacy data. Up to EA v0.64 the group path of the close resolution wrote the CLOSE line with
+//   ticket 0 — the result could not be attributed to its entry, the file showed EVERY trade as "offen" (open).
+//   After the fact only CLOSING is still possible: same symbol, same direction, oldest still open position
+//   first (FIFO). That is a reasoned guess, not a fact — every number obtained that way is marked
+//   as "zugeordnet" (attributed), so that nobody takes it for ticket-accurate. New closes no longer need this.
 function orphanCloseMap(rows) {
   const opens = [], map = new Map();
   for (const e of rows) {
@@ -462,10 +462,10 @@ function orphanCloseMap(rows) {
     }
     const dir  = (e.dir && e.dir !== '-') ? e.dir : null;   // Schutz-Closes tragen "-"
     const cand = opens.filter(x => !x.used && x.symbol === e.symbol && (!dir || x.dir === dir));
-    // NUR bei Eindeutigkeit zuordnen. Der naheliegende FIFO-Ansatz (aeltester Einstieg zuerst) ist
-    // nachweislich falsch: eine spaeter eroeffnete Position kann frueher schliessen. Am Kontoauszug
-    // des Nutzers gepruft — von neun Zeilen waren zwei vertauscht. Eine falsche Zahl mit "circa"
-    // davor ist schlechter als ein ehrliches "unbekannt", weil sie wie ein Messwert aussieht.
+    // Attribute ONLY when unambiguous. The obvious FIFO approach (oldest entry first) is
+    // demonstrably wrong: a position opened later can close earlier. Checked against the user's
+    // account statement — of nine lines, two were swapped. A wrong number with "circa"
+    // in front of it is worse than an honest "unknown", because it looks like a measured value.
     if (cand.length !== 1) { for (const c of cand) c.ambiguous = true; continue; }
     cand[0].used = true;
     map.set(cand[0].ticket, e);
@@ -480,8 +480,8 @@ function tradeDossier(ticket, acct) {
   const open  = rows.find(e => e.event === 'OPEN') || null;
   let   close = rows.find(e => e.event === 'CLOSE' && e.tagNet !== null) || null;
   let   inferred = false, backfilled = false;
-  // v0.65: Reihenfolge der Wahrheit: (1) CLOSE mit Ticket, (2) CLOSE_HIST aus der MT4-Kontohistorie
-  //   (exakt, vom Broker), (3) nur wenn eindeutig: Zuordnung ueber Symbol+Reihenfolge (Vermutung).
+  // v0.65: order of truth: (1) CLOSE with ticket, (2) CLOSE_HIST from the MT4 account history
+  //   (exact, from the broker), (3) only when unambiguous: attribution via symbol+order (a guess).
   if (!close) {
     const hist = rows.find(e => e.event === 'CLOSE_HIST' && e.tagNet !== null);
     if (hist) { close = hist; backfilled = true; }
@@ -494,7 +494,7 @@ function tradeDossier(ticket, acct) {
   const panel = rows.filter(e => e.event === 'PANEL_CLOSE');
   const be    = rows.filter(e => e.event === 'BREAKEVEN');
 
-  // Bewertung der Verschiebungen: der EA schreibt sein Urteil bereits in den Tag.
+  // Assessment of the moves: the EA already writes its verdict into the tag.
   let slWorse = 0, slBetter = 0, tpShorter = 0, tpLonger = 0;
   for (const m of moves) {
     const t = m.tag || '';
@@ -503,7 +503,7 @@ function tradeDossier(ticket, acct) {
     else if (/Gewinn abgekuerzt|Gewinn abgekürzt/i.test(t)) tpShorter++;
     else if (/Ziel vergroessert|Ziel vergrößert/i.test(t))  tpLonger++;
   }
-  // Ursprüngliches Risiko in Kontowährung: Risk% der OPEN-Zeile auf die Balance derselben Zeile.
+  // Original risk in account currency: Risk% of the OPEN line applied to the balance of that same line.
   const plannedRisk = open ? num(open.raw && open.raw[3]) * num(open.raw && open.raw[13]) / 100 : 0;
   const net = close ? close.tagNet : null;
   const third = open ? ((open.tag || '').match(/\bK([123])\/3\b/) || [])[1] : null;
@@ -536,9 +536,9 @@ function tradeDossier(ticket, acct) {
     if (net < 0 && plannedRisk > 0 && Math.abs(net) <= plannedRisk * 1.15)
       S.push('Der Verlust blieb im geplanten Rahmen — genau so soll ein Stop wirken.');
   } else {
-    // v0.65: Bis EA v0.64 schrieb der Gruppen-Pfad der Close-Auflösung die CLOSE-Zeile mit Ticket 0. Ein
-    //   Ergebnis liess sich dadurch nie seinem Einstieg zuordnen — die Akte behauptete für JEDEN Trade
-    //   „noch offen". Für Einträge aus dieser Zeit ist das aus dem Journal nicht mehr reparierbar; lieber
+    // v0.65: up to EA v0.64 the group path of the close resolution wrote the CLOSE line with ticket 0. A
+    //   result could therefore never be attributed to its entry — the file claimed for EVERY trade
+    //   "noch offen" (still open). For entries from that period this can no longer be repaired from the journal; better
     //   ehrlich benennen als weiter „offen" behaupten.
     const openTs = open && open.time ? Date.parse(open.time.replace(/\./g, '-').replace(' ', 'T')) : NaN;
     const stale  = Number.isFinite(openTs) && (Date.now() - openTs > 6 * 3600 * 1000);
@@ -551,15 +551,15 @@ function tradeDossier(ticket, acct) {
            stats: { moves: moves.length, slWorse, slBetter, tpShorter, tpLonger, plannedRisk, net, third, inferred, backfilled },
            shots: shotsFor(ticket, acct), summary: S };
 }
-// Liste aller Tickets mit Kurzinfo (fuer die Uebersicht)
+// List of all tickets with short info (for the overview)
 function tradeList(acct) {
   const rows = parseAll(acct);
   const map = new Map();
   for (const e of rows) {
     const tk = String(e.ticket || '');
     if (!tk || tk === '0') continue;
-    // v0.65: Ein Nachtrag allein macht noch keinen Listeneintrag — sonst tauchten Trades von VOR dem
-    //   EA mit der Nachtrags-Uhrzeit ganz oben auf. Nur Tickets, zu denen es einen Einstieg gibt.
+    // v0.65: an addendum alone does not yet make a list entry — otherwise trades from BEFORE the
+    //   EA showed up right at the top with the addendum's time. Only tickets that have an entry.
     if (!map.has(tk) && e.event === 'CLOSE_HIST') continue;
     if (!map.has(tk)) map.set(tk, { ticket: tk, symbol: e.symbol, dir: e.dir, time: e.time, net: null, moves: 0, shots: 0, third: null });
     const t = map.get(tk);
@@ -570,7 +570,7 @@ function tradeList(acct) {
     else if (e.event === 'CLOSE_HIST' && e.tagNet !== null && t.net === null) { t.net = e.tagNet; t.backfilled = true; }
   }
   const out = [...map.values()];
-  const orphan = orphanCloseMap(rows);          // v0.65: Altbestand ohne Ticket in der Close-Zeile
+  const orphan = orphanCloseMap(rows);          // v0.65: legacy data without a ticket in the close line
   for (const t of out) {
     if (t.net === null && orphan.has(t.ticket)) { t.net = orphan.get(t.ticket).tagNet; t.inferred = true; }
     if (t.backfilled) t.inferred = false;   // exakt schlaegt Vermutung
@@ -606,12 +606,12 @@ const server = http.createServer((req, res) => {
     return res.end('Verboten: nur localhost / 127.0.0.1 erlaubt.');
   }
   const p = u.pathname;
-  const acct = (u.searchParams.get('acct') || '').replace(/\D/g, '');   // nur Ziffern (Pfad-Injektion ausgeschlossen)
-  // serverPort = der TATSAECHLICHE Port; state.port ist nur der EA-Input InpCockpitPort (reine Anzeige)
+  const acct = (u.searchParams.get('acct') || '').replace(/\D/g, '');   // digits only (path injection ruled out)
+  // serverPort = the ACTUAL port; state.port is only the EA input InpCockpitPort (display only)
   if (p === '/state')     return sendJson(res, { ok: true, state: readState(acct), ageMs: stateAgeMs(acct), serverPort: PORT, accounts: accountsList() });
   if (p === '/accounts')  return sendJson(res, accountsList());
-  // v0.45-fix (Verify): ERST filtern, DANN kappen. Vorher schnitt slice(-80) auf die Rohdaten, sodass
-  // periodische INFO-Zeilen echte Ereignisse aus der Cockpit-Liste verdraengten.
+  // v0.45-fix (Verify): filter FIRST, cap AFTERWARDS. Before, slice(-80) cut into the raw data, so that
+  // periodic INFO lines pushed real events out of the cockpit list.
   if (p === '/journal')   return sendJson(res, parseAll(acct)
     .filter(e => ['OPEN','CLOSE','CLOSE_MAN','BLOCKED'].includes(e.event)
               || /PROTECT/i.test(e.event || '')
@@ -620,19 +620,19 @@ const server = http.createServer((req, res) => {
   if (p === '/analytics') return sendJson(res, analytics(acct));
   if (p === '/day')       return sendJson(res, dayDetail(u.searchParams.get('d') || '', acct));
   if (p === '/equity')    return sendJson(res, equitySeries(acct || (accountsList()[0] || {}).account || '', Number(u.searchParams.get('n')) || 2000));   // v0.39
-  // v0.39: "Tag beenden" — schreibt das Tighten-Only-Kommando in den Files-Ordner des Kontos.
-  // Nur POST; schlimmster Missbrauch waere eine ZUSAETZLICHE Sperre (nie eine Lockerung) — tighten-only by design.
-  // Inhalt ist BOM-freies ASCII (latin1) — der EA-Prefix-Check "endday" verlaesst sich darauf.
+  // v0.39: "Tag beenden" (end day) — writes the tighten-only command into the account's Files folder.
+  // POST only; the worst abuse would be an ADDITIONAL lock (never a loosening) — tighten-only by design.
+  // Content is BOM-free ASCII (latin1) — the EA prefix check "endday" relies on that.
   if (p === '/cmd/endday') {
     if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
-    // v0.39-fix (Verify): CSRF — ein Cross-Site-Form-POST traegt Host: localhost:8730 und passiert hostAllowed.
-    // Origin pruefen: fehlt er (curl/CLI) -> ok; ist er gesetzt, muss er von localhost stammen.
+    // v0.39-fix (Verify): CSRF — a cross-site form POST carries Host: localhost:8730 and passes hostAllowed.
+    // Check Origin: if absent (curl/CLI) -> ok; if set, it must come from localhost.
     const orig = req.headers.origin;
     if (orig && !new RegExp('^http://(localhost|127\\.0\\.0\\.1):' + PORT + '$', 'i').test(orig)) {
       res.writeHead(403); return res.end('Cross-Site verboten');
     }
-    // v0.39-fix (Verify): Konto verpflichtend — sonst koennte die Sperre bei 2 live schreibenden
-    // Terminals im FALSCHEN Konto landen (currentFiles-Fallback kippt zwischen Polls).
+    // v0.39-fix (Verify): account mandatory — otherwise the lock could land in the WRONG account with 2 live
+    // writing terminals (the currentFiles fallback flips between polls).
     if (!acct) { res.writeHead(400); return res.end('acct erforderlich'); }
     const d = dirForAccount(acct);
     if (!d) { res.writeHead(404); return res.end('Konto nicht gefunden'); }
@@ -640,8 +640,8 @@ const server = http.createServer((req, res) => {
     catch (e) { res.writeHead(500); return res.end('Schreiben fehlgeschlagen'); }
     return sendJson(res, { ok: true });
   }
-  // v0.62: Screenshot ausliefern. Dateiname streng gepruft (nur Mamal_<ticket>_<tag>_<zeit>.png),
-  // damit ueber diesen Weg NIE ein anderer Pfad gelesen werden kann.
+  // v0.62: serve a screenshot. File name strictly checked (only Mamal_<ticket>_<day>_<time>.png),
+  // so that NO other path can ever be read this way.
   if (p.startsWith('/shot/')) {
     const name = decodeURIComponent(p.slice(6));
     if (!/^Mamal_\d+_[a-z0-9]+_\d+\.png$/i.test(name)) { res.writeHead(400); return res.end('ungueltiger Name'); }
@@ -653,8 +653,8 @@ const server = http.createServer((req, res) => {
       res.end(buf);
     });
   }
-  // v0.62: Trade-Akte — alles zu EINEM Ticket: Einstieg, SL/TP-Verschiebungen, Ergebnis,
-  // Screenshots und eine automatisch formulierte Zusammenfassung.
+  // v0.62: trade file — everything about ONE ticket: entry, SL/TP moves, result,
+  // screenshots and an automatically formulated summary.
   if (p === '/trade') return sendJson(res, tradeDossier((u.searchParams.get('ticket') || '').replace(/\D/g, ''), acct));
   if (p === '/trades') return sendJson(res, tradeList(acct));
   if (p === '/trade.html') return sendFile(res, 'trade.html');
@@ -692,8 +692,8 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log('  Hinweis: noch keine mamal_cockpit.json — MT4 + EA (InpCockpit=true) noetig.');
   }
   console.log('');
-  // v0.38: MAMAL_QUIETSTART=1 (Autostart) -> beim Hochfahren KEIN Browser-Popup;
-  // der Cockpit-Klick im EA (Trigger-Datei) oeffnet ihn weiterhin.
+  // v0.38: MAMAL_QUIETSTART=1 (autostart) -> NO browser popup at boot;
+  // the cockpit click in the EA (trigger file) still opens it.
   const quiet = /^(1|true|yes)$/i.test(process.env.MAMAL_QUIETSTART || '');
   if (!quiet) openBrowser();
 });

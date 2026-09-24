@@ -1,170 +1,170 @@
-// TradingGuard — Risiko- und Disziplin-Tool fuer MetaTrader 4
+// TradingGuard — risk and discipline tool for MetaTrader 4
 // Copyright (C) 2026 Mohammadreza Tavakoli — https://itavakoli.com/
 //
-// Dieses Programm ist freie Software: Sie koennen es weitergeben und/oder
-// veraendern unter den Bedingungen der GNU Affero General Public License,
-// Version 3 oder (nach Ihrer Wahl) jeder spaeteren Version.
+// This program is free software: you may redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License,
+// version 3 or (at your option) any later version.
 //
-// Die Veroeffentlichung erfolgt in der Hoffnung, dass es nuetzlich ist, aber
-// OHNE JEDE GEWAEHRLEISTUNG — sogar ohne die implizite Gewaehrleistung der
-// MARKTGAENGIGKEIT oder EIGNUNG FUER EINEN BESTIMMTEN ZWECK. Einzelheiten in
-// der GNU Affero General Public License: <https://www.gnu.org/licenses/>.
+// It is published in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY — not even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. Details in
+// the GNU Affero General Public License: <https://www.gnu.org/licenses/>.
 //
-// KEINE ANLAGEBERATUNG. Handel mit Hebelprodukten kann zum Totalverlust
-// fuehren. Dieses Werkzeug erzwingt Regeln, es trifft keine Marktentscheidung
-// und uebernimmt keine Verantwortung fuer Handelsergebnisse.
+// NOT INVESTMENT ADVICE. Trading leveraged products can lead to total
+// loss. This tool enforces rules, it makes no market decision
+// and takes no responsibility for trading results.
 //+------------------------------------------------------------------+
 //|  MamalTrading.mq4  —  Mamal-Trading Risk-Engine, v0.46         |
-//|  v0.46: Risk-Free (SL auf Break-Even), ziehbare TP-Linie,       |
+//|  v0.46: Risk-Free (SL to break-even), draggable TP line,        |
 //|   Live-Spread + Kerzen-Countdown, Schrift-/Formskalierung,      |
-//|   Auto-Fit des Panels an die Chart-Hoehe.                       |
+//|   Auto-fit of the panel to the chart height.                    |
 //|  v0.40: 4 Close-Buttons (Full/Chart x Voll/50%) + PanelClose;    |
 //|   Close-Erkennung magic-/tab-unabhaengig (RGOPN-Registry +       |
-//|   Ticket-Fallback); InpMagic<=0-Guard; Cockpit-aus-Hinweis.      |
-//|  v0.39: Dashboard-Upgrade — dayBase/weekBase in der JSON,       |
+//|   ticket fallback); InpMagic<=0 guard; cockpit-off notice.       |
+//|  v0.39: dashboard upgrade — dayBase/weekBase in the JSON,       |
 //|   "Tag beenden"-Kommando (Tighten-Only-Selbstsperre).           |
 //|  v0.38: Zero-Config — Basis voll-automatisch (Einzahlungs-      |
-//|   Historie bzw. Rekonstruktion), nie mehr BASIS UNSICHER;       |
+//|   history or rebuild), no more "BASIS UNSICHER" (base unsure);  |
 //|   Konto-Wegweiser pro Login (Multi-Konto-Cockpit).              |
-//|  v0.37: InpPanelScale — Panel-Geometrie fuer Windows-Skalierung |
-//|   >100% skalieren (1.5 fuer 150%), gegen Panel-Ueberlappung.    |
+//|  v0.37: InpPanelScale — panel geometry for Windows scaling      |
+//|   >100% (1.5 for 150%), against panel overlap.                  |
 //|   + Meldungsbox 3-zeilig mit Wort-Umbruch (WrapText), voller    |
 //|   Text statt Abschneiden; Box +16px, Buttons nachgerueckt.      |
-//|   + Cockpit-Wegweiser (mamal_files.txt) im Common-Ordner:       |
-//|   Server findet den echten Files-Pfad auch bei Portable/Multi-  |
+//|   + cockpit signpost (mamal_files.txt) in the Common folder:    |
+//|   server finds the real Files path even with portable/multi-    |
 //|   Terminal; Cockpit-Meldung neutral-blau statt rotem Fehler.    |
-//|  v0.36: Wochen-Risiko-Waehler im Panel ([-]/[+], gilt fuer die   |
-//|   Woche; Auto-Scale-Kaskade skaliert mit, Trade-Zaehler nicht).  |
-//|  (Regeln R1-R19 + R22 + R25; R8/R9/R14/R15/R19/R25 aus;          |
-//|   Auto-Scale Caps; R22 = nur Panel-Trades, Magic 0 wird zu)      |
+//|  v0.36: weekly risk selector in panel ([-]/[+], applies to the   |
+//|   week; auto-scale cascade scales too, trade counter does not).  |
+//|  (rules R1-R19 + R22 + R25; R8/R9/R14/R15/R19/R25 off;           |
+//|   auto-scale caps; R22 = panel trades only, magic 0 is closed)   |
 //|  v0.34: Audit-Haertung (Konto-Bindung, Lockstate-Reconcile 5s,    |
-//|   Tighten-Only auf alle Sperr-Inputs, kein Verlust-Laundering,    |
+//|   tighten-only on all lock inputs, no loss laundering,            |
 //|   Entry-Regeln nachtraeglich, R2-Monitor, History-Wachhund).      |
 //|  v0.35: R22 — manuelle/Handy-Orders (Magic 0) werden geschlossen; |
 //|   fremde EA-Magics bleiben unangetastet.                          |
 //|  v0.15 P0/P1: FTMO-Basis MathMax + Erststart-Failsafe (P0-5/P1-2)|
 //|   Enforce tickunabh. (P0-1) · EA-Close-Ausschluss persistent     |
-//|   (P0-3, sofort-Flush) · History-Verlustauflösung (P0-2/4).      |
+//|   (P0-3, immediate flush) · history loss resolution (P0-2/4).    |
 //|  v0.16: echte Close-Queue (Retry/Backoff/Error-Codes/Journal) +  |
-//|   Lockstate-Datei (HMAC-light, fail-closed) + Schutz-aus-Logging.|
+//|   lockstate file (HMAC-light, fail-closed) + protection-off log. |
 //|  v0.17: R25 persistent · Audit-Journal · R17 Waehrungsvektor ·    |
 //|   R7-Haertung (OpenTime-Anker/News-Grace) · TickValue-Fallback ·  |
 //|   Funded-Gate (TOOL_ONLY) · Prop-Firm-Profil · TestMode-Harness.  |
-//|  ⚠ NUR DEMO. UNGETESTET — Compile-Nachweis erst nach F7=0 Errors.|
+//|  ⚠ DEMO ONLY. UNTESTED — compile proof only after F7=0 errors.   |
 //+------------------------------------------------------------------+
 #property copyright "Mohammadreza Tavakoli"
 #property link      "https://itavakoli.com/"
 #property strict
 
-enum WatchScope { TOOL_ONLY, TOOL_PLUS_MANUAL, ALL_POSITIONS };   // Reichweite des Watchdogs
+enum WatchScope { TOOL_ONLY, TOOL_PLUS_MANUAL, ALL_POSITIONS };   // reach of the watchdog
 enum PropFirm   { PF_FTMO, PF_THE5ERS, PF_FUNDEDNEXT, PF_FUNDINGPIPS, PF_ALPHACAPITAL, PF_CUSTOM };  // Prop-Firm-Profile (FTMO=Default; Limits bleiben Inputs)
 
-extern double InpInitialBalance     = 0;     // B1: 0 = automatisch (echte Kontobasis). Sonst die ECHTE Challenge-Startbalance setzen — R4b Max-Loss rechnet dagegen!
-extern double InpDayStartBase       = 0;     // P1-2: echte FTMO-Mitternachtsbasis manuell (0=auto). Bei Erststart mitten am Tag setzen!
+extern double InpInitialBalance     = 0;     // B1: 0 = automatic (real account base). Otherwise set the REAL challenge start balance — R4b max loss calculates against it!
+extern double InpDayStartBase       = 0;     // P1-2: real FTMO midnight base set manually (0=auto). On a first start in the middle of the day, set it!
 extern double InpDailyLossPct       = 2.0;   // R4
 extern double InpMaxLossPct         = 6.0;   // R4b Max-Loss-Sperre % (Puffer unter FTMO 10%)
-extern bool   InpTightenOnly        = true;  // v0.30 Selbst-Sperre: Verlust-Limits nur ENGER stellbar; LOCKERN greift erst zum naechsten Tageswechsel (kein Tilt-Lockern)
-extern double InpMaxLossWarnPct     = 5.0;   // R4b Warn-Gate: ab hier KEINE neuen Trades (vor der Sperre)
+extern bool   InpTightenOnly        = true;  // v0.30 self-lock: loss limits can only be set TIGHTER; LOOSENING takes effect only at the next day change (no tilt loosening)
+extern double InpMaxLossWarnPct     = 5.0;   // R4b warn gate: from here on NO new trades (before the lock)
 extern double InpRiskPerTradePct    = 0.25;  // R1 (FTMO: konservativ)
 extern double InpRiskTolFactor      = 1.10;  // R1/R12
-extern bool   InpAutoScale          = true;  // Caps dynamisch aus Risiko/Trade (R2->R3/R12 folgen)
+extern bool   InpAutoScale          = true;  // caps derived dynamically from risk/trade (R2->R3/R12 follow)
 extern double InpIdeaXrisk          = 2.0;   // R2  Idee-Cap   = X * Risiko/Trade
 extern double InpHeatXidea          = 2.0;   // R12 Gesamtrisiko = X * Idee-Cap
-extern double InpDayXidea           = 4.0;   // R3  Tagesbudget = X * Idee-Cap (v0.20: 4 -> 2,0% = 400 EUR, damit R4/Tagesziel erreichbar)
-extern double InpIdeaCapPct         = 1.0;   // R2  (nur AutoScale=false)
-extern double InpDailyRiskBudgetPct = 2.0;   // R3  (nur AutoScale=false; v0.20: 2,0% = 400 EUR)
-extern double InpPortfolioHeatPct   = 2.0;   // R12 (nur AutoScale=false)
+extern double InpDayXidea           = 4.0;   // R3  daily budget = X * idea cap (v0.20: 4 -> 2.0% = 400 EUR, so that R4/daily target stays reachable)
+extern double InpIdeaCapPct         = 1.0;   // R2  (only if AutoScale=false)
+extern double InpDailyRiskBudgetPct = 2.0;   // R3  (only if AutoScale=false; v0.20: 2.0% = 400 EUR)
+extern double InpPortfolioHeatPct   = 2.0;   // R12 (only if AutoScale=false)
 extern double InpDailyTargetPct     = 3.0;   // R13
 extern double InpGivebackArmPct     = 1.0;   // R13
 extern double InpGivebackPct        = 1.0;   // R13
 extern int    InpCooldownAfter      = 3;     // R5
 extern int    InpCooldownMin        = 45;    // R5
 extern int    InpLockAfter          = 5;     // R6
-extern double InpMinRR              = 0;     // R8 Mindest-CRV AUS (v0.20, auf Wunsch; 0=aus)
+extern double InpMinRR              = 0;     // R8 minimum risk-reward ratio OFF (v0.20, on request; 0=off)
 extern double InpRR                 = 2.0;   // Auto-TP
-extern double InpMinStopPips        = 0;     // R15 min-SL AUS (User-Wunsch: M1-Scalping braucht enge Stops; 0=aus). Broker-Mindestabstand (STOPLEVEL) bleibt hart.
-extern double InpMaxLot             = 0;     // R15 (0=aus)
-extern int    InpMinGapSec          = 0;     // R14 Mindestpause AUS (v0.20, auf Wunsch; 0=aus)
-extern int    InpRevengeMin         = 0;     // R25 Revenge-Fenster AUS (v0.20, auf Wunsch; 0=aus)
+extern double InpMinStopPips        = 0;     // R15 min SL OFF (user request: M1 scalping needs tight stops; 0=off). The broker minimum distance (STOPLEVEL) stays hard.
+extern double InpMaxLot             = 0;     // R15 (0=off)
+extern int    InpMinGapSec          = 0;     // R14 minimum pause OFF (v0.20, on request; 0=off)
+extern int    InpRevengeMin         = 0;     // R25 revenge window OFF (v0.20, on request; 0=off)
 extern bool   InpUseSession         = false; // R16
 extern int    InpSessionStart       = 8;     // R16
 extern int    InpSessionEnd         = 22;    // R16
-extern int    InpNewsFrom           = 0;     // R16 HHMM (0=aus)
+extern int    InpNewsFrom           = 0;     // R16 HHMM (0=off)
 extern int    InpNewsTo             = 0;     // R16 HHMM
 extern bool   InpUseCorrCap         = true;  // R17
 extern double InpCorrCapPct         = 1.5;   // R17
-extern double InpWeeklyLossPct      = 5.0;   // R18 (0=aus)
+extern double InpWeeklyLossPct      = 5.0;   // R18 (0=off)
 extern int    InpDeRiskAfter        = 2;     // R19
-extern double InpDeRiskFactor       = 1.0;   // R19 De-Risk-Leiter AUS (v0.20, auf Wunsch; 1.0=aus)
+extern double InpDeRiskFactor       = 1.0;   // R19 de-risk ladder OFF (v0.20, on request; 1.0=off)
 extern bool   InpFomoGate           = false; // R9
 extern int    InpFomoSeconds        = 7;     // R9
 extern bool   InpJournal            = true;  // R11
-extern bool   InpHistoryBackfill    = true;  // v0.66: EINMALIG geschlossene Trades aus der Kontohistorie ins Journal nachtragen
-                                             //   (Ticket + Netto), damit die Trade-Akte Altbestand zuordnen kann. Laeuft je Konto genau einmal.
-                                             //   BEWUSST NEU BENANNT (vorher InpBackfillHistory): MT4 speichert EA-Eingaben pro Chart und nimmt
-                                             //   beim Aufziehen den GESPEICHERTEN Wert, nicht den Default aus dem Quelltext — der alte Schalter
-                                             //   blieb dadurch auf "aus", obwohl der Default hier laengst "an" war. Ein neuer Name hat keinen
-                                             //   gespeicherten Vorgaenger, also greift der Default. Vorher im Terminal "Gesamte Historie" einstellen.
-                                             //   (Ticket + Netto). Vorher im Terminal "Gesamte Historie" einstellen, sonst
-                                             //   sieht der EA nur den gefilterten Ausschnitt. Laeuft je Konto genau einmal.
-extern bool   InpScreenshots        = true;  // R11 / v0.47: Screenshot bei jeder Aktion (Open/Close/SL-TP-Verschiebung) — wird je Trade im Cockpit angezeigt
-extern int    InpShotWidth          = 1100;  // v0.47: Breite der Screenshots (Pixel)
-extern int    InpShotHeight         = 620;   // v0.47: Hoehe der Screenshots (Pixel)
+extern bool   InpHistoryBackfill    = true;  // v0.66: ONE-TIME backfill of closed trades from the account history into the journal
+                                             //   (ticket + net), so the trade file can assign old positions. Runs exactly once per account.
+                                             //   DELIBERATELY RENAMED (formerly InpBackfillHistory): MT4 stores EA inputs per chart and takes
+                                             //   the STORED value when you attach it, not the default from the source — the old switch
+                                             //   therefore stayed "off" although the default here had long been "on". A new name has no
+                                             //   stored predecessor, so the default applies. Set "Gesamte Historie" (all history) in the terminal first.
+                                             //   (ticket + net). Set "Gesamte Historie" (all history) in the terminal first, otherwise
+                                             //   the EA only sees the filtered excerpt. Runs exactly once per account.
+extern bool   InpScreenshots        = true;  // R11 / v0.47: screenshot on every action (open/close/SL-TP move) — shown per trade in the cockpit
+extern int    InpShotWidth          = 1100;  // v0.47: width of the screenshots (pixels)
+extern int    InpShotHeight         = 620;   // v0.47: height of the screenshots (pixels)
 extern int    InpShotKeepDays       = 14;    // v0.47: Screenshots aelter als X Tage loeschen (0 = nie aufraeumen)
 extern int    InpSlippage           = 30;
 extern int    InpMagic              = 990201;
-extern WatchScope InpWatchScope     = TOOL_ONLY;  // TOOL_ONLY=fremde Magics unangetastet · TOOL_PLUS_MANUAL=+Magic0 · ALL_POSITIONS=fasst ALLES an (nur Demo/Debug, NICHT Funded)
-extern int    InpCloseThrottleMs    = 300;   // P0-1: min. Abstand zwischen Close-Durchläufen
-extern int    InpCloseRetries       = 5;     // Close-Queue: max Versuche je Ticket vor FINAL-FAIL
+extern WatchScope InpWatchScope     = TOOL_ONLY;  // TOOL_ONLY=foreign magics untouched · TOOL_PLUS_MANUAL=+Magic0 · ALL_POSITIONS=touches EVERYTHING (demo/debug only, NOT funded)
+extern int    InpCloseThrottleMs    = 300;   // P0-1: min. distance between close passes
+extern int    InpCloseRetries       = 5;     // close queue: max attempts per ticket before FINAL-FAIL
 extern int    InpCloseBackoffMs     = 400;   // Close-Queue: Basis-Backoff (verdoppelt je Versuch)
 extern int    InpCloseMaxBackoffMs  = 4000;  // Close-Queue: max Backoff je Ticket
 extern double InpDefaultSLpips      = 20;
-extern int    InpSlClicksToMove     = 3;     // v0.21: SL-Linie erst nach so vielen Klicks in dieselbe Zone setzen (1 = sofort)
-extern double InpSlZonePips         = 10;    // v0.21: Toleranz-Untergrenze "gleiche Zone" in Pips (zusaetzlich ~0,15% des Preises)
+extern int    InpSlClicksToMove     = 3;     // v0.21: set the SL line only after this many clicks into the same zone (1 = immediately)
+extern double InpSlZonePips         = 10;    // v0.21: lower tolerance bound for "same zone" in pips (plus ~0.15% of the price)
 extern bool   InpRequireSL          = true;  // R7
 extern bool   InpRequireTP          = true;  // R7
-extern int    InpSLTPGraceSeconds   = 4;     // R7 (v0.33: 5->4; Anker = seit SL/TP ENTFERNT wurde, nicht ab Open)
+extern int    InpSLTPGraceSeconds   = 4;     // R7 (v0.33: 5->4; anchor = since SL/TP was REMOVED, not from open)
 extern int    InpTimerSeconds       = 1;
 extern int    InpMinActionMs        = 500;
 extern int    InpPanelMs            = 1500;
 extern bool   InpUseAlert           = false;
-extern string InpPanelMono          = "Consolas";  // v0.24 Panel: Monospace-Font fuer Zahlen (falls unter Wine falsch -> "Courier New" oder "Lucida Console")
-extern double InpPanelScale         = 0;           // v0.37: 0 = AUTO (aus Windows-DPI, 150%->1.5). Sonst manueller Faktor (1.5 fuer 150%). Behebt Panel-Ueberlappung ohne Zutun.
-extern double InpFontScale          = 1.0;         // v0.46: Schriftgroesse im Panel getrennt skalieren (0.8 = kleiner, 1.3 = groesser)
-extern double InpShapeScale         = 1.0;         // v0.46: Kachel-/Button-Groesse getrennt skalieren (wirkt auf Breiten/Hoehen)
-extern bool   InpPanelAutoFit       = true;        // v0.46: Panel automatisch verkleinern, wenn es sonst hoeher als das Chart-Fenster waere
-extern bool   InpShowSpread         = true;        // v0.46: Live-Spread im Panel anzeigen
-extern bool   InpShowCandleTime     = true;        // v0.46: Restzeit der laufenden Kerze anzeigen (gruen -> amber -> rot)
-extern bool   InpCandleTimeOnChart  = true;        // v0.52: Countdown direkt NEBEN der laufenden Kerze einblenden (nicht nur im Panel)
-extern bool   InpBreakEvenBtn       = true;        // v0.46: Knopf "RISK FREE" (SL aller Trades im Gewinn auf Break-Even)
-extern double InpBreakEvenBufferPts = 0;           // v0.46: Zusatzpuffer in Punkten ueber Break-Even (0 = exakt Einstieg; deckt Kommission)
-extern bool   InpTpLine             = false;       // v0.46: ziehbare TP-Linie statt Auto-TP aus InpRR (Linie hat Vorrang, wenn gesetzt)
-extern bool   InpCockpit            = true;        // v0.26: Live-Zustand fuer localhost-Cockpit als JSON schreiben (lokaler Server noetig)
-extern int    InpCockpitPort        = 8730;        // v0.26: Port des lokalen Cockpit-Servers (nur Anzeige/Referenz)
+extern string InpPanelMono          = "Consolas";  // v0.24 panel: monospace font for numbers (if wrong under Wine -> "Courier New" or "Lucida Console")
+extern double InpPanelScale         = 0;           // v0.37: 0 = AUTO (from Windows DPI, 150%->1.5). Otherwise a manual factor (1.5 for 150%). Fixes panel overlap without user action.
+extern double InpFontScale          = 1.0;         // v0.46: scale the panel font size separately (0.8 = smaller, 1.3 = bigger)
+extern double InpShapeScale         = 1.0;         // v0.46: scale tile/button size separately (affects widths/heights)
+extern bool   InpPanelAutoFit       = true;        // v0.46: shrink the panel automatically if it would otherwise be taller than the chart window
+extern bool   InpShowSpread         = true;        // v0.46: show the live spread in the panel
+extern bool   InpShowCandleTime     = true;        // v0.46: show the remaining time of the running candle (green -> amber -> red)
+extern bool   InpCandleTimeOnChart  = true;        // v0.52: show the countdown right NEXT TO the running candle (not only in the panel)
+extern bool   InpBreakEvenBtn       = true;        // v0.46: "RISK FREE" button (SL of all trades in profit to break-even)
+extern double InpBreakEvenBufferPts = 0;           // v0.46: extra buffer in points beyond break-even (0 = exactly entry; covers commission)
+extern bool   InpTpLine             = false;       // v0.46: draggable TP line instead of auto TP from InpRR (the line wins when set)
+extern bool   InpCockpit            = true;        // v0.26: write live state for the localhost cockpit as JSON (local server required)
+extern int    InpCockpitPort        = 8730;        // v0.26: port of the local cockpit server (display/reference only)
 //--- v0.17: Prop-Firm-Profil, Funded-Gate, R7-Haertung, Test-Harness ---
 extern PropFirm InpPropFirm         = PF_FTMO;  // Prop-Firm-Profil (Label/Audit; Limits bleiben Inputs, pro Firma verifizieren)
 extern bool   InpFundedMode         = false; // Real/Funded: erzwingt WatchScope=TOOL_ONLY + sperrt TestMode hart
 extern int    InpSLTPGraceNews      = 0;     // R7: Grace-Sekunden waehrend News-Blackout (0 = sofort schliessen)
-extern bool   InpTestMode           = false; // Rule-Test-Harness (NUR Demo; in FundedMode hart aus)
+extern bool   InpTestMode           = false; // rule test harness (DEMO ONLY; hard off in FundedMode)
 extern int    InpDayResetHour        = 0;     // Prop-Firm-Tagesreset-Stunde in Server-Zeit (0 = Mitternacht = FTMO); R4/Tag
-extern int    InpWeekStartDay        = 0;     // Wochenstart (0=Sonntag..6=Samstag) fuer R18
-//--- R22 (v0.35): NUR PANEL-TRADES. Manuell/per Handy geoeffnete Orders (Magic 0) werden sofort geschlossen. ---
-// Trades ANDERER EAs (eigene Magic-Nummer) bleiben bewusst unangetastet. Gilt auch im FundedMode und auch fuer
-// Positionen, die beim EA-Start bereits offen sind (kein Bestandsschutz -> kein Schlupfloch ueber EA-Neustart).
-extern bool   InpCloseManualTrades   = true;  // R22: manuelle/Handy-Trades (Magic 0) sofort schliessen — nur Panel-Trades erlaubt
-//--- v0.36: Wochen-Risiko-Wähler im Panel (Risiko/Trade selbst einstellen, gilt fuer die Woche) ---
+extern int    InpWeekStartDay        = 0;     // week start (0=Sunday..6=Saturday) for R18
+//--- R22 (v0.35): PANEL TRADES ONLY. Orders opened manually/from a phone (magic 0) are closed immediately. ---
+// Trades of OTHER EAs (their own magic number) are deliberately left untouched. Applies in FundedMode too, and also to
+// positions already open when the EA starts (no grandfathering -> no loophole via an EA restart).
+extern bool   InpCloseManualTrades   = true;  // R22: close manual/phone trades (magic 0) immediately — only panel trades allowed
+//--- v0.36: weekly risk selector in the panel (set risk/trade yourself, applies for the week) ---
 enum PanelLang { LANG_DE, LANG_EN };       // v0.53: Panel-Sprache
-extern PanelLang InpLang = LANG_DE;        // v0.53: Sprache des On-Chart-Panels (das Dashboard hat einen eigenen Umschalter)
-extern bool   InpRequireWeeklyRisk = true;  // v0.49: OHNE festgelegtes Wochen-Risiko wird nicht gehandelt (jede Woche neu bestaetigen)
-extern bool   InpRiskChooser         = true;  // Risiko-Waehler [-]/[+] im Panel anzeigen (0 = nur ueber InpRiskPerTradePct)
-extern double InpRiskStep            = 0.05;  // Schrittweite des Waehlers in % (z.B. 0.05 -> 0,25 / 0,30 / 0,35 …)
-extern double InpRiskMaxPct          = 1.00;  // Obergrenze, die der Waehler zulaesst (harte Kappe bleibt 1,0 % / RULES-Bereich)
+extern PanelLang InpLang = LANG_DE;        // v0.53: language of the on-chart panel (the dashboard has its own switch)
+extern bool   InpRequireWeeklyRisk = true;  // v0.49: WITHOUT a fixed weekly risk there is no trading (confirm anew every week)
+extern bool   InpRiskChooser         = true;  // show the risk selector [-]/[+] in the panel (0 = only via InpRiskPerTradePct)
+extern double InpRiskStep            = 0.05;  // step size of the selector in % (e.g. 0.05 -> 0.25 / 0.30 / 0.35 …)
+extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows (the hard cap stays 1.0 % / RULES range)
 
 #define GV_DAYSTART_EQ   "RG_DAYSTART_EQ"
 #define GV_DAYSTART_DAY  "RG_DAYSTART_DAY"
 #define GV_LOCK_UNTIL    "RG_LOCK_UNTIL"
 #define GV_HARD_LOCK     "RG_HARD_LOCK"
-#define GV_MASTER        "RG_MASTER"      // v0.28: Einzel-Instanz-Sperre — welcher Chart ist der aktive Master
+#define GV_MASTER        "RG_MASTER"      // v0.28: single-instance lock — which chart is the active master
 #define GV_MASTER_HB     "RG_MASTER_HB"   // v0.28: Master-Heartbeat (Server-Zeit); stale -> anderer uebernimmt
 #define GV_INIT_BAL      "RG_INIT_BAL"
 #define GV_DAY_RISK      "RG_DAY_RISK"
@@ -178,85 +178,85 @@ extern double InpRiskMaxPct          = 1.00;  // Obergrenze, die der Waehler zul
 #define GV_WEEK_LOCK     "RG_WEEK_LOCK"
 #define GV_LAST_CLOSE    "RG_LAST_CLOSE"    // P4 Wasserstand letzter verarbeiteter Close
 #define GV_BASE_WARN     "RG_BASE_WARN"     // P1-2 Tagesbasis unsicher (Erststart)
-#define GV_EFF_DL        "RG_EFF_DL"        // v0.30: effektives Tages-Verlustlimit (Lockern erst zum Tageswechsel)
+#define GV_EFF_DL        "RG_EFF_DL"        // v0.30: effective daily loss limit (loosening only at the day change)
 #define GV_EFF_ML        "RG_EFF_ML"        // v0.30: effektives Max-Verlustlimit (dito)
 #define GV_PROTOFF       "RG_PROTOFF"       // v0.30: Zaehler "AutoTrading heute ausgeschaltet"
-#define GV_EFF_DAY       "RG_EFF_DAY"       // v0.30-fix: fuer welchen Tag EFF zuletzt (nur vom Master) gesetzt wurde -> deterministisch
-#define GV_PROT_LATCH    "RG_PROT_LATCH"    // v0.30-fix: geteilter Latch (aktuelle Schutz-aus-Episode schon gezaehlt) -> kein Doppelzaehlen bei Master-Handoff
+#define GV_EFF_DAY       "RG_EFF_DAY"       // v0.30-fix: for which day EFF was last set (only by the master) -> deterministic
+#define GV_PROT_LATCH    "RG_PROT_LATCH"    // v0.30-fix: shared latch (current protection-off episode already counted) -> no double counting on master handoff
 #define GV_BLOCKS        "RG_BLOCKS"        // v0.32 Panel-Spiegel: abgelehnte Versuche heute (geteilt, kontoweit)
 #define GV_FILLS         "RG_FILLS"         // v0.32: tatsaechliche Trades heute
-#define GV_BLK_LAST      "RG_BLK_LAST"      // v0.32: Zeit der letzten Ablehnung (fuer Tilt-Burst)
-#define GV_BLK_BURST     "RG_BLK_BURST"     // v0.32: Ablehnungen im aktuellen <60s-Fenster
-#define GV_ACCOUNT       "RG_ACCOUNT"        // §04-fix (hoch): Login des Kontos, zu dem der gespeicherte Zustand gehoert (Konto-Bindung)
-#define GV_MAGIC         "RG_MAGIC"          // v0.38: InpMagic des Masters — passive Charts warnen bei Abweichung (sonst unbewachte Trades)
-#define GV_SRV_OFFSET    "RG_SRV_OFFSET"     // §04-fix (mittel): letzter GUTER Server-Offset (Sek) — Neustart in tickloser Phase seedet sonst aus stalem TimeCurrent
-#define GV_EFF_RH        "RG_EFF_RH"         // §05-fix (hoch): effektive Tagesreset-Stunde — Input-Aenderung greift erst zum echten Rollover (kein kuenstlicher Roll-Wipe)
-#define GV_EFF_WS        "RG_EFF_WS"         // §05-fix (hoch): effektiver Wochenstart-Tag — dito fuer R18
-#define GV_TEST_SET      "RG_TEST_SET"       // §05-fix (hoch): eine Sperre wurde per TEST-Button gesetzt -> nur dann darf 'Reset' echte Sperren loeschen
-#define GV_LOCK_WHY      "RG_LOCK_WHY"       // v0.65: WARUM ist der Tag gesperrt? 1=R4 Tagesverlust 2=R6 Verlustserie
+#define GV_BLK_LAST      "RG_BLK_LAST"      // v0.32: time of the last rejection (for tilt burst)
+#define GV_BLK_BURST     "RG_BLK_BURST"     // v0.32: rejections in the current <60s window
+#define GV_ACCOUNT       "RG_ACCOUNT"        // §04-fix (high): login of the account the stored state belongs to (account binding)
+#define GV_MAGIC         "RG_MAGIC"          // v0.38: InpMagic of the master — passive charts warn on a mismatch (otherwise unguarded trades)
+#define GV_SRV_OFFSET    "RG_SRV_OFFSET"     // §04-fix (medium): last GOOD server offset (sec) — otherwise a restart in a tickless phase seeds from a stale TimeCurrent
+#define GV_EFF_RH        "RG_EFF_RH"         // §05-fix (high): effective daily reset hour — an input change takes effect only at the real rollover (no artificial roll wipe)
+#define GV_EFF_WS        "RG_EFF_WS"         // §05-fix (high): effective week start day — ditto for R18
+#define GV_TEST_SET      "RG_TEST_SET"       // §05-fix (high): a lock was set via the TEST button -> only then may 'Reset' delete real locks
+#define GV_LOCK_WHY      "RG_LOCK_WHY"       // v0.65: WHY is the day locked? 1=R4 daily loss 2=R6 losing streak
                                              //   3=R13 Giveback 4=Selbstsperre 5=Historie unsichtbar 6=Lockstate manipuliert 7=Test
 #define GV_BACKFILL      "RG_BACKFILL2"      // v0.65: Nachtrag ERFOLGREICH gelaufen (Wert = Kontonummer).
-                                             //   Nur bei Treffern gesetzt — ein Fehlversuch darf die einmalige Chance nicht verbrennen.
-#define GV_LS_SEEN       "RG_LS_SEEN"        // v0.63: die Lockstate-Datei hat auf diesem Konto schon einmal existiert -> ihr FEHLEN ist ab dann Manipulation, nicht Erststart
-// §06-fix (mittel): Tighten-Only auf ALLE sperr-relevanten Inputs ausweiten (bisher nur Daily/MaxLoss).
-#define GV_TIGHT_LATCH   "RG_TIGHT_LATCH"    // Selbst-Sperre war heute aktiv -> InpTightenOnly intraday nicht abschaltbar
-#define GV_PROT_SINCE    "RG_PROT_SINCE"     // §07-fix: Beginn der aktuellen Schutz-aus-Phase (AutoTrading aus) -> Sperrfristen um die Ausfallzeit verlaengern
-// v0.36: Wochen-Risiko-Wähler im Panel — der User stellt Risiko/Trade fuer die Woche selbst ein (Eigenkonto ODER Prop).
-#define GV_WEEK_RISK     "RG_WEEK_RISK"      // aktiv gewaehltes Risiko/Trade (%) fuer die laufende Woche
-#define GV_WEEK_RISK_IDX "RG_WEEK_RISK_IDX"  // Wochen-Index (WeekIdx), fuer den GV_WEEK_RISK gilt
-#define GV_WEEK_RISK_NXT "RG_WEEK_RISK_NXT"  // vorgemerkte Erhoehung -> greift erst zum naechsten Wochenwechsel (Anti-Tilt)
+                                             //   Only set on hits — a failed attempt must not burn the one-time chance.
+#define GV_LS_SEEN       "RG_LS_SEEN"        // v0.63: the lockstate file has existed on this account before -> from then on its ABSENCE is tampering, not a first start
+// §06-fix (medium): extend tighten-only to ALL lock-relevant inputs (so far only Daily/MaxLoss).
+#define GV_TIGHT_LATCH   "RG_TIGHT_LATCH"    // self-lock was active today -> InpTightenOnly cannot be switched off intraday
+#define GV_PROT_SINCE    "RG_PROT_SINCE"     // §07-fix: start of the current protection-off phase (AutoTrading off) -> extend lock periods by the downtime
+// v0.36: weekly risk selector in the panel — the user sets risk/trade for the week himself (own account OR prop).
+#define GV_WEEK_RISK     "RG_WEEK_RISK"      // actively chosen risk/trade (%) for the running week
+#define GV_WEEK_RISK_IDX "RG_WEEK_RISK_IDX"  // week index (WeekIdx) that GV_WEEK_RISK applies to
+#define GV_WEEK_RISK_NXT "RG_WEEK_RISK_NXT"  // pending increase -> takes effect only at the next week change (anti-tilt)
 #define GV_EFF_WEEK      "RG_EFF_WEEK"       // R18 Wochenlimit
 #define GV_EFF_WARN      "RG_EFF_WARN"       // R4b Warn-Gate
-#define GV_EFF_LOCKAFT   "RG_EFF_LOCKAFT"    // R6 Sperre nach n Verlusten
-#define GV_EFF_CDAFT     "RG_EFF_CDAFT"      // R5 Cooldown nach n Verlusten
+#define GV_EFF_LOCKAFT   "RG_EFF_LOCKAFT"    // R6 lock after n losses
+#define GV_EFF_CDAFT     "RG_EFF_CDAFT"      // R5 cooldown after n losses
 #define GV_EFF_CDMIN     "RG_EFF_CDMIN"      // R5 Cooldown-Dauer (groesser = strenger)
 #define GV_EFF_GIVE      "RG_EFF_GIVE"       // R13 Giveback
-#define GV_EFF_RISK      "RG_EFF_RISK"       // R1 Risiko/Trade (skaliert via AutoScale die ganze Kaskade)
-#define GV_EFF_REQSL     "RG_EFF_REQSL"      // R7 SL-Pflicht (einmal an -> intraday nicht abschaltbar)
+#define GV_EFF_RISK      "RG_EFF_RISK"       // R1 risk/trade (scales the whole cascade via AutoScale)
+#define GV_EFF_REQSL     "RG_EFF_REQSL"      // R7 SL mandatory (once on -> cannot be switched off intraday)
 #define GV_EFF_REQTP     "RG_EFF_REQTP"      // R7 TP-Pflicht
-#define GV_EFF_CORR      "RG_EFF_CORR"       // R17 Korrelations-Deckel an/aus
-#define EA_VER           "0.66"             // EINE Versions-Quelle (Log-Print + Cockpit-JSON) — hier hochzaehlen
+#define GV_EFF_CORR      "RG_EFF_CORR"       // R17 correlation cap on/off
+#define EA_VER           "0.66"             // ONE version source (log print + cockpit JSON) — increment here
 #define PFX              "MMT_"
 #define SLLINE           "MMT_slline"
-#define TPLINE           "MMT_tpline"      // v0.46: optionale, ziehbare TP-Linie (InpTpLine); sonst Auto-TP aus InpRR
+#define TPLINE           "MMT_tpline"      // v0.46: optional, draggable TP line (InpTpLine); otherwise auto TP from InpRR
 #define JOURNAL          "MamalTrading_Journal.csv"
 #define LOCKFILE         "MamalTrading_Lockstate.dat"   // Lockstate-Spiegel (fail-closed/Tamper)
-#define COCKPIT_FILE     "mamal_cockpit.json"           // v0.26: Live-Zustand fuer das localhost-Cockpit (DLL-freie Datei-Bruecke)
-#define COCKPIT_TMP      "mamal_cockpit.tmp"            // atomar: erst tmp schreiben, dann FileMove -> kein Torn-Read
-#define COCKPIT_OPEN     "mamal_cockpit_open.txt"       // Trigger: Server sieht die Datei -> oeffnet Browser
-#define COCKPIT_PATHS    "mamal_files.txt"              // v0.37: Wegweiser im Common-Ordner -> echter Files-Pfad (Portable/Multi-Terminal-sicher)
-#define COCKPIT_CMD      "mamal_cmd.txt"                // v0.39: Kommando vom Dashboard — NUR verschaerfend (endday = Selbstsperre), nie lockernd
-#define LOCKSALT         "MMT-ls-7731"                  // HMAC-light Salt fuer Lockstate-Checksumme
+#define COCKPIT_FILE     "mamal_cockpit.json"           // v0.26: live state for the localhost cockpit (DLL-free file bridge)
+#define COCKPIT_TMP      "mamal_cockpit.tmp"            // atomic: write tmp first, then FileMove -> no torn read
+#define COCKPIT_OPEN     "mamal_cockpit_open.txt"       // trigger: server sees the file -> opens the browser
+#define COCKPIT_PATHS    "mamal_files.txt"              // v0.37: signpost in the Common folder -> real Files path (portable/multi-terminal safe)
+#define COCKPIT_CMD      "mamal_cmd.txt"                // v0.39: command from the dashboard — ONLY tightening (endday = self-lock), never loosening
+#define LOCKSALT         "MMT-ls-7731"                  // HMAC-light salt for the lockstate checksum
 
 double g_initialBalance = 0;
-bool   g_initBalConfirmed = false;   // §04-fix: Basis stammt aus Input/GV/Lockstate (bestaetigt) — reine Auto-Ableitung darf NIE persistiert werden (weder GV noch Datei)
+bool   g_initBalConfirmed = false;   // §04-fix: base comes from input/GV/lockstate (confirmed) — a pure auto-derivation must NEVER be persisted (neither GV nor file)
 uint   g_lastActionMs   = 0;
 uint   g_lastPanelMs    = 0;
 uint   g_lastEnforceMs  = 0;   // P0-1 Close-Drossel
 string g_panelSig       = "";
 int    g_armed          = 0;
 uint   g_armMs          = 0;
-int    g_slClicks       = 0;    // v0.21: Klick-Zaehler fuer 3-Klick-SL-Setzen
+int    g_slClicks       = 0;    // v0.21: click counter for 3-click SL setting
 double g_slClickPrice   = 0;    // Zonen-Anker-Preis
-uint   g_slClickMs      = 0;    // Zeit des letzten Zonen-Klicks
-string g_flash          = "";   // v0.21: letzte Meldung (z.B. Ablehnungsgrund) direkt im Panel zeigen
-uint   g_flashMs        = 0;    // Zeit der letzten Meldung
+uint   g_slClickMs      = 0;    // time of the last zone click
+string g_flash          = "";   // v0.21: show the last message (e.g. rejection reason) directly in the panel
+uint   g_flashMs        = 0;    // time of the last message
 uint   g_flashHold      = 6000; // v0.63: Standzeit DIESER Meldung. Manipulationsbefunde bleiben laenger stehen —
-                                //   sie treten selten auf, und wer sie verpasst, verpasst genau das Wichtige.
-bool   g_flashLoud      = false;// v0.64: die stehende Meldung ist ein Manipulationsbefund -> darf von harmlosen
-                                //   Folgemeldungen nicht verdraengt werden (sonst waren die 120 s wirkungslos)
-bool   g_lsMissWarned   = false;// v0.64: "Datei fehlt" schon gemeldet? Erzwungene Alerts NUR beim Zustandswechsel,
-bool   g_lsCorruptWarned= false;//   sonst feuert bei dauerhaft unlesbarem Ordner jede Sekunde ein modaler Dialog
+                                //   they occur rarely, and whoever misses them misses exactly what matters.
+bool   g_flashLoud      = false;// v0.64: the standing message is a tampering finding -> must not be pushed aside by
+                                //   harmless follow-up messages (otherwise the 120 s had no effect)
+bool   g_lsMissWarned   = false;// v0.64: "Datei fehlt" (file missing) already reported? Forced alerts ONLY on a state change,
+bool   g_lsCorruptWarned= false;//   otherwise a permanently unreadable folder fires a modal dialog every second
 bool   g_flashInfo      = false;// v0.37: true = neutraler Hinweis (z.B. Cockpit), false = rote Ablehnung
-string g_rkEditSync     = "";   // v0.49: zuletzt INS Eingabefeld geschriebener Wert — verhindert, dass DrawPanel die Tipp-Eingabe ueberschreibt
-datetime g_noMasterSince = 0;   // v0.45: seit wann ist KEINE Instanz Master (0 = alles ok)
-bool     g_noMasterWarned= false;// v0.45: Alarm nur einmal je Ausfall-Episode
-bool   g_gvDirty        = false;// v0.22: GlobalVariables geaendert -> EIN gebuendelter Flush am Cycle-Ende (Wine-Crash-Schutz statt 4 synchroner Flushes je Tick)
-int    g_fgTries        = 0;    // v0.28: Vordergrund-Flag nur begrenzt oft setzen (nicht jeden Cycle -> kein ChartSetInteger-Spam)
-int    g_masterStreak   = 0;    // v0.28: wie viele Cycles in Folge Master (Hysterese: erst ab 2 wirklich handeln -> kein Startup-/Slow-Cycle-Burst)
-double g_lastScopeSig   = 0.0;  // v0.31: Signatur der In-Scope-SL/TP letzter Cycle (User-Modify erkennen)
+string g_rkEditSync     = "";   // v0.49: value last written INTO the input field — keeps DrawPanel from overwriting what is being typed
+datetime g_noMasterSince = 0;   // v0.45: since when is NO instance master (0 = all fine)
+bool     g_noMasterWarned= false;// v0.45: alarm only once per outage episode
+bool   g_gvDirty        = false;// v0.22: GlobalVariables changed -> ONE bundled flush at the end of the cycle (Wine crash protection instead of 4 synchronous flushes per tick)
+int    g_fgTries        = 0;    // v0.28: set the foreground flag only a limited number of times (not every cycle -> no ChartSetInteger spam)
+int    g_masterStreak   = 0;    // v0.28: how many cycles in a row master (hysteresis: really act only from 2 on -> no startup/slow-cycle burst)
+double g_lastScopeSig   = 0.0;  // v0.31: signature of the in-scope SL/TP from the last cycle (detect user modify)
 int    g_lastScopeN     = -1;   // v0.31: In-Scope-Order-Anzahl letzter Cycle
-uint   g_modifyQuietMs  = 0;    // v0.31: Zeitpunkt des letzten erkannten User-Modify -> kurz KEINE EA-Close (kein OrderClose in laufenden Modify = Wine-Crash)
+uint   g_modifyQuietMs  = 0;    // v0.31: time of the last detected user modify -> briefly NO EA close (no OrderClose during a running modify = Wine crash)
 uint   g_lastCockpitMs  = 0;    // v0.26: Cockpit-JSON gedrosselt schreiben
 
 // Close-Queue (echte ticketbasierte Schliessung mit Retry/Backoff/Journal)
@@ -264,55 +264,55 @@ int      g_qTicket[];
 string   g_qReason[];
 int      g_qTries[];
 uint     g_qNextMs[];
-// §06-fix: R7-Grace liegt jetzt persistent in GlobalVariables (RG_NK_/RG_NKH_), nicht mehr in Instanz-Arrays
-uint     g_modifyQuietStart = 0;   // §06-fix: Beginn der laufenden Modify-Serie (Quiet-Fenster hart deckeln)
+// §06-fix: R7 grace now lives persistently in GlobalVariables (RG_NK_/RG_NKH_), no longer in per-instance arrays
+uint     g_modifyQuietStart = 0;   // §06-fix: start of the running modify series (hard-cap the quiet window)
 int      g_seenTicket[];           // §06-fix: zuletzt gesehene offene In-Scope-Tickets (History-Sichtbarkeits-Wachhund)
-int      g_suspTicket[];           // verschwundene Tickets, die (noch) nicht in der History auffindbar sind
+int      g_suspTicket[];           // vanished tickets that are not (yet) findable in the history
 string   g_lockSig         = "";   // letzte geschriebene Lockstate-Signatur (Disk-Schonung)
 bool     g_lsGuard         = false; // v0.63: laeuft gerade ein Abgleich? verhindert Rekursion WriteLockstate <-> ReconcileLockstate
-uint     g_lastReconcileMs = 0;    // Drossel fuer R3-Reconcile in Cycle()
-uint     g_lastLockReconcileMs = 0;// §05-fix (hoch): Drossel fuer periodische Lockstate-Rekonsiliation (faengt F3-Loeschen der Sperr-GVs)
-datetime g_lastStaleWarnDay= 0;    // Drossel fuer Serverzeit-Drift-Hinweis (max 1x/Tag)
-datetime g_lastTvWarnDay   = 0;    // Drossel fuer TickValue-Fallback-Warnung (max 1x/Tag)
-bool     g_tvEstimate      = false;// §07-fix: Risiko beruht (teilweise) auf einer Schaetzung statt echtem TickValue -> im Panel/Cockpit sichtbar machen
-datetime g_lastRdrWarnDay  = 0;    // §07-fix: Drossel fuer die R3-Rekonstruktions-Warnung (vorher CSV-Spam alle 15 s)
-datetime g_lastRollWarn    = 0;    // §07-fix: Drossel fuer "Roll ohne Broker-Bestaetigung" (PC-Uhr-Manipulation)
-int      g_srvOffset       = 0;    // Server-Offset (Sek): TimeCurrent - TimeLocal am letzten Tick
+uint     g_lastReconcileMs = 0;    // throttle for the R3 reconcile in Cycle()
+uint     g_lastLockReconcileMs = 0;// §05-fix (high): throttle for the periodic lockstate reconciliation (catches an F3 deletion of the lock GVs)
+datetime g_lastStaleWarnDay= 0;    // throttle for the server-time drift notice (max 1x/day)
+datetime g_lastTvWarnDay   = 0;    // throttle for the TickValue fallback warning (max 1x/day)
+bool     g_tvEstimate      = false;// §07-fix: risk rests (partly) on an estimate instead of a real TickValue -> make it visible in panel/cockpit
+datetime g_lastRdrWarnDay  = 0;    // §07-fix: throttle for the R3 reconstruction warning (previously CSV spam every 15 s)
+datetime g_lastRollWarn    = 0;    // §07-fix: throttle for "Roll ohne Broker-Bestaetigung" (roll without broker confirmation) (PC clock manipulation)
+int      g_srvOffset       = 0;    // server offset (sec): TimeCurrent - TimeLocal at the last tick
 bool     g_srvOffsetSet    = false;
-datetime g_lastSrvSeen     = 0;    // §04-fix (mittel): letzter beobachteter TimeCurrent-Stand — "frisch" = er hat sich seit der letzten Beobachtung bewegt
+datetime g_lastSrvSeen     = 0;    // §04-fix (medium): last observed TimeCurrent value — "fresh" = it has moved since the last observation
 
 double Pip(){ return ((Digits==5 || Digits==3) ? 10*Point : Point); }
 long DayKeyOf(datetime t){ return (long)(TimeYear(t)*10000+TimeMonth(t)*100+TimeDay(t)); }
-// Server-Zeit, tickunabhaengig: MQL4 hat KEIN TimeTradeServer() (nur MQL5). Loesung: Serverzeit = PC-Uhr
-// (TimeLocal) + gepflegtem Server-Offset (am letzten Tick aus TimeCurrent-TimeLocal). So laeuft die Zeit
-// auch ohne neue Ticks weiter. Offset wird in OnTick/OnInit via UpdateSrvOffset() aktualisiert.
-// §04-fix (mittel): Offset nur aus FRISCHER Serverzeit ableiten. Nach einem Neustart in tickloser Phase (Wochenende)
-// liefert TimeCurrent() den Cache vom letzten Tick — ein daraus gebildeter Offset laesst SrvTime() um die gesamte
-// Tick-Luecke (bis ~2,5 Tage) hinterherlaufen: abgelaufene Sperren re-aktivieren sich, SafeCloseAll schliesst zum
-// Montags-Open. "Frisch" = TimeCurrent hat sich seit der letzten Beobachtung bewegt (irgendein Symbol lieferte eine
-// Quote — auch aus OnTimer erkennbar), ODER der Kandidat passt zum persistierten letzten guten Offset.
+// Server time, tick-independent: MQL4 has NO TimeTradeServer() (MQL5 only). Solution: server time = PC clock
+// (TimeLocal) + a maintained server offset (from TimeCurrent-TimeLocal at the last tick). That way time keeps
+// running even without new ticks. The offset is updated in OnTick/OnInit via UpdateSrvOffset().
+// §04-fix (medium): derive the offset only from FRESH server time. After a restart in a tickless phase (weekend)
+// TimeCurrent() returns the cache from the last tick — an offset built from it makes SrvTime() lag by the whole
+// tick gap (up to ~2.5 days): expired locks re-activate themselves, SafeCloseAll closes at the
+// Monday open. "Fresh" = TimeCurrent has moved since the last observation (some symbol delivered a
+// quote — detectable from OnTimer too), OR the candidate matches the persisted last good offset.
 void AdoptSrvOffset(datetime sc)
 {
    g_srvOffset=(int)(sc - TimeLocal()); g_srvOffsetSet=true;
    if(!GlobalVariableCheck(GV_SRV_OFFSET) || (int)GlobalVariableGet(GV_SRV_OFFSET)!=g_srvOffset)
-      GlobalVariableSet(GV_SRV_OFFSET,(double)g_srvOffset);   // aendert sich selten (Drift/DST) -> kaum Writes, Flush macht der Cycle/Terminal
+      GlobalVariableSet(GV_SRV_OFFSET,(double)g_srvOffset);   // rarely changes (drift/DST) -> hardly any writes, the flush is done by the cycle/terminal
 }
 void UpdateSrvOffset()
 {
    datetime sc = TimeCurrent();
    if(sc<=0) return;
-   bool fresh = (g_lastSrvSeen>0 && sc>g_lastSrvSeen);         // Serverzeit bewegt sich -> Quote ist frisch
-   if(g_lastSrvSeen<=0)                                        // erster Aufruf nach Start: TimeCurrent kann der Wochenend-Cache sein
+   bool fresh = (g_lastSrvSeen>0 && sc>g_lastSrvSeen);         // server time is moving -> quote is fresh
+   if(g_lastSrvSeen<=0)                                        // first call after start: TimeCurrent may be the weekend cache
    {
       if(GlobalVariableCheck(GV_SRV_OFFSET))
       {
          int stored=(int)GlobalVariableGet(GV_SRV_OFFSET);
          int cand  =(int)(sc - TimeLocal());
          if(MathAbs(cand-stored)<=120) fresh=true;             // Kandidat ~= letzter guter Offset -> plausibel frisch
-         else { g_srvOffset=stored; g_srvOffsetSet=true;       // stale (Tick-Luecke): letzten guten Offset nutzen, bis eine frische Quote kommt
+         else { g_srvOffset=stored; g_srvOffsetSet=true;       // stale (tick gap): use the last good offset until a fresh quote arrives
                 PrintFormat("Mamal: TimeCurrent %d s neben letztem gutem Offset (Tick-Luecke?) — nutze persistierten Offset, bis frische Quote da ist.", cand-stored); }
       }
-      else fresh=true;                                         // kein Vorwissen (Erststart): Kandidat uebernehmen — besser als keine Serverzeit
+      else fresh=true;                                         // no prior knowledge (first start): adopt the candidate — better than no server time
    }
    if(sc>g_lastSrvSeen) g_lastSrvSeen=sc;
    if(fresh) AdoptSrvOffset(sc);
@@ -321,39 +321,39 @@ datetime SrvTime()
 {
    if(g_srvOffsetSet)
    {
-      datetime est = TimeLocal() + g_srvOffset;   // PC-Uhr + Offset -> bewegt sich auch ohne Ticks
+      datetime est = TimeLocal() + g_srvOffset;   // PC clock + offset -> moves even without ticks
       datetime sc  = TimeCurrent();
       if(sc>0 && (est-sc) > 6*3600 && DayKeyOf(g_lastStaleWarnDay)!=DayKeyOf(est))
       { g_lastStaleWarnDay=est; PrintFormat("Mamal: HINWEIS letzter Tick %d s alt — Zeit aus PC-Uhr+Server-Offset.", (int)(est-sc)); }
       return est;
    }
-   // §07-fix: Offset noch ungesetzt -> zuerst den PERSISTIERTEN Offset nutzen. Der alte Fallback lieferte rohe PC-Lokalzeit
-   //   (falsche Zeitzone) und verfaelschte damit DayKey und den GV_LAST_CLOSE-Floor, bevor die erste Serverzeit ankam.
+   // §07-fix: offset not set yet -> use the PERSISTED offset first. The old fallback returned raw PC local time
+   //   (wrong time zone) and thereby corrupted DayKey and the GV_LAST_CLOSE floor before the first server time arrived.
    if(GlobalVariableCheck(GV_SRV_OFFSET)) return TimeLocal() + (int)GlobalVariableGet(GV_SRV_OFFSET);
-   datetime sc2 = TimeCurrent();       // sonst: letzter Tick
+   datetime sc2 = TimeCurrent();       // otherwise: last tick
    if(sc2>0) return sc2;
    return TimeLocal();                 // letzter Ausweg (reine PC-Zeit, Zeitzone unbekannt)
 }
 // Prop-Firm-Zeit-Profil (P0/P1-3): Tagesreset um InpDayResetHour (Server), Woche ab InpWeekStartDay. Default 0/0 = FTMO/Sonntag.
-// §05-fix (hoch): Tagesreset-Stunde/Wochenstart NICHT direkt aus dem Input lesen, sondern aus dem persistierten EFFEKTIVEN
-//   Wert. Sonst verschiebt eine INTRADAY-Aenderung von InpDayResetHour/InpWeekStartDay den Tages-/Wochen-Key -> kuenstlicher
-//   RollNewDay/Wochen-Roll wiped Basis/R3/Serie/TargetHit/Wochensperre. Der neue Input greift erst zum ECHTEN Rollover
-//   (dort adoptiert). Seed in OnInit; fehlt der GV -> Input (Erststart).
+// §05-fix (high): do NOT read the day-reset hour/week start straight from the input, but from the persisted EFFECTIVE
+//   value. Otherwise an INTRADAY change of InpDayResetHour/InpWeekStartDay shifts the day/week key -> an artificial
+//   RollNewDay/week roll wipes base/R3/series/TargetHit/week lock. The new input only takes effect at the REAL rollover
+//   (adopted there). Seeded in OnInit; if the GV is missing -> input (first start).
 int EffResetHour(){ return GlobalVariableCheck(GV_EFF_RH) ? (int)GlobalVariableGet(GV_EFF_RH) : InpDayResetHour; }
 int EffWeekStart(){ return GlobalVariableCheck(GV_EFF_WS) ? (int)GlobalVariableGet(GV_EFF_WS) : InpWeekStartDay; }
 long ServerDayKey(){ return DayKeyOf(SrvTime() - EffResetHour()*3600); }
 datetime NextServerMidnight(){ datetime sh=SrvTime()-EffResetHour()*3600; datetime nx=(sh-(sh%86400))+86400; return nx + EffResetHour()*3600; }
-long WeekIdx(){ datetime t=SrvTime()-EffResetHour()*3600; MqlDateTime st; TimeToStruct(t,st); int dow=(st.day_of_week-EffWeekStart()+7)%7; return (long)(t/86400) - (long)dow; }   // B2: am Wochenstart-Tag ankern (Default Sonntag)
-// §07-fix (hoch): PC-Uhr-Manipulation. SrvTime() = TimeLocal + Offset — wer die Windows-Uhr vorstellt, verschiebt den
-//   Tages-/Wochen-Key und loeste damit einen RollNewDay aus, der Sperre, Tagesbasis, R3-Budget und Verlustserie wegwischte
-//   (der naechste Tick korrigierte nur den Offset, nicht den geloeschten Zustand). TimeCurrent() kommt dagegen VOM BROKER
-//   und laesst sich lokal nicht faelschen. Ein Roll wird deshalb nur noch akzeptiert, wenn die Broker-Zeit denselben
-//   Tages-/Wochenwechsel zeigt. Ueber ein Wochenende ohne Ticks bedeutet das: der Roll passiert beim ersten echten Tick
-//   (Marktoeffnung) — vorher kann ohnehin nicht gehandelt werden, die Sperre bleibt so lange bestehen (konservativ).
+long WeekIdx(){ datetime t=SrvTime()-EffResetHour()*3600; MqlDateTime st; TimeToStruct(t,st); int dow=(st.day_of_week-EffWeekStart()+7)%7; return (long)(t/86400) - (long)dow; }   // B2: anchor on the week start day (default Sunday)
+// §07-fix (high): PC clock manipulation. SrvTime() = TimeLocal + offset — whoever moves the Windows clock forward shifts the
+//   day/week key and thereby triggered a RollNewDay that wiped the lock, the day base, the R3 budget and the loss series
+//   (the next tick corrected only the offset, not the deleted state). TimeCurrent(), by contrast, comes FROM THE BROKER
+//   and cannot be faked locally. A roll is therefore only accepted if the broker time shows the same
+//   day/week change. Across a weekend without ticks that means: the roll happens at the first real tick
+//   (market open) — before that no trading is possible anyway, so the lock stays in place until then (conservative).
 bool ServerDayRollConfirmed(long storedDay)
 {
    datetime sc=TimeCurrent();
-   if(sc<=0) return false;                                        // keine Broker-Zeit -> kein Roll
+   if(sc<=0) return false;                                        // no broker time -> no roll
    return (DayKeyOf(sc - EffResetHour()*3600) != storedDay);
 }
 bool ServerWeekRollConfirmed(long storedWeek)
@@ -364,22 +364,22 @@ bool ServerWeekRollConfirmed(long storedWeek)
    int dow=(st.day_of_week-EffWeekStart()+7)%7;
    return (((long)(t/86400)-(long)dow) != storedWeek);
 }
-void WarnUnconfirmedRoll(string what)   // gedrosselt: sonst je Cycle eine Meldung
+void WarnUnconfirmedRoll(string what)   // throttled: otherwise one message per cycle
 {
    if(SrvTime()-g_lastRollWarn < 300) return;
    g_lastRollWarn=SrvTime();
    Notify(TF("time.rolloverNotConfirmed",what));
    Journal("TAMPER","-","-",0,0,0,0,0,StringFormat("%s ohne Broker-Bestaetigung -> Roll unterdrueckt (Uhr-Manipulation?)",what));
 }
-datetime ServerDayStart(){ datetime sh=SrvTime()-EffResetHour()*3600; return (sh-(sh%86400))+EffResetHour()*3600; }   // §04-fix: Beginn des AKTUELLEN Servertags (= Moment, an dem der Roll haette stattfinden sollen)
-datetime ServerWeekStart(){ return (datetime)(WeekIdx()*86400) + EffResetHour()*3600; }                              // §04-fix: Beginn der aktuellen Woche (R18-Anker)
-// §04-fix (mittel): Balance zum Anker-Zeitpunkt aus der Broker-History rekonstruieren: aktuelle Balance minus aller
-// SEITHER realisierten Nettos (inkl. Ein-/Auszahlungen — alles, was die Balance seit dem Anker bewegt hat, ueber ALLE
-// Magics/Symbole, denn die Kontobalance ist kontoweit). War das Terminal ueber den Anker hinweg aus und liefen Nacht-
-// SL-Hits, misst der verspaetete Roll sonst vom bereits gefallenen Niveau — FTMO-Limits koennen reissen, bevor der EA
-// sperrt. Ohne Closes seit dem Anker ist die Summe 0 -> Ergebnis = aktuelle Balance (identisch zum alten Verhalten).
-// Grenze: sieht nur den im Kontohistorie-Tab geladenen Bereich (dokumentierte OrdersHistoryTotal-Schwaeche) — liefert
-// dann zu wenig Korrektur, nie eine falsche; max() unten verhindert jede Verschlechterung gegen den Ist-Zustand.
+datetime ServerDayStart(){ datetime sh=SrvTime()-EffResetHour()*3600; return (sh-(sh%86400))+EffResetHour()*3600; }   // §04-fix: start of the CURRENT server day (= the moment at which the roll should have happened)
+datetime ServerWeekStart(){ return (datetime)(WeekIdx()*86400) + EffResetHour()*3600; }                              // §04-fix: start of the current week (R18 anchor)
+// §04-fix (medium): reconstruct the balance at the anchor moment from the broker history: current balance minus all
+// net results realized SINCE then (incl. deposits/withdrawals — everything that moved the balance since the anchor, across ALL
+// magics/symbols, because the account balance is account-wide). If the terminal was off across the anchor and night-time
+// SL hits ran, the late roll otherwise measures from the already-dropped level — FTMO limits can break before the EA
+// locks. With no closes since the anchor the sum is 0 -> result = current balance (identical to the old behavior).
+// Limit: sees only the range loaded in the account history tab (documented OrdersHistoryTotal weakness) — it then delivers
+// too little correction, never a wrong one; max() below prevents any worsening against the actual state.
 double ReconstructedBalanceAt(datetime anchor)
 {
    double sum=0;
@@ -387,15 +387,15 @@ double ReconstructedBalanceAt(datetime anchor)
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)) continue;
       if(OrderCloseTime()<anchor) continue;
-      if(OrderType()==7) continue;   // Credit-Operation: bewegt Equity/Credit, NICHT die Balance (Typ 6 = Einzahlung gehoert dagegen hinein; geloeschte Pendings haben Profit 0)
+      if(OrderType()==7) continue;   // credit operation: moves equity/credit, NOT the balance (type 6 = deposit, by contrast, does belong in; deleted pendings have profit 0)
       sum += OrderProfit()+OrderSwap()+OrderCommission();
    }
    return AccountBalance()-sum;
 }
 
-// v0.38: Challenge-Startbalance aus der Einzahlungs-Historie ableiten (erste Einzahlung = Kontogroesse).
-// FTMO/Prop-Konten haben genau EINE initiale Balance-Buchung (Typ 6). Grenze: sieht nur den geladenen
-// History-Bereich — findet er nichts, faellt der Aufrufer auf die aktuelle Balance zurueck.
+// v0.38: derive the challenge start balance from the deposit history (first deposit = account size).
+// FTMO/prop accounts have exactly ONE initial balance entry (type 6). Limit: sees only the loaded
+// history range — if it finds nothing, the caller falls back to the current balance.
 double DepositBase()
 {
    double first=0; datetime firstT=0;
@@ -403,13 +403,13 @@ double DepositBase()
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)) continue;
       if(OrderType()!=6) continue;         // 6 = Balance-Operation (Ein-/Auszahlung)
-      if(OrderProfit()<=0) continue;       // nur Einzahlungen
+      if(OrderProfit()<=0) continue;       // deposits only
       if(firstT==0 || OrderOpenTime()<firstT){ firstT=OrderOpenTime(); first=OrderProfit(); }
    }
    return first;
 }
 
-// P1-11: WatchScope — TOOL_ONLY/TOOL_PLUS_MANUAL fassen fremde Magics NICHT an; ALL_POSITIONS schon (nur Demo/Debug)
+// P1-11: WatchScope — TOOL_ONLY/TOOL_PLUS_MANUAL do NOT touch foreign magics; ALL_POSITIONS does (demo/debug only)
 bool InScope(int magic)
 {
    if(InpWatchScope==ALL_POSITIONS) return true;
@@ -421,21 +421,21 @@ bool InScope(int magic)
 string EaKey(int t){ return "RGEAC_"+IntegerToString(t); }
 string OpnKey(int t){ return "RGOPN_"+IntegerToString(t); }   // v0.40: vom Panel eroeffnete Tickets — Close-Erkennung findet sie auch bei Magic-Divergenz/gefiltertem History-Tab
 int CountOpn(){ int c=0; for(int i=GlobalVariablesTotal()-1;i>=0;i--) if(StringFind(GlobalVariableName(i),"RGOPN_")==0) c++; return c; }   // v0.42: Diagnose
-string EacfKey(int t){ return "RGEACF_"+IntegerToString(t); }   // §05-fix (hoch): EA-Close war TRADER-VERSCHULDEN (R7/R1/R8) -> zaehlt fuer Verlustserie (kein Laundering)
-bool IsFaultCloseReason(string r){ return (StringFind(r,"R7")==0 || StringFind(r,"R8")==0 || StringFind(r,"R1 ")==0); }   // R7 SL/TP entfernt, R1 Ueberrisiko, R8 CRV — NICHT R12/Lock (das ist echter Schutz-Flat)
+string EacfKey(int t){ return "RGEACF_"+IntegerToString(t); }   // §05-fix (high): the EA close was the TRADER'S OWN FAULT (R7/R1/R8) -> counts toward the loss series (no laundering)
+bool IsFaultCloseReason(string r){ return (StringFind(r,"R7")==0 || StringFind(r,"R8")==0 || StringFind(r,"R1 ")==0); }   // R7 SL/TP removed, R1 over-risk, R8 CRV — NOT R12/lock (that is a genuine protective flat)
 void MarkEaClosed(int t,string reason){ GlobalVariableSet(EaKey(t),(double)SrvTime()); if(IsFaultCloseReason(reason)) GlobalVariableSet(EacfKey(t),(double)SrvTime()); GlobalVariablesFlush(); }   // P0-3: sofort persistieren (Crash-fest)
 // §07-fix: UnmarkEaClosed()/TakeEaClosed() waren toter Code (nirgends aufgerufen) — entfernt statt mitgeschleppt.
 // P0-2/P0-4: verarbeitete POSITIONEN (Key = OpenTime_Type_Symbol_Magic_OpenPrice) persistent -> idempotent, same-second-robust
-// §07-fix: FESTE Preis-Praezision statt MarketInfo(MODE_DIGITS). Der Digits-Wert ist nach einem Restart ohne das Symbol
-//   im Market Watch nicht verfuegbar (Fallback 5) -> derselbe Verlust bekam einen anderen Key und wurde DOPPELT gezaehlt.
-//   Hinweis (bewusste MT4-Grenze): zwei Positionen mit identischer Open-Sekunde, gleichem Preis, gleichem Symbol/Magic und
-//   gleicher Richtung teilen sich weiterhin einen Key — MT4 hat keine Positions-ID, und Ticket taugt nicht (Teil-Closes).
+// §07-fix: FIXED price precision instead of MarketInfo(MODE_DIGITS). The digits value is unavailable after a restart without the symbol
+//   in the Market Watch (fallback 5) -> the same loss got a different key and was counted TWICE.
+//   Note (deliberate MT4 limit): two positions with an identical open second, the same price, the same symbol/magic and
+//   the same direction still share one key — MT4 has no position ID, and the ticket is no good (partial closes).
 string ProcKey(datetime ot,int ty,string sym,int magic,double openPrice){ return "RGP_"+IntegerToString((int)ot)+"_"+IntegerToString(ty)+"_"+sym+"_"+IntegerToString(magic)+"_"+DoubleToString(openPrice,8); }
 string ProcKeyLegacy(datetime ot,int ty,string sym,int magic,double openPrice){ int dg=(int)MarketInfo(sym,MODE_DIGITS); if(dg<=0) dg=5; return "RGP_"+IntegerToString((int)ot)+"_"+IntegerToString(ty)+"_"+sym+"_"+IntegerToString(magic)+"_"+DoubleToString(openPrice,dg); }
 bool   IsProcessed(string key){ return GlobalVariableCheck(key); }
-bool   IsProcessedAny(string key,string legacyKey){ return (GlobalVariableCheck(key) || GlobalVariableCheck(legacyKey)); }   // Migration: alte Marker weiter respektieren -> keine Doppelwertung beim Update
-// v0.45 (Verify): EIN Marker-Paar pro Position. RGM_ = "im Cockpit schon gezeigt" — wird von BEIDEN Pfaden
-//   gesetzt, damit ein Trade nie als CLOSE *und* als CLOSE_MAN im Netto landet (Scope-/Magic-Wechsel).
+bool   IsProcessedAny(string key,string legacyKey){ return (GlobalVariableCheck(key) || GlobalVariableCheck(legacyKey)); }   // migration: keep honoring old markers -> no double counting on the update
+// v0.45 (Verify): ONE marker pair per position. RGM_ = "already shown in the cockpit" — is set by BOTH paths
+//   so that a trade never lands in the net as CLOSE *and* as CLOSE_MAN (scope/magic change).
 string ManKey(string procKey){ return "RGM_"+StringSubstr(procKey,4); }
 void   AddProcessed(string key,datetime ct){ GlobalVariableSet(key,(double)ct); GlobalVariableSet(ManKey(key),(double)ct); }
 void   PruneGV(string prefix,datetime below)
@@ -446,13 +446,13 @@ void   PruneGV(string prefix,datetime below)
       if(StringFind(nm,prefix)==0 && (datetime)GlobalVariableGet(nm) < below) GlobalVariableDel(nm);
    }
 }
-// §04-fix (hoch): kompletter Zustands-Reset bei Kontowechsel — GVs sind terminalweit und tragen KEINE Konto-Nr.,
-// darum gehoert der gespeicherte Zustand (Basen/Sperren/Serie/Marker) nach einem Login-Wechsel NICHT zum neuen Konto.
+// §04-fix (high): full state reset on an account switch — GVs are terminal-wide and carry NO account number,
+// so after a login change the stored state (bases/locks/series/markers) does NOT belong to the new account.
 void WipeAllState()
 {
    for(int i=GlobalVariablesTotal()-1;i>=0;i--)
    { string nm=GlobalVariableName(i); if(StringFind(nm,"RG")==0) GlobalVariableDel(nm); }   // gesamter Namespace: RG_*, RGP_*, RGEAC_*
-   if(FileIsExist(LOCKFILE)) FileDelete(LOCKFILE);   // signierten Lockstate des alten Kontos nicht wiederherstellen
+   if(FileIsExist(LOCKFILE)) FileDelete(LOCKFILE);   // do not restore the signed lockstate of the old account
    g_lockSig="";
    GlobalVariablesFlush();
 }
@@ -484,17 +484,17 @@ void ApplyFundedAndProfile()
 
 int OnInit()
 {
-   UpdateSrvOffset();          // Server-Offset seeden (TimeCurrent meist schon gueltig)
+   UpdateSrvOffset();          // seed the server offset (TimeCurrent is usually valid already)
    // v0.40-fix: InpMagic=0 machte Panel-Trades von manuellen ununterscheidbar (R22-Failsafe, Scope-Chaos,
    //   Close-Erkennung blind). Ungueltige Magic -> Default erzwingen, laut melden.
    if(InpMagic<=0){ InpMagic=990201; Notify(T("cfg.magicInvalid")); }
    ApplyFundedAndProfile();    // #11/#13: Funded-Gate (TOOL_ONLY) + Prop-Firm-Profil-Log
-   ObjectsDeleteAll(0,PFX);   // B20: Panel-Objekte heissen MMT_ (nicht RG_) — vorher No-Op
-   // §04-fix (hoch): Konto-Bindung. GVs/Lockstate sind terminalweit ohne Konto-Nr. — nach einem Kontowechsel
-   //   (Demo->Challenge->Verification->Funded im selben Terminal) wuerde der EA sonst gegen die BASEN des ALTEN
+   ObjectsDeleteAll(0,PFX);   // B20: panel objects are named MMT_ (not RG_) — previously a no-op
+   // §04-fix (high): account binding. GVs/lockstate are terminal-wide without an account number — after an account switch
+   //   (demo->challenge->verification->funded in the same terminal) the EA would otherwise run against the BASES of the OLD
    //   Kontos rechnen (Sperren tot bzw. Phantom-Sperre + Zwangs-Close). Bei Login-Wechsel -> kompletter State-Reset.
    long acct=(long)AccountNumber();
-   if(acct>0)   // acct<=0 = (noch) nicht verbunden -> keinen Reset gegen eine Phantom-0 ausloesen
+   if(acct>0)   // acct<=0 = not (yet) connected -> do not trigger a reset against a phantom 0
    {
       if(GlobalVariableCheck(GV_ACCOUNT) && (long)GlobalVariableGet(GV_ACCOUNT)!=acct)
       {
@@ -505,16 +505,16 @@ int OnInit()
       }
       GlobalVariableSet(GV_ACCOUNT,(double)acct);
    }
-   // §04-fix (hoch): Herkunft der R4b-Basis merken. Nur InpInitialBalance oder ein bereits persistierter Wert
-   //   gelten als BESTAETIGT; die reine Auto-Ableitung aus AccountBalance() ist beim Erst-Attach mitten in einer
-   //   Challenge (nach Vorverlust) zu niedrig und wird unten fail-closed behandelt.
+   // §04-fix (high): remember the origin of the R4b base. Only InpInitialBalance or an already persisted value
+   //   count as CONFIRMED; the plain auto-derivation from AccountBalance() is too low on a first attach in the middle of a
+   //   challenge (after prior losses) and is treated fail-closed below.
    double prevInit    = (GlobalVariableCheck(GV_INIT_BAL) && GlobalVariableGet(GV_INIT_BAL)>0) ? GlobalVariableGet(GV_INIT_BAL) : 0;
    bool initFromInput = (InpInitialBalance>0);
-   // v0.37-fix: Plausibilitaet. Eine Basis WEIT unter der Kontobalance ist fast sicher ein Dezimaltrennzeichen-
-   //   Tippfehler (z.B. "163.659" oder "163,659" -> MT4 liest 163,66 statt 163659). Der R4b-Max-Loss-Floor laege
-   //   sonst weit unter der Balance -> Schutz praktisch AUS. Input verwerfen.
-   // v0.38-fix (Verify): Guard MUSS vor der Store/Lockstate-Ermittlung laufen — sonst umgeht der verworfene
-   //   Input die bestehende bestaetigte Basis und der Auto-Zweig ueberschreibt sie.
+   // v0.37-fix: plausibility. A base FAR below the account balance is almost certainly a decimal-separator
+   //   typo (e.g. "163.659" or "163,659" -> MT4 reads 163.66 instead of 163659). The R4b max-loss floor would then
+   //   sit far below the balance -> protection practically OFF. Discard the input.
+   // v0.38-fix (Verify): the guard MUST run before the store/lockstate resolution — otherwise the discarded
+   //   input bypasses the existing confirmed base and the auto branch overwrites it.
    if(initFromInput && AccountBalance()>0 && InpInitialBalance < AccountBalance()*0.1)
    {
       Notify(TF("base.initialBalanceImplausible",DoubleToString(InpInitialBalance,2),DoubleToString(AccountBalance(),2),DoubleToString(AccountBalance(),2)));
@@ -522,12 +522,12 @@ int OnInit()
       initFromInput=false;   // -> Store/Lockstate/Auto uebernehmen (unten), Tighten-Only bleibt intakt
    }
    bool initFromStore = (!initFromInput && GlobalVariableCheck(GV_INIT_BAL) && GlobalVariableGet(GV_INIT_BAL)>0);
-   double lsInit      = (!initFromInput && !initFromStore) ? LsStoredInitBal() : 0;   // §04-fix (mittel): Lockstate-Datei ueberlebt den 4-Wochen-GV-Ablauf
+   double lsInit      = (!initFromInput && !initFromStore) ? LsStoredInitBal() : 0;   // §04-fix (medium): the lockstate file survives the 4-week GV expiry
    bool initFromFile  = (lsInit>0);
    if(initFromInput)
    {
       g_initialBalance=InpInitialBalance;
-      if(prevInit>0 && InpInitialBalance < prevInit-0.01)   // §05-fix (hoch): Basis-ABSENKUNG intraday schiebt die R4b-Sperre weiter weg -> ablehnen (tighten-only); hoehere Basis behalten, Absenken wirkt erst zum Tageswechsel
+      if(prevInit>0 && InpInitialBalance < prevInit-0.01)   // §05-fix (high): LOWERING the base intraday pushes the R4b lock further away -> reject (tighten-only); keep the higher base, a lowering only takes effect at the day change
       {
          g_initialBalance=prevInit;
          Notify(TF("base.initialBalanceLoweringIgnored",DoubleToString(prevInit,2),DoubleToString(InpInitialBalance,2),DoubleToString(prevInit,2)));
@@ -536,11 +536,11 @@ int OnInit()
    }
    else if(initFromStore) g_initialBalance=GlobalVariableGet(GV_INIT_BAL);
    else if(initFromFile)  g_initialBalance=lsInit;
-   else   // v0.38: VOLL-AUTO — Challenge-Basis aus der Einzahlungs-Historie, Fallback aktuelle Balance.
-   {      //   Einmal abgeleitet wird sie persistiert (stabil ueber Neustarts) -> nie wieder "BASIS UNSICHER".
+   else   // v0.38: FULLY AUTOMATIC — challenge base from the deposit history, fallback the current balance.
+   {      //   Once derived it is persisted (stable across restarts) -> never again "BASIS UNSICHER" (base uncertain).
       double dep=DepositBase();
       // v0.38-fix (Verify): unplausibel kleine "Einzahlung" (z.B. Fee-Refund bei gefiltertem History-Tab)
-      //   NICHT als Basis nehmen — R4b waere sonst wirkungslos (Basis << Balance -> DD clampt auf 0).
+      //   do NOT take as the base — R4b would otherwise be ineffective (base << balance -> DD clamps to 0).
       if(dep>0 && AccountBalance()>0 && dep < AccountBalance()*0.1)
       { Journal("INFO","-","-",0,0,0,0,0,StringFormat("Einzahlung %.2f unplausibel klein ggue. Balance %.0f (Historie unvollstaendig?) -> Fallback Balance",dep,AccountBalance())); dep=0; }
       if(dep>0)
@@ -549,17 +549,17 @@ int OnInit()
       else
       { g_initialBalance=AccountBalance();
         if(g_initialBalance>0) Notify(TF("base.autoFromBalance",DoubleToString(g_initialBalance,2))); }
-      // v0.38-fix (Verify): Tighten-Only auch im Auto-Zweig — eine bereits bestaetigte hoehere Basis
-      //   (Store/Lockstate) darf durch eine niedrigere Auto-Ableitung NIE abgesenkt werden.
+      // v0.38-fix (Verify): tighten-only in the auto branch too — an already confirmed higher base
+      //   (store/lockstate) must NEVER be lowered by a lower auto-derivation.
       if(prevInit>0 && g_initialBalance<prevInit) g_initialBalance=prevInit;
    }
-   g_initBalConfirmed = (g_initialBalance>0);   // v0.38: jede Quelle gilt — Basis wird sofort festgeschrieben (tighten-only schuetzt weiterhin gegen Absenkung)
+   g_initBalConfirmed = (g_initialBalance>0);   // v0.38: every source counts — the base is fixed immediately (tighten-only still protects against lowering)
    if(g_initBalConfirmed)
-      GlobalVariableSet(GV_INIT_BAL,g_initialBalance);         // v0.38: auch die Auto-Basis persistieren — Stabilitaet ueber Neustarts (Wert ist ab jetzt die verbindliche Referenz)
-   // P0-2: keine gueltige Max-Loss-Basis -> fail-closed (keine neuen Trades), bis Kontodaten/InpInitialBalance da sind
+      GlobalVariableSet(GV_INIT_BAL,g_initialBalance);         // v0.38: persist the auto base as well — stability across restarts (from now on the value is the binding reference)
+   // P0-2: no valid max-loss base -> fail-closed (no new trades) until account data/InpInitialBalance are there
    if(g_initialBalance<=0)
    { GlobalVariableSet(GV_BASE_WARN,1); GlobalVariablesFlush(); Notify(T("base.missingFailClosed")); }
-   // B1: warnen, wenn die Max-Loss-Basis stark von der echten Kontobasis abweicht (R4b rechnet dagegen!)
+   // B1: warn if the max-loss base deviates strongly from the real account base (R4b computes against it!)
    {
       double ab=AccountBalance();
       if(g_initialBalance>0 && ab>0 && MathAbs(g_initialBalance-ab)/MathMax(g_initialBalance,ab) > 0.25)
@@ -567,7 +567,7 @@ int OnInit()
    }
 
    // §05-fix (hoch): effektive Tagesreset-Stunde/Wochenstart seeden (Erststart) bzw. anstehende Config-Aenderung melden.
-   //   Wird NICHT vom Input ueberschrieben — die Uebernahme passiert erst am echten Tages-/Wochen-Rollover (RollNewDay/Cycle).
+   //   Is NOT overwritten by the input — the adoption happens only at the real day/week rollover (RollNewDay/Cycle).
    if(!GlobalVariableCheck(GV_EFF_RH)) GlobalVariableSet(GV_EFF_RH,(double)InpDayResetHour);
    if(!GlobalVariableCheck(GV_EFF_WS)) GlobalVariableSet(GV_EFF_WS,(double)InpWeekStartDay);
    if(EffResetHour()!=InpDayResetHour || EffWeekStart()!=InpWeekStartDay)
@@ -588,21 +588,21 @@ int OnInit()
       GlobalVariablesFlush();
       Notify(TF("base.dayStartBaseManual",DoubleToString(dsbIn,2)));
    }
-   // v0.38: Der fruehere Fail-Closed-Block "Auto-Basis unbestaetigt" entfaellt — die Basis wird jetzt automatisch
-   //   aus der Einzahlungs-Historie (bzw. Balance) abgeleitet, sofort bestaetigt und persistiert. Wer eine abweichende
-   //   Basis will, setzt InpInitialBalance (tighten-only bleibt aktiv: Absenken wirkt erst zum Tageswechsel).
+   // v0.38: the earlier fail-closed block "auto base unconfirmed" is gone — the base is now derived automatically
+   //   from the deposit history (or balance), confirmed immediately and persisted. Anyone wanting a different
+   //   base sets InpInitialBalance (tighten-only stays active: a lowering only takes effect at the day change).
 
    ReconcileLockstate();   // Lockstate-Datei (fail-closed) abgleichen, bevor irgendetwas handelt
    // v0.42: Boot-Diagnose — Ground Truth ins Journal (jede Instanz; klaert Registry/Floor/History/Kontext)
-   // v0.66: Backfill-Zustand mit hineinschreiben. Der Nachtrag lief einmal ins Leere, und von aussen war
-   //   nicht feststellbar, ob der Schalter ueberhaupt an war — Diagnose per Ferndeutung statt per Beleg.
+   // v0.66: write the backfill state in as well. The backfill ran into the void once, and from the outside it was
+   //   impossible to tell whether the switch was even on — diagnosis by guesswork instead of by evidence.
    Journal("INFO",Symbol(),"-",0,0,0,0,0,StringFormat("BootDiag v%s: RGOPN=%d HistTotal=%d Floor=%s Ctx=%s Magic=%d Backfill=%s MasterSlot=%s",EA_VER,CountOpn(),OrdersHistoryTotal(),TimeToString((datetime)GlobalVariableGet(GV_LAST_CLOSE)),IsTradeContextBusy()?"BUSY":"frei",InpMagic,(InpHistoryBackfill?(GlobalVariableCheck(GV_BACKFILL)?"erledigt":"an"):"aus"),GlobalVariableCheck(GV_MASTER)?"da":"FEHLT"));
-   ReconcileDayRisk();     // R3: Tagesbudget nach Crash/Restart aus Broker-Daten wiederherstellen
+   ReconcileDayRisk();     // R3: restore the daily budget from broker data after a crash/restart
    ChartSetInteger(0,CHART_FOREGROUND,false);
-   g_fgTries=8;                              // v0.28: Vordergrund die ersten paar Zyklen erneut versuchen (falls Init nicht haelt), dann Ruhe
+   g_fgTries=8;                              // v0.28: retry in the foreground for the first few cycles (in case init does not stick), then stay quiet
    CreateControls();
-   // §07-fix: Rueckgabe pruefen + Input validieren. Der Timer traegt das TICKUNABHAENGIGE Enforcement (P0-1) —
-   //   scheiterte EventSetTimer oder war InpTimerSeconds<=0, lief der Schutz still nur noch auf Ticks.
+   // §07-fix: check the return value + validate the input. The timer carries the TICK-INDEPENDENT enforcement (P0-1) —
+   //   if EventSetTimer failed or InpTimerSeconds<=0, the protection silently ran on ticks only.
    int tsec=InpTimerSeconds; if(tsec<1){ tsec=1; Notify(T("cfg.timerSecondsInvalid")); }
    if(tsec>60){ tsec=60; Notify(T("cfg.timerSecondsCapped")); }
    if(!EventSetTimer(tsec))
@@ -610,10 +610,10 @@ int OnInit()
      Journal("PROTECT_OFF","-","-",0,0,0,0,0,StringFormat("EventSetTimer fehlgeschlagen (err=%d) — nur noch tick-getriebenes Enforcement",GetLastError())); }
    PrintFormat("Mamal-Trading v%s aktiv (%s). Scope=%d. Profil=%s Funded=%s Test=%s SL-Klicks=%d. R15-min-SL=%s. Cockpit=%s(Port %d). UNGETESTET bis F7=0 Errors.", EA_VER, Symbol(), (int)InpWatchScope, PropFirmName(InpPropFirm), InpFundedMode?"AN":"aus", InpTestMode?"AN":"aus", InpSlClicksToMove, (InpMinStopPips>0?"an":"AUS"), (InpCockpit?"an":"aus"), InpCockpitPort);
    if(InpWatchScope==ALL_POSITIONS) Notify(T("cfg.watchScopeAllPositions"));
-   // R22: beim Start vorhandene manuelle Positionen werden ebenfalls geschlossen (kein Bestandsschutz) -> vorher laut ansagen
+   // R22: manual positions present at start are closed as well (no grandfathering) -> announce it loudly beforehand
    if(InpCloseManualTrades)
    {
-      if(InpMagic==0)   // FAILSAFE: Panel-Trades traegen dann selbst Magic 0 und waeren von manuellen nicht unterscheidbar
+      if(InpMagic==0)   // FAILSAFE: panel trades then carry magic 0 themselves and would be indistinguishable from manual ones
       { Notify(T("cfg.r22DisabledMagicZero"));
         Journal("INFO","-","-",0,0,0,0,0,"R22 wegen InpMagic=0 deaktiviert (Failsafe)"); }
       else
@@ -621,13 +621,13 @@ int OnInit()
          int man=0;
          for(int mi=OrdersTotal()-1;mi>=0;mi--)
             if(OrderSelect(mi,SELECT_BY_POS,MODE_TRADES) && OrderMagicNumber()==0) man++;
-         // Ehrlich: OnInit schliesst nichts. Der Close laeuft ueber den Enforcement-Cycle und braucht die bestaetigte
+         // Honestly: OnInit closes nothing. The close runs via the enforcement cycle and needs the confirmed
          // Master-Instanz (>=2 Cycles) -> typischerweise 1-3 Sekunden, bei geschlossenem Markt (err 132) deutlich laenger.
          if(man>0)
          { Notify(TF("cfg.r22ManualOrdersOpen",IntegerToString(man)));
            Journal("INFO","-","-",0,0,0,0,0,StringFormat("R22 Start: %d manuelle Order(s) vorgefunden -> werden geschlossen",man)); }
          else Notify(T("cfg.r22PanelOnly"));
-         // R22 haengt bewusst NICHT am WatchScope -> gilt kontoweit ueber alle Symbole und auch im FundedMode
+         // R22 deliberately does NOT hang off the WatchScope -> applies account-wide across all symbols and in FundedMode too
          if(InpFundedMode)                   Notify(T("cfg.r22FundedNote"));
          if(InpWatchScope==TOOL_PLUS_MANUAL) Notify(T("cfg.r22ScopeNote"));
       }
@@ -636,10 +636,10 @@ int OnInit()
    return INIT_SUCCEEDED;
 }
 void OnDeinit(const int reason){ EventKillTimer();
-   // v0.42-fix (KRITISCH): Master freigeben durch SET AUF 0, NICHT loeschen! GlobalVariableSetOnCondition kann
-   //   eine FEHLENDE Variable nicht anlegen (Err 4058) — nach einem Del konnte NIE wieder ein Master gewaehlt
-   //   werden (Deadlock: kein Enforcement, keine Close-Wertung, keine Cockpit-Daten, bis F3/Neuanlage).
-   if(GlobalVariableCheck(GV_MASTER) && GlobalVariableGet(GV_MASTER)==(double)ChartID()){ GlobalVariableSet(GV_MASTER,0.0); GlobalVariableSet(GV_MASTER_HB,0.0); }   // Slot existiert weiter -> sofortige Uebernahme durch die naechste Instanz
+   // v0.42-fix (CRITICAL): release the master by SETTING TO 0, NOT by deleting! GlobalVariableSetOnCondition cannot
+   //   create a MISSING variable (err 4058) — after a delete a master could NEVER be elected again
+   //   (deadlock: no enforcement, no close accounting, no cockpit data, until F3/re-creation).
+   if(GlobalVariableCheck(GV_MASTER) && GlobalVariableGet(GV_MASTER)==(double)ChartID()){ GlobalVariableSet(GV_MASTER,0.0); GlobalVariableSet(GV_MASTER_HB,0.0); }   // the slot still exists -> immediate takeover by the next instance
    Journal("PROTECT_OFF","-","-",0,0,0,0,0,StringFormat("EA gestoppt (reason=%d) — Watchdog inaktiv (Tamper/Schutz-aus moeglich)",reason)); ObjectsDeleteAll(0,PFX); Comment(""); }
 
 void OnTick()
@@ -654,14 +654,14 @@ void OnTimer(){ Cycle(); }   // P0-1: Enforcement laeuft auch tickunabhaengig
 
 void OnChartEvent(const int id,const long &lparam,const double &dparam,const string &sparam)
 {
-   // v0.49: Enter im Eingabefeld bestaetigt genauso wie der SETZEN-Knopf
+   // v0.49: Enter in the input field confirms just like the "SETZEN" (set) button
    if(id==CHARTEVENT_OBJECT_ENDEDIT && sparam==PFX+"rkin"){ ApplyWeekRiskFromEdit(); return; }
    if(id==CHARTEVENT_OBJECT_CLICK)
    {
       if(sparam==PFX+"buy"){  ObjectSetInteger(0,sparam,OBJPROP_STATE,false); GateClick(true);  }
       if(sparam==PFX+"sell"){ ObjectSetInteger(0,sparam,OBJPROP_STATE,false); GateClick(false); }
       if(sparam==PFX+"cockpit"){ ObjectSetInteger(0,sparam,OBJPROP_STATE,false); OpenCockpit(); }   // v0.26
-      // v0.40: Close-Buttons — Risiko-REDUKTION, laufen deshalb IMMER (auch bei Sperre/Cooldown), sofort ohne Bestaetigung
+      // v0.40: close buttons — risk REDUCTION, therefore they ALWAYS run (even under lock/cooldown), immediately without confirmation
       if(sparam==PFX+"fc"){ ObjectSetInteger(0,sparam,OBJPROP_STATE,false); PanelClose(false,false); }
       if(sparam==PFX+"cc"){ ObjectSetInteger(0,sparam,OBJPROP_STATE,false); PanelClose(true, false); }
       if(sparam==PFX+"f5"){ ObjectSetInteger(0,sparam,OBJPROP_STATE,false); PanelClose(false,true ); }
@@ -680,16 +680,16 @@ void OnChartEvent(const int id,const long &lparam,const double &dparam,const str
       return;
    }
    if(id==CHARTEVENT_OBJECT_DRAG && sparam==SLLINE)
-   { ObjectSetString(0,PFX+"prev",OBJPROP_TEXT,Clip(PreviewText(),42)); ChartRedraw(0); return; }   // v0.37: eine Zeile sofort; Volltext-Umbruch macht DrawPanel
+   { ObjectSetString(0,PFX+"prev",OBJPROP_TEXT,Clip(PreviewText(),42)); ChartRedraw(0); return; }   // v0.37: one line immediately; the full-text wrapping is done by DrawPanel
    if(id==CHARTEVENT_CLICK)
    {
       int cx=(int)lparam, cy=(int)dparam;
-      if(cx>=PS(12) && cx<=PS(312) && cy>=PS(16) && cy<=PS(16)+PS(PanelH())) return;   // v0.25: Klick AUFS PANEL nicht als SL-Zone werten (v0.37: mit InpPanelScale skaliert, wie die Karte)
+      if(cx>=PS(12) && cx<=PS(312) && cy>=PS(16) && cy<=PS(16)+PS(PanelH())) return;   // v0.25: do not treat a click ON THE PANEL as an SL zone (v0.37: scaled with InpPanelScale, like the card)
       int sub=0; datetime tt=0; double pp=0;
-      // §07-fix: nur Klicks im HAUPTFENSTER (sub==0) als SL-Zone werten — in einem Indikator-Unterfenster liefert
-      //   ChartXYToTimePrice den Indikatorwert (z.B. RSI 42) und der wuerde als SL-Preis uebernommen.
+      // §07-fix: treat only clicks in the MAIN WINDOW (sub==0) as an SL zone — in an indicator subwindow
+      //   ChartXYToTimePrice returns the indicator value (e.g. RSI 42) and that would be adopted as the SL price.
       if(ChartXYToTimePrice(0,cx,cy,sub,tt,pp) && pp>0 && sub==0)
-         SlZoneClick(NormalizeDouble(pp,Digits));   // erst nach InpSlClicksToMove Klicks in dieselbe Zone setzen
+         SlZoneClick(NormalizeDouble(pp,Digits));   // only set after InpSlClicksToMove clicks in the same zone
    }
 }
 
@@ -701,7 +701,7 @@ void GateClick(bool isBuy)
    else { g_armed=want; g_armMs=GetTickCount(); Notify(TF("fomo.arm",IntegerToString(InpFomoSeconds),isBuy?"BUY":"SELL")); g_panelSig=""; }
 }
 
-double DayStartBaseInput()   // v0.37-fix: InpDayStartBase nur wenn plausibel; Dezimaltrenner-Tippfehler (z.B. 163.659 statt 163659) -> als nicht gesetzt behandeln
+double DayStartBaseInput()   // v0.37-fix: InpDayStartBase only if plausible; decimal-separator typo (e.g. 163.659 instead of 163659) -> treat as not set
 {
    double d=InpDayStartBase;
    if(d>0 && AccountBalance()>0 && d < AccountBalance()*0.1) return 0;   // unplausibel klein -> ignorieren (Tagesbasis bleibt unsicher)
@@ -709,48 +709,48 @@ double DayStartBaseInput()   // v0.37-fix: InpDayStartBase nur wenn plausibel; D
 }
 void RollNewDay(bool firstAttach=false)
 {
-   // P0-5: FTMO-Basis = max(Balance,Equity) am Mitternachts-Roll.
-   // v0.38: VOLL-AUTO — Erststart mitten am Tag rekonstruiert die Mitternachtsbasis aus der History
-   //   (kein Warn-Flag/keine Sperre mehr); InpDayStartBase bleibt als manueller Override.
+   // P0-5: FTMO base = max(balance,equity) at the midnight roll.
+   // v0.38: FULLY AUTOMATIC — a first start in the middle of the day reconstructs the midnight base from the history
+   //   (no more warn flag/lock); InpDayStartBase remains as the manual override.
    double dsb = DayStartBaseInput();   // v0.37-fix: tippfehler-geprueft
    double dayBase;
-   if(firstAttach && dsb>0) dayBase = dsb;                                                                // §04-fix (hoch): manuelle Mitternachtsbasis NUR beim Erststart
-   else if(firstAttach)     // v0.38: Erststart mitten am Tag -> echte Mitternachtsbasis aus der History rekonstruieren
-   {                        //   (Balance minus seitdem realisierte Ergebnisse). Konservativ nach oben gegen Ist-Zustand.
+   if(firstAttach && dsb>0) dayBase = dsb;                                                                // §04-fix (high): manual midnight base ONLY on the first start
+   else if(firstAttach)     // v0.38: first start in the middle of the day -> reconstruct the real midnight base from the history
+   {                        //   (balance minus the results realized since then). Conservative upward against the actual state.
       double rec = ReconstructedBalanceAt(ServerDayStart());
       dayBase = MathMax(rec, MathMax(AccountBalance(), AccountEquity()));
       Journal("INFO","-","-",0,0,0,0,0,StringFormat("Auto-Tagesbasis (Erststart): %.2f (rekonstruiert %.2f)",dayBase,rec));
    }
    else                                                                                                   // Folgetage: echter Mitternachts-Snapshot — bei VERSPAETETEM Roll (EA war
-   {                                                                                                      // ueber die Reset-Grenze aus) zusaetzlich die Mitternachts-Balance aus der
-      double rec = ReconstructedBalanceAt(ServerDayStart());                                              // History rekonstruieren (§04-fix mittel): Nacht-SL-Hits senken sonst die
-      dayBase = MathMax(MathMax(AccountBalance(), AccountEquity()), rec);                                 // Basis und das 2%-Limit misst vom gefallenen Niveau. Beim puenktlichen
-   }                                                                                                      // Roll ist rec == Balance (keine Closes seit Anker) -> Verhalten unveraendert.
-   if(InpDayResetHour!=EffResetHour()){ GlobalVariableSet(GV_EFF_RH,(double)InpDayResetHour); Notify(TF("time.dayResetHourActive",IntegerToString(InpDayResetHour))); }   // §05-fix: geaenderten Input erst am echten Rollover uebernehmen
-   // §05-fix (hoch): Basis-Aenderung (auch Absenkung) erst am echten Tageswechsel uebernehmen.
-   // v0.38-fix (Verify): NUR plausible Werte — der Dezimaltrenner-Tippfehler (163.66 statt 163659), den OnInit
-   //   verwirft, darf auch hier nicht durchrutschen (R4b waere sonst still deaktiviert).
+   {                                                                                                      // across the reset boundary) additionally reconstruct the midnight balance from the
+      double rec = ReconstructedBalanceAt(ServerDayStart());                                              // history (§04-fix medium): otherwise night-time SL hits lower the
+      dayBase = MathMax(MathMax(AccountBalance(), AccountEquity()), rec);                                 // base and the 2% limit measures from the dropped level. On a punctual
+   }                                                                                                      // roll rec == balance (no closes since the anchor) -> behavior unchanged.
+   if(InpDayResetHour!=EffResetHour()){ GlobalVariableSet(GV_EFF_RH,(double)InpDayResetHour); Notify(TF("time.dayResetHourActive",IntegerToString(InpDayResetHour))); }   // §05-fix: adopt a changed input only at the real rollover
+   // §05-fix (high): adopt a base change (a lowering too) only at the real day change.
+   // v0.38-fix (Verify): ONLY plausible values — the decimal-separator typo (163.66 instead of 163659) that OnInit
+   //   discards must not slip through here either (R4b would otherwise be silently disabled).
    if(!firstAttach && InpInitialBalance>0 && MathAbs(InpInitialBalance-g_initialBalance)>0.01
       && !(AccountBalance()>0 && InpInitialBalance < AccountBalance()*0.1))
    { g_initialBalance=InpInitialBalance; g_initBalConfirmed=true; GlobalVariableSet(GV_INIT_BAL,InpInitialBalance);
      Notify(TF("base.challengeBaseRollover",DoubleToString(InpInitialBalance,2))); }
    GlobalVariableSet(GV_DAYSTART_EQ,  dayBase);
    GlobalVariableSet(GV_DAYSTART_DAY, (double)ServerDayKey());
-   GlobalVariableSet(GV_LOCK_UNTIL,   0); ClearLockWhy();   // v0.65b: sonst klebt der Grund von gestern an der naechsten Sperre
+   GlobalVariableSet(GV_LOCK_UNTIL,   0); ClearLockWhy();   // v0.65b: otherwise yesterday's reason sticks to the next lock
    GlobalVariableSet(GV_DAY_RISK,     0);
    GlobalVariableSet(GV_CONSEC,       0);
-   // §07-fix: einen noch LAUFENDEN Cooldown nicht am Tageswechsel kappen — sonst war R5 kurz vor Mitternacht
+   // §07-fix: do not cut off a still RUNNING cooldown at the day change — otherwise R5 was, shortly before midnight,
    //   systematisch verkuerzt bzw. durch Warten bis 00:00 umgehbar. Abgelaufene Cooldowns werden weiterhin genullt.
    { datetime cdNow=GlobalVariableCheck(GV_COOLDOWN)?(datetime)GlobalVariableGet(GV_COOLDOWN):0;
      GlobalVariableSet(GV_COOLDOWN, (cdNow>SrvTime()) ? (double)cdNow : 0); }
    GlobalVariableSet(GV_PEAK_EQ,      dayBase);
    GlobalVariableSet(GV_TARGET_HIT,   0);
-   // v0.38-fix (Verify): BASE_WARN nicht blind nullen — der Fail-Closed-Fall "keine gueltige Kontobasis"
-   //   (g_initialBalance<=0, z.B. EA-Start vor dem Broker-Handshake) muss den Roll ueberleben, sonst
+   // v0.38-fix (Verify): do not blindly zero BASE_WARN — the fail-closed case "no valid account base"
+   //   (g_initialBalance<=0, e.g. EA start before the broker handshake) must survive the roll, otherwise
    //   liefe R4b dauerhaft mit Basis 0 (fail-open).
    GlobalVariableSet(GV_BASE_WARN,    (g_initialBalance<=0) ? 1 : 0);
-   // v0.30-fix: EFF-Limits + Schutz-aus-Zaehler werden NICHT hier gesetzt (RollNewDay laeuft auch aus OnInit auf JEDER Instanz).
-   //            Der Master setzt sie einmal pro Tag in Cycle() -> deterministisch = Master-Input (kein loses Limit durch Init-Reihenfolge).
+   // v0.30-fix: EFF limits + protection-off counters are NOT set here (RollNewDay also runs from OnInit on EVERY instance).
+   //            The master sets them once per day in Cycle() -> deterministic = master input (no loose limit from the init order).
    GlobalVariablesFlush();
    PrintFormat("Mamal: neuer Handelstag. Basis=%.2f", dayBase);
 }
@@ -763,22 +763,22 @@ bool CooldownActive(){ if(!GlobalVariableCheck(GV_COOLDOWN)) return false; retur
 bool TargetHit(){ return GlobalVariableCheck(GV_TARGET_HIT) && GlobalVariableGet(GV_TARGET_HIT)>0.5; }
 bool BaseWarn(){ return GlobalVariableCheck(GV_BASE_WARN) && GlobalVariableGet(GV_BASE_WARN)>0.5; }
 double TotalDDpct(){ double eq=AccountEquity(); if(g_initialBalance<=0) return 0; double d=(g_initialBalance-eq)/g_initialBalance*100.0; return d>0?d:0; }   // R4b
-// v0.30 Selbst-Sperre: effektives Limit = enger stellbar sofort, LOCKERN erst zum Tageswechsel (RG_EFF_* wird am Tages-Roll aus dem Input gesetzt; intraday nur verschaerft).
-// §06-fix (mittel): (a) auf ALLE sperr-relevanten Inputs ausgeweitet — bisher waren nur Daily/MaxLoss geschuetzt, waehrend
-//   Wochenlimit, Warn-Gate, R5/R6-Parameter, Giveback, Risiko/Trade und sogar die SL/TP-Pflicht intraday frei lockerbar waren.
-//   (b) InpTightenOnly selbst gelatcht: die Selbst-Sperre war mit einem einzigen Input-Flip abschaltbar (Widerspruch zu
-//   R4 "Immutabilitaet nicht konfigurierbar" und R10 No-Override). Der Latch wird nur am Tages-Roll aus dem Input neu gesetzt.
-// §07-fix: seltene, aber kritische Latches (Sperre gesetzt / Tagesziel erreicht) SOFORT persistieren statt erst beim
-//   gebuendelten Flush am Cycle-Ende — ein Crash im Fenster dazwischen liess den frisch gesetzten Zustand verschwinden.
-//   Nicht waehrend einer laufenden Handelsoperation flushen (Wine-Schutz, wie beim regulaeren Flush).
+// v0.30 self-lock: effective limit = tightening possible immediately, LOOSENING only at the day change (RG_EFF_* is set from the input at the day roll; intraday only tightened).
+// §06-fix (medium): (a) extended to ALL lock-relevant inputs — so far only daily/max loss were protected, while
+//   weekly limit, warn gate, R5/R6 parameters, giveback, risk/trade and even the SL/TP requirement were freely loosenable intraday.
+//   (b) InpTightenOnly itself latched: the self-lock could be switched off with a single input flip (contradicts
+//   R4 "immutability not configurable" and R10 no-override). The latch is re-seeded from the input only at the daily roll.
+// §07-fix: rare but critical latches (lock set / daily target reached) are persisted IMMEDIATELY instead of only at the
+//   bundled flush at cycle end — a crash in the window in between made the freshly set state disappear.
+//   Do not flush while a trade operation is running (Wine protection, same as for the regular flush).
 void PersistLatch(){ g_gvDirty=true; if(!IsTradeContextBusy()){ GlobalVariablesFlush(); g_gvDirty=false; } }
 bool TightenOn(){ if(InpTightenOnly) return true; return (GlobalVariableCheck(GV_TIGHT_LATCH) && GlobalVariableGet(GV_TIGHT_LATCH)>0.5); }
-double EffMinPct(string gv,double inp)   // kleiner = strenger; <=0 bedeutet AUS (= schwaechster Zustand)
+double EffMinPct(string gv,double inp)   // smaller = stricter; <=0 means OFF (= weakest state)
 {
    if(!TightenOn() || !GlobalVariableCheck(gv)) return inp;
    double st=GlobalVariableGet(gv);
-   if(st<=0)  return inp;      // gespeichert war AUS -> jeder Input (auch ein strengerer) gilt sofort
-   if(inp<=0) return st;       // Input AUS = lockerer -> gespeicherten Wert behalten
+   if(st<=0)  return inp;      // stored value was OFF -> any input (even a stricter one) applies immediately
+   if(inp<=0) return st;       // input OFF = looser -> keep the stored value
    return MathMin(inp,st);
 }
 double EffMaxNum(string gv,double inp)   // groesser = strenger (z.B. Cooldown-Dauer)
@@ -786,7 +786,7 @@ double EffMaxNum(string gv,double inp)   // groesser = strenger (z.B. Cooldown-D
    if(!TightenOn() || !GlobalVariableCheck(gv)) return inp;
    return MathMax(inp,GlobalVariableGet(gv));
 }
-bool EffFlagOn(string gv,bool inp)       // einmal AN -> intraday nicht abschaltbar
+bool EffFlagOn(string gv,bool inp)       // once ON -> not switchable off intraday
 {
    if(inp) return true;
    if(!TightenOn() || !GlobalVariableCheck(gv)) return inp;
@@ -797,52 +797,52 @@ double EffMaxLoss(){     return EffMinPct(GV_EFF_ML,  InpMaxLossPct);     }
 double EffWeekLoss(){    return EffMinPct(GV_EFF_WEEK,InpWeeklyLossPct);  }
 double EffMaxLossWarn(){ return EffMinPct(GV_EFF_WARN,InpMaxLossWarnPct); }
 double EffGivebackPct(){ return EffMinPct(GV_EFF_GIVE,InpGivebackPct);    }
-// v0.36: gewuenschtes Risiko/Trade = der im Panel fuer DIESE Woche gewaehlte Wert; sonst der Input-Default.
-//   Wird zur Basis der ganzen Auto-Scale-Kaskade (Idee/Heat/Tagesbudget). Die Trade-ANZAHL-Regeln (R5/R6-Zaehler)
-//   haengen bewusst NICHT hieran — sie bleiben InpCooldownAfter/InpLockAfter.
-//   v0.62: Der WERT haengt NICHT mehr am Wochen-Index. Frueher fiel er beim Wochenwechsel auf den
-//   Input-Default zurueck, solange die neue Woche nicht bestaetigt war — dann schloss R1 (EnforceRisk,
-//   Vergleich gegen EffRiskPct()) am Montag Wochenend-Positionen zwang, die nach dem zuletzt
-//   bestaetigten Wochenwert korrekt dimensioniert waren. Der Index steuert jetzt ausschliesslich die
-//   BESTAETIGUNG (WeekRiskSet) — also ob gehandelt werden darf, nicht mit welcher Groesse gerechnet wird.
+// v0.36: desired risk/trade = the value chosen in the panel for THIS week; otherwise the input default.
+//   Becomes the base of the whole auto-scale cascade (idea/heat/daily budget). The trade COUNT rules (R5/R6 counters)
+//   deliberately do NOT hang off this — they stay InpCooldownAfter/InpLockAfter.
+//   v0.62: The VALUE no longer hangs off the week index. Previously it fell back at the week change to the
+//   input default as long as the new week was not confirmed — then R1 (EnforceRisk,
+//   comparison against EffRiskPct()) forced weekend positions closed on Monday that were correctly sized
+//   according to the last confirmed weekly value. The index now controls exclusively the
+//   CONFIRMATION (WeekRiskSet) — i.e. whether trading is allowed, not with which size it is computed.
 double DesiredRiskPct()
 {
    if(GlobalVariableCheck(GV_WEEK_RISK) && GlobalVariableGet(GV_WEEK_RISK)>0)
       return GlobalVariableGet(GV_WEEK_RISK);
    return InpRiskPerTradePct;
 }
-double EffRiskPct(){ double r=EffMinPct(GV_EFF_RISK,DesiredRiskPct()); if(r>1.0) r=1.0; if(r<0) r=0; return r; }   // Basis = Wochenwahl/Input; Tages-Tighten-Only bleibt als Intraday-Absicherung darueber (kein Hochsetzen innerhalb des Tages)
+double EffRiskPct(){ double r=EffMinPct(GV_EFF_RISK,DesiredRiskPct()); if(r>1.0) r=1.0; if(r<0) r=0; return r; }   // base = weekly choice/input; daily tighten-only stays on top as intraday safeguard (no raising within the day)
 double RiskCap(){ double m=InpRiskMaxPct; if(m<=0 || m>1.0) m=1.0; return m; }   // Waehler-Obergrenze, hart bei 1,0 %
-// v0.36: vorgemerkte Erhoehung (fuer die naechste Woche) — 0, wenn keine.
+// v0.36: pre-booked increase (for next week) — 0 if none.
 double PendingWeekRisk(){ return GlobalVariableCheck(GV_WEEK_RISK_NXT) ? GlobalVariableGet(GV_WEEK_RISK_NXT) : 0; }
-// v0.36: der User waehlt sein Wochen-Risiko im Panel. Semantik "einmal fuer die ganze Woche": die ERSTE Wahl einer Woche
-//   ist frei; danach ist die Woche FEST — JEDE Aenderung (hoch ODER runter) greift erst zum naechsten Wochenwechsel
-//   (bewusst gewaehltes Risiko = fuer die Woche gebunden; kein Herum-Justieren, auch kein Senken). Prop = Eigenkonto.
+// v0.36: the user chooses his weekly risk in the panel. Semantics "once for the whole week": the FIRST choice of a week
+//   is free; after that the week is FIXED — ANY change (up OR down) takes effect only at the next week change
+//   (deliberately chosen risk = bound for the week; no fiddling around, not even lowering). Prop = own account.
 void SetWeekRisk(double v)
 {
    v = NormalizeDouble(v,2);
-   if(v < InpRiskStep) v = InpRiskStep;   // nicht unter eine Schrittweite
+   if(v < InpRiskStep) v = InpRiskStep;   // not below one step size
    if(v > RiskCap())   v = RiskCap();
    long   wk    = WeekIdx();
    bool   fresh = (!GlobalVariableCheck(GV_WEEK_RISK) || GlobalVariableGet(GV_WEEK_RISK)<=0
-                   || (long)GlobalVariableGet(GV_WEEK_RISK_IDX)!=wk);   // diese Woche noch nicht gesetzt
+                   || (long)GlobalVariableGet(GV_WEEK_RISK_IDX)!=wk);   // not yet set this week
    double cur   = DesiredRiskPct();
-   if(fresh)   // ERSTE Wahl der Woche -> frei, sofort wirksam; danach ist die Woche gebunden
+   if(fresh)   // FIRST choice of the week -> free, effective immediately; after that the week is bound
    {
       GlobalVariableSet(GV_WEEK_RISK,     v);
       GlobalVariableSet(GV_WEEK_RISK_IDX, (double)wk);
       if(GlobalVariableCheck(GV_WEEK_RISK_NXT)) GlobalVariableDel(GV_WEEK_RISK_NXT);
-      GlobalVariableSet(GV_EFF_RISK,v);   // sofort wirksam (sonst wuerde der Tages-Tighten-Only-Layer die erste Wahl runterdruecken)
+      GlobalVariableSet(GV_EFF_RISK,v);   // effective immediately (otherwise the daily tighten-only layer would push the first choice down)
       PersistLatch();
       Notify(TF("risk.set.confirmed",DoubleToString(v,2)));
       Journal("INFO","-","-",0,0,0,0,v,StringFormat("Wochen-Risiko gesetzt: %.2f%% (fest fuer die Woche)",v));
    }
-   else if(MathAbs(v-cur)<=0.0001)   // zurueck auf den aktuell fixen Wert getippt -> evtl. Vormerkung aufheben
+   else if(MathAbs(v-cur)<=0.0001)   // typed back to the currently fixed value -> cancel any pre-booking
    {
       if(GlobalVariableCheck(GV_WEEK_RISK_NXT)){ GlobalVariableDel(GV_WEEK_RISK_NXT); PersistLatch(); Notify(TF("cfg.weekRiskPendingCancelled",DoubleToString(cur,2))); }
       else Notify(TF("cfg.weekRiskAlreadySet",DoubleToString(cur,2)));
    }
-   else   // JEDE Aenderung (hoch ODER runter) innerhalb der laufenden Woche -> fuer naechste Woche vormerken
+   else   // ANY change (up OR down) within the running week -> pre-book for next week
    {
       GlobalVariableSet(GV_WEEK_RISK_NXT, v); PersistLatch();
       Notify(TF("risk.set.pending",DoubleToString(v,2),DoubleToString(cur,2)));
@@ -850,25 +850,25 @@ void SetWeekRisk(double v)
    }
    g_panelSig="";
 }
-void ChangeWeekRisk(int dir)   // Panel [-]/[+]: auf einer bestehenden Vormerkung aufbauen, sonst auf dem aktuellen Wert
+void ChangeWeekRisk(int dir)   // panel [-]/[+]: build on an existing pre-booking, otherwise on the current value
 {
    double base = (PendingWeekRisk()>0) ? PendingWeekRisk() : DesiredRiskPct();
    SetWeekRisk(base + dir*InpRiskStep);
 }
-// v0.49: Ist das Wochen-Risiko fuer die LAUFENDE Woche bewusst gesetzt worden?
+// v0.49: Has the weekly risk been deliberately set for the CURRENT week?
 bool WeekRiskSet()
 {
    return (GlobalVariableCheck(GV_WEEK_RISK) && GlobalVariableGet(GV_WEEK_RISK)>0
            && GlobalVariableCheck(GV_WEEK_RISK_IDX) && (long)GlobalVariableGet(GV_WEEK_RISK_IDX)==WeekIdx());
 }
-// v0.62: Steht die woechentliche Festlegung aus (R23)? EINE Quelle fuer Gate, Panel-Status, Button-Graufaerbung
-//   und Unterzeile. Bewusst aus den LOKALEN Inputs dieser Instanz — jede Instanz entscheidet fuer sich, ob sie
-//   handeln laesst. Der Wochen-Roll (Master) darf diese Entscheidung NICHT global vorwegnehmen: sonst haette
-//   ein Chart mit InpRequireWeeklyRisk=false, der zufaellig Master ist, das Gate fuer alle anderen aufgehoben.
+// v0.62: Is the weekly commitment still pending (R23)? ONE source for gate, panel status, button greying
+//   and sub-line. Deliberately from the LOCAL inputs of this instance — each instance decides for itself whether it
+//   lets trading happen. The weekly roll (master) must NOT pre-empt this decision globally: otherwise
+//   a chart with InpRequireWeeklyRisk=false that happens to be master would have lifted the gate for all others.
 bool WeekRiskPending(){ return (InpRiskChooser && InpRequireWeeklyRisk && !WeekRiskSet()); }
-// v0.49: Eingabefeld auswerten — der Trader tippt seinen Wochenwert und bestaetigt.
-//   Dezimalkomma wird akzeptiert (deutsche Tastatur schreibt "0,25"); ohne diese Umwandlung
-//   laese MQL4 daraus 0 und wuerde die Eingabe stillschweigend verwerfen.
+// v0.49: evaluate the input field — the trader types his weekly value and confirms.
+//   A decimal comma is accepted (a German keyboard writes "0,25"); without this conversion
+//   MQL4 would read 0 from it and silently discard the input.
 void ApplyWeekRiskFromEdit()
 {
    string t=ObjectGetString(0,PFX+"rkin",OBJPROP_TEXT);
@@ -878,11 +878,11 @@ void ApplyWeekRiskFromEdit()
    if(v<=0 || v>1.0)
    {
       Notify(TF("risk.set.invalid",t));
-      g_rkEditSync="";   // Feld auf den gueltigen Stand zuruecksetzen
+      g_rkEditSync="";   // reset the field to the valid state
       g_panelSig=""; return;
    }
    SetWeekRisk(v);
-   g_rkEditSync=""; g_panelSig="";   // Feld mit dem tatsaechlich uebernommenen Wert neu beschriften
+   g_rkEditSync=""; g_panelSig="";   // relabel the field with the value actually accepted
 }
 int  EffLockAfter(){     return (int)EffMinPct(GV_EFF_LOCKAFT,(double)InpLockAfter);    }
 int  EffCooldownAfter(){ return (int)EffMinPct(GV_EFF_CDAFT,  (double)InpCooldownAfter);}
@@ -890,9 +890,9 @@ int  EffCooldownMin(){   return (int)EffMaxNum(GV_EFF_CDMIN,  (double)InpCooldow
 bool EffRequireSL(){     return EffFlagOn(GV_EFF_REQSL,InpRequireSL);  }
 bool EffRequireTP(){     return EffFlagOn(GV_EFF_REQTP,InpRequireTP);  }
 bool EffUseCorrCap(){    return EffFlagOn(GV_EFF_CORR, InpUseCorrCap); }
-void TightenPersistMin(string gv,double inp,string label)   // strengeren Wert sofort persistieren (ueberlebt Restart am selben Tag)
+void TightenPersistMin(string gv,double inp,string label)   // persist the stricter value immediately (survives a restart on the same day)
 {
-   if(inp<=0) return;                                       // AUS = lockerer -> nie persistieren
+   if(inp<=0) return;                                       // OFF = looser -> never persist
    if(!GlobalVariableCheck(gv) || GlobalVariableGet(gv)<=0 || inp < GlobalVariableGet(gv)-0.0001)
    { GlobalVariableSet(gv,inp); g_gvDirty=true; if(StringLen(label)>0) Notify(TF("cfg.tightenedImmediately",label,DoubleToString(inp,2))); }
 }
@@ -906,7 +906,7 @@ void TightenOnlyLimits()   // pro Cycle (Master): Input ENGER als effektiv -> so
    TightenPersistMin(GV_EFF_WEEK,    InpWeeklyLossPct,          "Wochen-Limit");
    TightenPersistMin(GV_EFF_WARN,    InpMaxLossWarnPct,         "");
    TightenPersistMin(GV_EFF_GIVE,    InpGivebackPct,            "");
-   TightenPersistMin(GV_EFF_RISK,    DesiredRiskPct(),          "");   // v0.36: Basis ist die Wochenwahl, nicht mehr der Roh-Input
+   TightenPersistMin(GV_EFF_RISK,    DesiredRiskPct(),          "");   // v0.36: base is the weekly choice, no longer the raw input
    TightenPersistMin(GV_EFF_LOCKAFT,(double)InpLockAfter,       "");
    TightenPersistMin(GV_EFF_CDAFT,  (double)InpCooldownAfter,   "");
    TightenPersistMax(GV_EFF_CDMIN,  (double)InpCooldownMin);
@@ -915,28 +915,28 @@ void TightenOnlyLimits()   // pro Cycle (Master): Input ENGER als effektiv -> so
    TightenPersistFlag(GV_EFF_CORR,   InpUseCorrCap);
 }
 bool MaxLossWarnActive(){ double w=EffMaxLossWarn(); return (w>0 && EffMaxLoss()>0 && w<EffMaxLoss() && TotalDDpct()>=w); }   // R4b Warn-Gate (mit Input-Schutz)
-// v0.63: loud=true fuer Manipulations-/Schutzausfall-Befunde. Im Test ist genau das aufgefallen: die
-//   Erkennung "Lockstate-Datei fehlt" hat korrekt gefeuert, aber die Meldung stand nur 6 s im Panel und
-//   InpUseAlert ist per Default aus — der Trader stand vor einem stillen Befund. Solche Ereignisse sind
-//   selten genug, dass ein erzwungener Alert kein Spam ist, und wichtig genug, dass Verpassen teuer waere.
-void Notify(string m, bool info=false, bool loud=false)   // v0.37: info=true -> neutraler Hinweis (Cockpit), kein rotes "NICHT MOEGLICH"
+// v0.63: loud=true for tamper / protection-failure findings. Exactly that showed up in testing: the
+//   detection "lockstate file missing" fired correctly, but the message stood in the panel for only 6 s and
+//   InpUseAlert is off by default — the trader was left with a silent finding. Such events are
+//   rare enough that a forced alert is not spam, and important enough that missing one would be expensive.
+void Notify(string m, bool info=false, bool loud=false)   // v0.37: info=true -> neutral note (cockpit), no red "NICHT MOEGLICH" (not possible)
 {
    Print(m);
    if(InpUseAlert || loud) Alert(m);
-   // v0.64: Ein stehender Manipulationsbefund wird von harmlosen Meldungen NICHT ueberschrieben. Ohne das
-   //   war die lange Standzeit wirkungslos: der Missing-Zweig setzt selbst eine Tagessperre, deren Meldung
-   //   dem Befund unmittelbar hinterherlief und ihn nach Sekundenbruchteilen ersetzte.
+   // v0.64: A standing tamper finding is NOT overwritten by harmless messages. Without that
+   //   the long display time was useless: the missing branch itself sets a day lock whose message
+   //   ran in right behind the finding and replaced it within fractions of a second.
    if(!loud && g_flashLoud && (GetTickCount()-g_flashMs) < g_flashHold) return;
    g_flashLoud = loud;
    g_flashHold = loud ? 120000 : 6000;
-   string fm=m; if(StringSubstr(fm,0,7)=="Mamal: ") fm=StringSubstr(fm,7);      // v0.21: Panel-Kurzform ohne Prefix
+   string fm=m; if(StringSubstr(fm,0,7)=="Mamal: ") fm=StringSubstr(fm,7);      // v0.21: short panel form without prefix
    fm=Clip(fm,132);                                                             // v0.37: vollen Text behalten (bis zu 3 Panel-Zeilen); Umbruch macht DrawPanel
-   g_flash=fm; g_flashMs=GetTickCount(); g_flashInfo=info;                      // Grund/Meldung 6s im Panel zeigen
-   if(ObjectFind(0,PFX+"prev")>=0){ ObjectSetString(0,PFX+"prev",OBJPROP_TEXT,Clip(fm,42)); ObjectSetInteger(0,PFX+"prev",OBJPROP_COLOR,info?C'150,200,255':C'255,140,60'); ChartRedraw(0); }   // sofortige erste Zeile; Rest folgt beim naechsten DrawPanel
-   g_panelSig="";                                                               // erzwingt Neuzeichnen beim naechsten DrawPanel
+   g_flash=fm; g_flashMs=GetTickCount(); g_flashInfo=info;                      // show reason/message in the panel for 6s
+   if(ObjectFind(0,PFX+"prev")>=0){ ObjectSetString(0,PFX+"prev",OBJPROP_TEXT,Clip(fm,42)); ObjectSetInteger(0,PFX+"prev",OBJPROP_COLOR,info?C'150,200,255':C'255,140,60'); ChartRedraw(0); }   // immediate first line; the rest follows at the next DrawPanel
+   g_panelSig="";                                                               // forces a redraw at the next DrawPanel
 }
 
-// §05-fix (hoch): auch fuer einen BELIEBIGEN Zeitpunkt auswertbar (t) -> "wurde die Position WAEHREND einer Sperre eroeffnet?"
+// §05-fix (high): can also be evaluated for an ARBITRARY point in time (t) -> "was the position opened DURING a lock?"
 bool InSessionAt(datetime t)
 {
    if(!InpUseSession) return true;
@@ -963,16 +963,16 @@ double EffectiveRiskPct()
    if(InpDeRiskFactor<1.0 && c>=InpDeRiskAfter) return EffRiskPct()*InpDeRiskFactor;   // R19
    return EffRiskPct();
 }
-double EffIdeaCap(){ return InpAutoScale ? EffRiskPct()*InpIdeaXrisk : InpIdeaCapPct; }   // §06-fix: Risiko/Trade tighten-only -> die ganze Auto-Scale-Kaskade ist nicht mehr intraday hochsetzbar
+double EffIdeaCap(){ return InpAutoScale ? EffRiskPct()*InpIdeaXrisk : InpIdeaCapPct; }   // §06-fix: risk/trade tighten-only -> the whole auto-scale cascade can no longer be raised intraday
 double EffHeat()   { return InpAutoScale ? EffIdeaCap()*InpHeatXidea      : InpPortfolioHeatPct; }
 double EffDay()    { return InpAutoScale ? EffIdeaCap()*InpDayXidea       : InpDailyRiskBudgetPct; }
-// §07-fix: R17 war unter Auto-Scale eine TOTE Regel. Die groesste Netto-Waehrungs-Exposition kann nie groesser sein als
-//   die Summe aller Risiken (= Heat). Mit InpCorrCapPct=1,5 % bei einem Heat-Cap von 1,0 % konnte das Gate also NIE
-//   greifen. Unter Auto-Scale wird der Deckel deshalb an den Heat-Cap gekoppelt (75 %) — ein strengerer manueller
+// §07-fix: R17 was a DEAD rule under auto-scale. The largest net currency exposure can never be larger than
+//   the sum of all risks (= heat). So with InpCorrCapPct=1.5 % against a heat cap of 1.0 % the gate could NEVER
+//   bite. Under auto-scale the cap is therefore tied to the heat cap (75 %) — a stricter manual
 //   InpCorrCapPct gewinnt weiterhin.
 double EffCorrCap(){ double c=InpCorrCapPct; if(InpAutoScale){ double a=EffHeat()*0.75; if(a>0 && (c<=0 || a<c)) c=a; } return c; }
-// R17 (v0.17): Waehrungsvektor statt USD-only. Jede Position belastet Basis-Waehrung (long bei BUY) und
-// Quote-Waehrung (short bei BUY) mit ihrem Risiko%. Nicht-FX (Indizes) -> eigener Bucket auf Symbolname.
+// R17 (v0.17): currency vector instead of USD-only. Every position loads the base currency (long on BUY) and
+// the quote currency (short on BUY) with its risk%. Non-FX (indices) -> own bucket keyed on the symbol name.
 bool IsCcy(string c){ return StringFind(" USD EUR GBP JPY CHF AUD CAD NZD SGD HKD NOK SEK DKK PLN ZAR MXN TRY CNH CZK HUF ", " "+c+" ")>=0; }   // B19: gueltige ISO-Codes
 bool SplitCcy(string s,string &base,string &quote)
 {
@@ -981,7 +981,7 @@ bool SplitCcy(string s,string &base,string &quote)
    for(int i=0;i<6;i++){ ushort c=StringGetCharacter(a,i); if(!((c>='A'&&c<='Z')||(c>='a'&&c<='z'))) return false; }
    base=StringSubstr(a,0,3); quote=StringSubstr(a,3,3);
    StringToUpper(base); StringToUpper(quote);
-   if(!IsCcy(base) || !IsCcy(quote)) return false;   // B19: 6-Buchstaben-Nicht-FX (CFD/Krypto) -> kein Phantom-Waehrungs-Bucket
+   if(!IsCcy(base) || !IsCcy(quote)) return false;   // B19: 6-letter non-FX (CFD/crypto) -> no phantom currency bucket
    return true;
 }
 void AddCcy(string &ccy[],double &net[],int &n,string c,double v)
@@ -993,7 +993,7 @@ void AddExposure(string &ccy[],double &net[],int &n,string sym,bool isBuy,double
 {
    string b,q;
    if(SplitCcy(sym,b,q)){ AddCcy(ccy,net,n,b, isBuy? rp : -rp); AddCcy(ccy,net,n,q, isBuy? -rp : rp); }
-   else { string u=sym; StringToUpper(u); AddCcy(ccy,net,n,u, isBuy? rp : -rp); }   // Nicht-FX: Einzel-Bucket
+   else { string u=sym; StringToUpper(u); AddCcy(ccy,net,n,u, isBuy? rp : -rp); }   // non-FX: single bucket
 }
 double MaxCurrencyExposurePct(string addSym,bool addBuy,double addRp,bool conservative=false)   // groesste |Netto-Waehrungs-Exposition| inkl. hypothetischem Trade
 {
@@ -1003,7 +1003,7 @@ double MaxCurrencyExposurePct(string addSym,bool addBuy,double addRp,bool conser
       if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
       int t=OrderType(); if(t!=OP_BUY && t!=OP_SELL) continue;
       if(!InScope(OrderMagicNumber())) continue;
-      if(OrderStopLoss()==0.0)   // §06-fix: nackte Position nicht als 0 % zaehlen (sonst Gate umgehbar)
+      if(OrderStopLoss()==0.0)   // §06-fix: do not count a naked position as 0 % (otherwise the gate can be bypassed)
       { if(conservative) AddExposure(ccy,net,n,OrderSymbol(),(t==OP_BUY),EffRiskPct()); continue; }
       AddExposure(ccy,net,n,OrderSymbol(),(t==OP_BUY),RiskPctOf(OrderSymbol(),OrderLots(),OrderOpenPrice(),OrderStopLoss()));
    }
@@ -1016,10 +1016,10 @@ string RevDirKey(string s){ return "RG_REVD_"+s; }    // verlorene Richtung (OP_
 string RevUntilKey(string s){ return "RG_REVU_"+s; }  // gueltig-bis (Server-Zeit)
 void SetRevenge(string s,int lostType)   // R25
 {
-   if(InpRevengeMin<=0) return;   // deaktiviert -> keine Marker schreiben
+   if(InpRevengeMin<=0) return;   // disabled -> write no markers
    GlobalVariableSet(RevDirKey(s), (double)lostType);
    GlobalVariableSet(RevUntilKey(s), (double)(SrvTime()+InpRevengeMin*60));
-   g_gvDirty=true;   // v0.22: Flush gebuendelt am Cycle-Ende (SetRevenge laeuft im Close-Pfad ueber ApplyResult)
+   g_gvDirty=true;   // v0.22: flush bundled at cycle end (SetRevenge runs in the close path via ApplyResult)
 }
 bool RevengeBlocked(string s,bool isBuy)
 {
@@ -1039,14 +1039,14 @@ void PruneRevenge()   // abgelaufene Revenge-Marker (RG_REVU_/RG_REVD_) aufraeum
       string nm=GlobalVariableName(i);
       if(StringFind(nm,"RG_REVU_")==0 && (datetime)GlobalVariableGet(nm) < SrvTime())
       {
-         string sym=StringSubstr(nm,8);   // nach "RG_REVU_"
+         string sym=StringSubstr(nm,8);   // after "RG_REVU_"
          GlobalVariableDel(nm);
          if(GlobalVariableCheck("RG_REVD_"+sym)) GlobalVariableDel("RG_REVD_"+sym);
       }
    }
 }
 
-string RuleIdFromTag(string tag)   // fuehrendes "Rxx" aus dem Tag ziehen (sonst leer)
+string RuleIdFromTag(string tag)   // pull the leading "Rxx" out of the tag (empty otherwise)
 {
    if(StringLen(tag)>=2 && StringGetCharacter(tag,0)=='R')
    {
@@ -1055,8 +1055,8 @@ string RuleIdFromTag(string tag)   // fuehrendes "Rxx" aus dem Tag ziehen (sonst
    }
    return "";
 }
-// v0.17: audit-taugliches Journal — Kontext (Zeit/Konto/Balance/Equity/Magic/DayKey/RuleId) wird automatisch
-// gefuellt, Ticket/Netto optional. Header beim ersten Schreiben. Aufruf-Stellen bleiben unveraendert.
+// v0.17: audit-grade journal — context (time/account/balance/equity/magic/DayKey/RuleId) is filled
+// automatically, ticket/net optional. Header on first write. Call sites stay unchanged.
 void Journal(string ev,string sym,string dir,double lot,double entry,double sl,double tp,double riskpct,string tag,int ticket=0,double net=0.0)
 {
    // v0.32 Panel-Spiegel: Versuche (BLOCKED) + Trades (OPEN) zaehlen — geteilt (kontoweit), unabhaengig vom CSV-Journal
@@ -1064,15 +1064,15 @@ void Journal(string ev,string sym,string dir,double lot,double entry,double sl,d
    {
       GlobalVariableSet(GV_BLOCKS, GlobalVariableGet(GV_BLOCKS)+1);
       datetime nb=SrvTime(); datetime bl=(datetime)GlobalVariableGet(GV_BLK_LAST);
-      double burst = ((nb-bl) < 60) ? GlobalVariableGet(GV_BLK_BURST)+1 : 1;   // Ablehnungen im letzten 60s-Fenster
+      double burst = ((nb-bl) < 60) ? GlobalVariableGet(GV_BLK_BURST)+1 : 1;   // rejections in the last 60s window
       GlobalVariableSet(GV_BLK_BURST, burst); GlobalVariableSet(GV_BLK_LAST,(double)nb); g_gvDirty=true;
       if(burst==3.0) Notify(T("tilt.burst"));   // Tilt-Blitz (nutzt Panel-Flash)
    }
    else if(ev=="OPEN"){ GlobalVariableSet(GV_FILLS, GlobalVariableGet(GV_FILLS)+1); g_gvDirty=true; }
    if(!InpJournal) return;
-   // §06-fix (mittel): ohne Sharing-Flags scheiterte FileOpen still, sobald der Cockpit-Server (oder Excel) die CSV gerade
-   //   liest — der Audit-Eintrag (auch TAMPER/CLOSE/FINAL-FAIL) war dann DAUERHAFT verloren, ohne jede Spur. Jetzt:
-   //   FILE_SHARE_READ|FILE_SHARE_WRITE + kurzer Retry, und im Fehlerfall ein lauter Print statt eines stummen return.
+   // §06-fix (medium): without sharing flags FileOpen failed silently as soon as the cockpit server (or Excel) was just
+   //   reading the CSV — the audit entry (TAMPER/CLOSE/FINAL-FAIL included) was then PERMANENTLY lost, without a trace. Now:
+   //   FILE_SHARE_READ|FILE_SHARE_WRITE + short retry, and on failure a loud Print instead of a silent return.
    int h=INVALID_HANDLE;
    for(int a=0;a<3 && h==INVALID_HANDLE;a++)
    { h=FileOpen(JOURNAL,FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE,';');
@@ -1095,15 +1095,15 @@ void Journal(string ev,string sym,string dir,double lot,double entry,double sl,d
       IntegerToString(ticket),DoubleToString(net,2),RuleIdFromTag(tag),tag);
    FileClose(h);
 }
-// v0.47: Screenshot mit Ticket-Bezug — Dateiname traegt das Ticket, damit Cockpit/Server jedes Bild
-//   eindeutig EINEM Trade zuordnen kann: Mamal_<ticket>_<tag>_<epoch>.png (ticket 0 = kein Trade-Bezug).
+// v0.47: screenshot tied to a ticket — the file name carries the ticket so cockpit/server can map every image
+//   unambiguously to ONE trade: Mamal_<ticket>_<tag>_<epoch>.png (ticket 0 = no trade reference).
 void Shot(string tag,int ticket=0)
 {
    if(!InpScreenshots) return;
    ChartScreenShot(0,StringFormat("Mamal_%d_%s_%d.png",ticket,tag,(int)SrvTime()),InpShotWidth,InpShotHeight);
 }
-// v0.47: Screenshots aufraeumen — sonst waechst MQL4/Files unbegrenzt (ein Bild je Aktion).
-//   Laeuft im 60s-Housekeeping, nicht im Enforcement-Takt.
+// v0.47: clean up screenshots — otherwise MQL4/Files grows without bound (one image per action).
+//   Runs in the 60s housekeeping, not in the enforcement cycle.
 void PruneShots()
 {
    if(InpShotKeepDays<=0) return;
@@ -1113,7 +1113,7 @@ void PruneShots()
    int killed=0;
    do
    {
-      // Zeitstempel steckt am Dateiende: Mamal_<ticket>_<tag>_<epoch>.png
+      // the timestamp sits at the end of the file name: Mamal_<ticket>_<tag>_<epoch>.png
       int p2=StringFind(fn,".png");
       if(p2<=0) continue;
       string base=StringSubstr(fn,0,p2);
@@ -1122,17 +1122,17 @@ void PruneShots()
       if(us<0) continue;
       long ts=StringToInteger(StringSubstr(base,us+1));
       if(ts>0 && (datetime)ts<cutoff && FileDelete(fn)) killed++;
-   } while(FileFindNext(h,fn) && killed<200);   // pro Durchlauf deckeln (kein langer I/O-Block)
+   } while(FileFindNext(h,fn) && killed<200);   // cap per pass (no long I/O block)
    FileFindClose(h);
    if(killed>0) PrintFormat("Mamal: %d alte Screenshots geloescht (aelter als %d Tage)",killed,InpShotKeepDays);
 }
 string SlSeenKey(int t){ return "RGSLS_"+IntegerToString(t); }   // v0.47: zuletzt gesehener SL
 string TpSeenKey(int t){ return "RGTPS_"+IntegerToString(t); }   // v0.47: zuletzt gesehener TP
 
-// v0.47: VERHALTENS-TRACKING — erkennt je Ticket, ob SL oder TP verschoben wurde, und bewertet die Richtung.
-//   Fachlich: ein SL WEG vom Einstieg erhoeht das Risiko (klassischer Fehler „dem Verlust Luft geben");
-//   ein SL ZUM Einstieg senkt es. Ein TP naeher am Einstieg kuerzt Gewinne ab. Das Urteil wird als Klartext
-//   ins Journal geschrieben; die Gesamtauswertung je Position macht der Cockpit-Server aus diesen Zeilen.
+// v0.47: BEHAVIOUR TRACKING — detects per ticket whether SL or TP was moved, and judges the direction.
+//   In substance: an SL AWAY from the entry raises the risk (classic mistake of "giving the loss room");
+//   an SL TOWARDS the entry lowers it. A TP closer to the entry cuts profits short. The verdict is written as plain text
+//   into the journal; the overall evaluation per position is done by the cockpit server from these lines.
 void TrackSLTP()
 {
    for(int i=OrdersTotal()-1;i>=0;i--)
@@ -1154,7 +1154,7 @@ void TrackSLTP()
 
       if(MathAbs(sl-lastSL)>eps)
       {
-         // Abstand zum Einstieg: groesser = mehr Risiko
+         // distance to the entry: larger = more risk
          double dOld=MathAbs(entry-lastSL), dNew=MathAbs(entry-sl);
          string verdict;
          if(lastSL==0)                       verdict="SL erstmals gesetzt";
@@ -1186,7 +1186,7 @@ void TrackSLTP()
    }
 }
 
-//--- v0.26: Cockpit-Bruecke (DLL-frei) — Live-Zustand als JSON in MQL4/Files, ein lokaler Server serviert daraus die localhost-Seite ---
+//--- v0.26: cockpit bridge (DLL-free) — live state as JSON in MQL4/Files, a local server serves the localhost page from it ---
 string JB(bool b){ return b?"true":"false"; }
 void WriteCockpit()
 {
@@ -1206,9 +1206,9 @@ void WriteCockpit()
    string st="AKTIV", sc="green";
    if(disabled)              { st=T("status.guardOff");        sc="amber"; }
    else if(IsLocked())       { st=(IsHardLocked()?T("status.hardLock"):(IsWeekLocked()?T("status.weekLock"):T("status.dayLock"))); sc="red"; }
-   else if(BaseWarn())       { st=T("status.baseWarn");    sc="amber"; }   // §07-fix: BaseWarn blockt JEDEN Entry, wurde aber als "AKTIV" angezeigt
-   // v0.62: R23 fehlte in der Cockpit-Leiter — das Dashboard zeigte gruen "AKTIV", waehrend das Panel
-   //   sperrte. Reihenfolge bewusst identisch zur Panel-Leiter (DrawPanel), sonst driften beide Anzeigen.
+   else if(BaseWarn())       { st=T("status.baseWarn");    sc="amber"; }   // §07-fix: BaseWarn blocks EVERY entry, but was displayed as "AKTIV" (active)
+   // v0.62: R23 was missing from the cockpit ladder — the dashboard showed green "AKTIV" (active) while the panel
+   //   blocked. Order deliberately identical to the panel ladder (DrawPanel), otherwise the two displays drift apart.
    else if(WeekRiskPending()){ st=T("status.setWeekRisk");  sc="blue"; }
    else if(maxw)             { st=T("status.maxLossWarn");  sc="amber"; }
    else if(CooldownActive()) { st=T("status.cooldown");          sc="amber"; }
@@ -1222,7 +1222,7 @@ void WriteCockpit()
    if(InpDeRiskFactor>=1.0) dis=dis+"\"R19\",";
    if(InpRevengeMin<=0)     dis=dis+"\"R25\",";
    if(InpMinStopPips<=0)    dis=dis+"\"R15min\",";
-   if(!InpCloseManualTrades) dis=dis+"\"R22\",";   // R22: nur-Panel-Trades abgeschaltet
+   if(!InpCloseManualTrades) dis=dis+"\"R22\",";   // R22: panel-only trades switched off
    if(StringLen(dis)>0) dis=StringSubstr(dis,0,StringLen(dis)-1);
 
    string j="{";
@@ -1230,17 +1230,17 @@ void WriteCockpit()
    j=j+StringFormat("\"account\":\"%s\",\"symbol\":\"%s\",\"tf\":\"%s\",\"port\":%d,\"profile\":\"%s\",\"funded\":%s,", IntegerToString(AccountNumber()), Symbol(), PeriodStr(), InpCockpitPort, PropFirmName(InpPropFirm), JB(InpFundedMode));   // v0.37: Kontonummer (String, ueberlauf-sicher) -> Dashboard zeigt, WELCHES Konto (bei mehreren Terminals)
    j=j+StringFormat("\"equity\":%s,\"balance\":%s,\"ccy\":\"%s\",\"initBal\":%s,", DoubleToString(eq,2), DoubleToString(bal,2), AccountCurrency(), DoubleToString(g_initialBalance,2));
    j=j+StringFormat("\"status\":\"%s\",\"statusColor\":\"%s\",\"protectOff\":%s,", st, sc, JB(disabled));
-   j=j+StringFormat("\"dailyDD\":%s,\"dailyLimit\":%s,\"dayBase\":%s,\"weekBase\":%s,", DoubleToString(dailyDD,2), DoubleToString(EffDailyLoss(),2), DoubleToString(GlobalVariableGet(GV_DAYSTART_EQ),2), DoubleToString(GlobalVariableGet(GV_WEEKSTART_EQ),2));   // v0.39: Basen fuer die €-Umrechnung im Dashboard (Puffer-Tacho)
+   j=j+StringFormat("\"dailyDD\":%s,\"dailyLimit\":%s,\"dayBase\":%s,\"weekBase\":%s,", DoubleToString(dailyDD,2), DoubleToString(EffDailyLoss(),2), DoubleToString(GlobalVariableGet(GV_DAYSTART_EQ),2), DoubleToString(GlobalVariableGet(GV_WEEKSTART_EQ),2));   // v0.39: bases for the € conversion in the dashboard (buffer gauge)
    j=j+StringFormat("\"totalDD\":%s,\"maxLoss\":%s,\"maxLossWarn\":%s,", DoubleToString(TotalDDpct(),2), DoubleToString(EffMaxLoss(),2), DoubleToString(EffMaxLossWarn(),2));
-   j=j+StringFormat("\"protOff\":%d,\"tightenOnly\":%s,", (int)GlobalVariableGet(GV_PROTOFF), JB(TightenOn()));   // v0.30: Schutz-aus-Zaehler + Selbst-Sperre-Status (§06: gelatchter Ist-Zustand, nicht der Roh-Input)
+   j=j+StringFormat("\"protOff\":%d,\"tightenOnly\":%s,", (int)GlobalVariableGet(GV_PROTOFF), JB(TightenOn()));   // v0.30: protection-off counter + self-lock status (§06: latched actual state, not the raw input)
    j=j+StringFormat("\"dayRisk\":%s,\"dayBudget\":%s,", DoubleToString(dayR,2), DoubleToString(EffDay(),2));
    j=j+StringFormat("\"heat\":%s,\"heatCap\":%s,\"ideaCap\":%s,\"riskPerTrade\":%s,\"riskNextWeek\":%s,", DoubleToString(heat,2), DoubleToString(EffHeat(),2), DoubleToString(EffIdeaCap(),2), DoubleToString(EffRiskPct(),2), DoubleToString(PendingWeekRisk(),2));   // v0.36: wirksames Risiko/Trade (Wochenwahl) + vorgemerkte Erhoehung
    j=j+StringFormat("\"consec\":%d,\"lockAfter\":%d,\"cooldownAfter\":%d,\"cooldownSec\":%d,\"cooldownMin\":%d,", consec, EffLockAfter(), EffCooldownAfter(), cdSec, EffCooldownMin());
    j=j+StringFormat("\"weekDD\":%s,\"weekLimit\":%s,", DoubleToString(weekDD,2), DoubleToString(EffWeekLoss(),2));
    j=j+StringFormat("\"targetPct\":%s,\"profitPct\":%s,\"givebackPct\":%s,", DoubleToString(InpDailyTargetPct,2), DoubleToString(profitPct,2), DoubleToString(EffGivebackPct(),2));
-   j=j+StringFormat("\"dayLock\":%s,\"hardLock\":%s,\"weekLock\":%s,\"targetHit\":%s,\"baseWarn\":%s,\"cooldown\":%s,\"offSession\":%s,\"maxWarn\":%s,\"weekRiskPending\":%s,\"lockWhy\":%d,", JB(IsDayLocked()), JB(IsHardLocked()), JB(IsWeekLocked()), JB(TargetHit()), JB(BaseWarn()), JB(CooldownActive()), JB(OffSession()), JB(maxw), JB(WeekRiskPending()), (IsLocked() && GlobalVariableCheck(GV_LOCK_WHY)) ? (int)GlobalVariableGet(GV_LOCK_WHY) : 0);   // §06-fix: maxWarn als eigenes Flag — das Dashboard zeigte sonst gruen "Alles frei", waehrend der EA jeden Trade blockte; v0.62: weekRiskPending (R23) ebenso
+   j=j+StringFormat("\"dayLock\":%s,\"hardLock\":%s,\"weekLock\":%s,\"targetHit\":%s,\"baseWarn\":%s,\"cooldown\":%s,\"offSession\":%s,\"maxWarn\":%s,\"weekRiskPending\":%s,\"lockWhy\":%d,", JB(IsDayLocked()), JB(IsHardLocked()), JB(IsWeekLocked()), JB(TargetHit()), JB(BaseWarn()), JB(CooldownActive()), JB(OffSession()), JB(maxw), JB(WeekRiskPending()), (IsLocked() && GlobalVariableCheck(GV_LOCK_WHY)) ? (int)GlobalVariableGet(GV_LOCK_WHY) : 0);   // §06-fix: maxWarn as its own flag — otherwise the dashboard showed green "Alles frei" (all clear) while the EA blocked every trade; v0.62: weekRiskPending (R23) likewise
    j=j+StringFormat("\"minStopPips\":%s,\"rr\":%s,\"scope\":%d,", DoubleToString(InpMinStopPips,0), DoubleToString(InpRR,1), (int)InpWatchScope);
-   j=j+StringFormat("\"fills\":%d,\"blocks\":%d,\"riskEstimate\":%s,", (int)GlobalVariableGet(GV_FILLS), (int)GlobalVariableGet(GV_BLOCKS), JB(g_tvEstimate));   // §07-fix: GV_FILLS wurde gepflegt, aber nirgends gelesen; riskEstimate macht die TickValue-Schaetzung sichtbar
+   j=j+StringFormat("\"fills\":%d,\"blocks\":%d,\"riskEstimate\":%s,", (int)GlobalVariableGet(GV_FILLS), (int)GlobalVariableGet(GV_BLOCKS), JB(g_tvEstimate));   // §07-fix: GV_FILLS was maintained but read nowhere; riskEstimate makes the TickValue estimate visible
    j=j+StringFormat("\"disabled\":[%s]", dis);
    j=j+"}";
 
@@ -1249,17 +1249,17 @@ void WriteCockpit()
    FileWriteString(h,j);
    FileClose(h);
    FileMove(COCKPIT_TMP,0,COCKPIT_FILE,FILE_REWRITE);   // atomar ersetzen
-   // v0.37: Wegweiser in den Common-Ordner (fester Pfad, egal ob Portable/Terminal-Hash).
-   // Verraet dem Server den ECHTEN Files-Ordner dieses Terminals -> Server findet JSON/Journal/Trigger immer.
-   // v0.38-fix (Verify): Wegweiser nur EINMAL pro Session/Konto schreiben — nicht alle 2s.
-   //   (Spart I/O und beseitigt das Lese-Race auf eine halb geschriebene Pfadzeile.)
+   // v0.37: signpost into the common folder (fixed path, no matter whether portable/terminal hash).
+   // Tells the server the REAL Files folder of this terminal -> the server always finds JSON/journal/trigger.
+   // v0.38-fix (verify): write the signpost only ONCE per session/account — not every 2s.
+   //   (Saves I/O and removes the read race on a half-written path line.)
    static long beaconAcct=-2;
    if((long)AccountNumber()!=beaconAcct)
    {
       int hp=FileOpen(COCKPIT_PATHS,FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
       if(hp!=INVALID_HANDLE){ FileWriteString(hp,TerminalInfoString(TERMINAL_DATA_PATH)+"\\MQL4\\Files"); FileClose(hp); }
       // v0.38: PRO KONTO ein Wegweiser (mamal_files_<login>.txt) — mehrere Terminals/Konten
-      //   ueberschreiben sich so nicht mehr; der Server bietet daraus den Konto-Umschalter an.
+      //   no longer overwrite each other; from these the server offers the account switcher.
       if(AccountNumber()>0)
       {
          int hp2=FileOpen("mamal_files_"+IntegerToString(AccountNumber())+".txt",FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
@@ -1273,22 +1273,22 @@ void OpenCockpit()
    WriteCockpit();   // frischen Stand garantieren
    int h=FileOpen(COCKPIT_OPEN,FILE_WRITE|FILE_TXT|FILE_ANSI);
    if(h!=INVALID_HANDLE){ FileWriteString(h,StringFormat("open %d",(int)SrvTime())); FileClose(h); }
-   if(!InpCockpit){ Notify(T("cfg.cockpitDisabled")); return; }   // v0.40: sonst wundert man sich ueber 'Daten veraltet'
+   if(!InpCockpit){ Notify(T("cfg.cockpitDisabled")); return; }   // v0.40: otherwise one wonders about 'Daten veraltet' (data stale)
    Notify(TF("info.cockpit",IntegerToString(InpCockpitPort)), true);   // v0.37: ehrlicher Hinweis + URL statt rotem Fehler
 }
 
-// v0.40: Close-Buttons — schliesst offene Positionen sofort (Risiko-Reduktion: KEINE Gates, keine Bestaetigung).
-//   chartOnly=true -> nur Symbol dieses Charts; half=true -> jede Position um 50% verkleinern (Lot-Step-gerundet,
-//   Floor rundet zugunsten des Rests ab). Reichweite bewusst KONTOWEIT inkl. fremder Magics (User-Entscheidung) —
-//   Pending-Orders bleiben unberuehrt. KEIN MarkEaClosed: fuer EA-/Panel-eroeffnete Trades zaehlen Verluste damit
-//   normal in Serie/Cooldown (Trader-Entscheidung, kein Laundering); FREMDE Magics werden nur journalisiert,
-//   ihr P/L bleibt ausserhalb der Wertung (Scope-Design).
+// v0.40: close buttons — close open positions immediately (risk reduction: NO gates, no confirmation).
+//   chartOnly=true -> only this chart's symbol; half=true -> shrink every position by 50% (rounded to lot step,
+//   floor rounds in favour of the remainder). Reach deliberately ACCOUNT-WIDE incl. foreign magics (user decision) —
+//   pending orders stay untouched. NO MarkEaClosed: for EA-/panel-opened trades losses therefore count
+//   normally towards streak/cooldown (trader decision, no laundering); FOREIGN magics are only journalled,
+//   their P/L stays outside the evaluation (scope design).
 void PanelClose(bool chartOnly,bool half)
 {
    if(IsTradeContextBusy()){ Notify(T("info.tradeContextBusy"),true); return; }
-   // Phase 1 (Verify v0.40): Ziel-Tickets VOR dem ersten Close einfrieren — der Pool mutiert waehrend der
-   //   Closes (50%-Rest bekommt ein NEUES Ticket) und MQL4 garantiert die Pool-Sortierung nicht; positional
-   //   koennte ein frischer Rest sonst erneut halbiert werden.
+   // phase 1 (verify v0.40): freeze the target tickets BEFORE the first close — the pool mutates during the
+   //   closes (the 50% remainder gets a NEW ticket) and MQL4 does not guarantee the pool ordering; positionally
+   //   a fresh remainder could otherwise be halved again.
    int tks[]; int nT=0;
    for(int i=OrdersTotal()-1;i>=0;i--)
    {
@@ -1314,7 +1314,7 @@ void PanelClose(bool chartOnly,bool half)
       double lots=all;
       if(half)
       {
-         // +Epsilon (Verify v0.40): Binaer-FP macht sonst z.B. 0.06*0.5/0.01 = 2.9999... -> 0.02 statt 0.03
+         // +epsilon (verify v0.40): binary FP otherwise makes e.g. 0.06*0.5/0.01 = 2.9999... -> 0.02 instead of 0.03
          lots=NormalizeDouble(MathFloor(all*0.5/stp + 0.0000001)*stp,LotDigits(stp));
          if(lots<mn-0.0000001 || all-lots<mn-0.0000001){ skipped++; continue; }   // Haelfte ODER Rest unter Minimum -> unveraendert lassen
       }
@@ -1326,9 +1326,9 @@ void PanelClose(bool chartOnly,bool half)
          Journal("PANEL_CLOSE",sy,(ty==OP_BUY?"BUY":"SELL"),lots,px,0,0,0,StringFormat("%s%s per Panel-Button (#%d)",half?"50%":"Voll",chartOnly?" · Chart":" · Konto",tk),tk);
          if(half && GlobalVariableCheck(OpnKey(tk)))   // Rest-Ticket unseres Trades registrieren -> Close-Erkennung findet auch ihn
          {
-            // Verify v0.40: bevorzugt am MT4-Standard-Kommentar "from #<tk>" erkennen; Fallback nur bei
-            //   EXAKTEM Match aus Zeit/Preis/Magic/Rest-Lots (zwei gleichzeitige Positionen gleicher
-            //   Sekunde/Preis duerfen nie das falsche Ticket registrieren).
+            // verify v0.40: prefer detection via the MT4 standard comment "from #<tk>"; fallback only on an
+            //   EXACT match of time/price/magic/remaining lots (two simultaneous positions of the same
+            //   second/price must never register the wrong ticket).
             double rem=all-lots; int found=-1;
             for(int r=OrdersTotal()-1;r>=0;r--)
             {
@@ -1355,12 +1355,12 @@ void PanelClose(bool chartOnly,bool half)
    g_panelSig="";
 }
 
-// v0.46: "RISK FREE" — SL aller Positionen IM GEWINN auf Break-Even ziehen (Einstieg + optionaler Puffer).
-//   Reine Risiko-SENKUNG: keine Regel wird beruehrt, laeuft daher auch bei Sperre/Cooldown.
-//   Reichweite: nur Positionen, die das Tool verantwortet (InScope ODER registriertes Panel-Ticket) — fremde
-//   EAs bleiben unangetastet, weil deren Logik auf ihrem eigenen SL beruhen kann.
-//   Break-Even ist exakt OrderOpenPrice(): MT4 eroeffnet BUY zum Ask und schliesst zum Bid (und umgekehrt),
-//   der Spread steckt also bereits im Einstiegspreis. InpBreakEvenBufferPts deckt zusaetzlich die Kommission.
+// v0.46: "RISK FREE" — pull the SL of all positions IN PROFIT to break-even (entry + optional buffer).
+//   Pure risk REDUCTION: no rule is touched, so it also runs during lock/cooldown.
+//   Reach: only positions the tool is responsible for (InScope OR registered panel ticket) — foreign
+//   EAs stay untouched, because their logic may rely on their own SL.
+//   Break-even is exactly OrderOpenPrice(): MT4 opens a BUY at the ask and closes at the bid (and vice versa),
+//   so the spread is already inside the entry price. InpBreakEvenBufferPts additionally covers the commission.
 void PanelBreakEven(bool chartOnly)
 {
    if(IsTradeContextBusy()){ Notify(T("info.tradeContextBusy"),true); return; }
@@ -1378,14 +1378,14 @@ void PanelBreakEven(bool chartOnly)
       double buf=MathMax(0.0,InpBreakEvenBufferPts)*pt;
       double target=(ty==OP_BUY)? entry+buf : entry-buf;
       target=NormalizeDouble(target,dg);
-      // schon auf/ueber Break-Even? -> nichts zu tun (SL nie lockern!)
+      // already at/above break-even? -> nothing to do (never loosen the SL!)
       if(curSL>0 && ((ty==OP_BUY && curSL>=target-pt/2) || (ty==OP_SELL && curSL<=target+pt/2))) continue;
       RefreshRates();
       double cur=(ty==OP_BUY)?MarketInfo(sy,MODE_BID):MarketInfo(sy,MODE_ASK);
       if(cur<=0) continue;
-      // nur wenn wirklich im Gewinn
+      // only if really in profit
       if((ty==OP_BUY && cur<=target) || (ty==OP_SELL && cur>=target)){ skipped++; continue; }
-      // Broker-Mindestabstand einhalten, sonst lehnt der Server das Modify ab (err 130)
+      // respect the broker's minimum distance, otherwise the server rejects the modify (err 130)
       double stopLvl=MarketInfo(sy,MODE_STOPLEVEL)*pt;
       if(MathAbs(cur-target)<stopLvl){ skipped++; continue; }
       if(OrderModify(tk,entry,target,tp,0,clrDodgerBlue))
@@ -1409,16 +1409,16 @@ void PanelBreakEven(bool chartOnly)
    g_panelSig="";
 }
 
-// v0.44: Manuelle / fremde Trades (nicht vom Panel, ausserhalb des WatchScope) fuers Cockpit sichtbar machen —
-//   eigenes Event "CLOSE_MAN". Sie aendern KEINE Regel (keine Verlustserie, kein Cooldown, kein Tagesbudget):
-//   das Enforcement bleibt exakt wie definiert, das Dashboard markiert sie nur als "manuell".
-//   Fenster = heutiger Servertag (bounded); Dedup ueber eigenen Namespace RGM_ (RGP_ gehoert dem Regel-Pfad).
+// v0.44: make manual / foreign trades (not from the panel, outside the WatchScope) visible for the cockpit —
+//   own event "CLOSE_MAN". They change NO rule (no loss streak, no cooldown, no daily budget):
+//   the enforcement stays exactly as defined, the dashboard only marks them as "manual".
+//   Window = today's server day (bounded); dedup via its own namespace RGM_ (RGP_ belongs to the rule path).
 void ResolveManualHistory()
 {
    datetime dayStart=ServerDayStart();
    if(dayStart<=0 || dayStart>SrvTime()) return;                    // v0.45: unplausible Zeitbasis -> nichts tun
-   // v0.45 (Verify): Aggregations-Fenster BREITER als das Melde-Fenster. Ein Teil-Close von gestern gehoert
-   //   zum selben Positions-Netto wie der heute geschlossene Rest — sonst meldet CLOSE_MAN nur einen Teilbetrag.
+   // v0.45 (verify): aggregation window WIDER than the reporting window. A partial close from yesterday belongs
+   //   to the same position net as the remainder closed today — otherwise CLOSE_MAN reports only a partial amount.
    datetime scanFrom=dayStart-7*86400;
    string   gKey[]; string gSym[]; int gType[]; int gMagic[]; double gNet[]; double gLots[];
    datetime gMax[]; datetime gOpen[]; double gPrice[];
@@ -1426,7 +1426,7 @@ void ResolveManualHistory()
    for(int i=0;i<tot;i++)
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)) continue;
-      // v0.45 (Verify): billige Filter ZUERST — GlobalVariableCheck ist O(N_GV) und lief vorher auf jeder
+      // v0.45 (verify): cheap filters FIRST — GlobalVariableCheck is O(N_GV) and previously ran on every
       //   History-Zeile (bei "Gesamte Historie" alle 2s zehntausende Lookups -> Wine-Freeze-Risiko).
       datetime ct=OrderCloseTime(); if(ct<scanFrom) continue;
       int ty=OrderType(); if(ty!=OP_BUY && ty!=OP_SELL) continue;
@@ -1450,17 +1450,17 @@ void ResolveManualHistory()
    static bool s_manMarkerFail=false;
    for(int g2=0;g2<gN;g2++)
    {
-      if(gMax[g2]<dayStart) continue;                                                          // aelter als heute -> nur Aggregations-Kontext
+      if(gMax[g2]<dayStart) continue;                                                          // older than today -> aggregation context only
       string mk=ManKey(gKey[g2]);
-      if(GlobalVariableCheck(mk)) continue;                                                    // schon angezeigt/gewertet
-      // v0.45 (Verify): Quervergleich mit dem REGEL-Pfad. Ohne ihn konnte ein Trade, den ResolveHistory
-      //   ueber die Ticket-Registrierung gewertet hat (Magic-Divergenz/Scope-Wechsel), zusaetzlich als
-      //   CLOSE_MAN erscheinen -> doppeltes Netto im Dashboard.
+      if(GlobalVariableCheck(mk)) continue;                                                    // already shown/counted
+      // v0.45 (verify): cross-check against the RULE path. Without it a trade that ResolveHistory
+      //   had counted via the ticket registration (magic divergence/scope change) could additionally appear as
+      //   CLOSE_MAN -> double net in the dashboard.
       string kleg=ProcKeyLegacy(gOpen[g2],gType[g2],gSym[g2],gMagic[g2],gPrice[g2]);
       if(IsProcessedAny(gKey[g2],kleg)){ GlobalVariableSet(mk,(double)gMax[g2]); g_gvDirty=true; continue; }
-      if(HasOpenRemainder(gOpen[g2],gSym[g2],gType[g2],gMagic[g2],gPrice[g2])) continue;        // Teil-Close: erst wenn ganz zu
-      // v0.45 (Verify): Marker VOR dem Journal setzen und Erfolg pruefen — schlaegt die GV-Anlage fehl
-      //   (Namenslaenge/GV-Limit), wuerde dieselbe Zeile sonst alle 2s neu geschrieben (Journal-Flut).
+      if(HasOpenRemainder(gOpen[g2],gSym[g2],gType[g2],gMagic[g2],gPrice[g2])) continue;        // partial close: only once fully closed
+      // v0.45 (verify): set the marker BEFORE the journal and check success — if creating the GV fails
+      //   (name length/GV limit), the same line would otherwise be rewritten every 2s (journal flood).
       if(!GlobalVariableSet(mk,(double)gMax[g2]))
       {
          if(!s_manMarkerFail)
@@ -1475,13 +1475,13 @@ void ResolveManualHistory()
 }
 
 // v0.40: Sicherheitsnetz — verarbeitet VOLL geschlossene, registrierte Panel-Tickets per SELECT_BY_TICKET
-//   (unabhaengig vom History-Tab-Zeitraumfilter und vom GV_LAST_CLOSE-Floor). Gleiche Dedup-Keys wie
+//   (independent of the history tab's period filter and of the GV_LAST_CLOSE floor). Same dedup keys as
 //   ResolveHistory -> nie doppelt gezaehlt.
 // v0.40-fix (Verify): GRUPPEN-AGGREGATION — alle registrierten Legs derselben Position (gleicher ProcKey,
-//   z.B. nach Panel-50%-Close) werden GEMEINSAM gewertet. Vorher wertete der Fallback nur das zuerst
-//   iterierte Leg und AddProcessed verschluckte das P/L der Geschwister (Laundering-Fenster: Gewinn-Bein
-//   zuerst -> Serie-Reset trotz Netto-Verlust). Registry wird vorab eingefroren (GV-Neuanlagen durch
-//   ApplyResult verschieben die Iteration sonst); Keys offener Positionen werden aufgefrischt (4-Wochen-Expiry).
+//   e.g. after a panel 50% close) are counted TOGETHER. Previously the fallback counted only the first
+//   iterated leg and AddProcessed swallowed the P/L of the siblings (laundering window: profit leg
+//   first -> series reset despite a net loss). The registry is frozen up front (new GVs created by
+//   ApplyResult would otherwise shift the iteration); keys of open positions are refreshed (4-week expiry).
 void ResolveByTicketRegistry()
 {
    // Phase 1: Registry einfrieren
@@ -1494,8 +1494,8 @@ void ResolveByTicketRegistry()
       if(t<=0){ GlobalVariableDel(n); continue; }
       ArrayResize(regT,nReg+1); regT[nReg]=t; nReg++;
    }
-   // v0.41/v0.45: Diagnose nur noch bei ECHTER Anomalie ins Journal (nicht aufloesbare Tickets), sonst Log-Print.
-   //   Vorher schrieb der 60s-Takt dauerhaft INFO-Zeilen und verdraengte echte Ereignisse aus der Cockpit-Liste.
+   // v0.41/v0.45: diagnostics go to the journal only on a REAL anomaly (unresolvable tickets), otherwise a log print.
+   //   Before, the 60s cycle wrote INFO lines nonstop and pushed real events out of the cockpit list.
    static uint s_diagMs=0;
    if(nReg==0) return;
    if(GetTickCount()-s_diagMs>=60000)
@@ -1513,7 +1513,7 @@ void ResolveByTicketRegistry()
       int tk=regT[i];
       if(!OrderSelect(tk,SELECT_BY_TICKET))
       {
-         // Nicht aufloesbar (History gepurgt / Tab-Cache?): 1x pro Stunde sichtbar machen, Key behalten.
+         // Not resolvable (history purged / tab cache?): surface it once per hour, keep the key.
          double reg=GlobalVariableGet(OpnKey(tk));
          if(reg>0 && SrvTime()-(datetime)reg>3600)
          { GlobalVariableSet(OpnKey(tk),(double)SrvTime()); g_gvDirty=true;
@@ -1521,15 +1521,15 @@ void ResolveByTicketRegistry()
          continue;
       }
       if(OrderCloseTime()==0)
-      { GlobalVariableSet(OpnKey(tk),GlobalVariableGet(OpnKey(tk))); continue; }   // offen -> Key auffrischen (nur hier: Orphans verfallen weiter nach 4 Wochen)
+      { GlobalVariableSet(OpnKey(tk),GlobalVariableGet(OpnKey(tk))); continue; }   // open -> refresh the key (only here: orphans still expire after 4 weeks)
       int ty=OrderType();
       if(ty!=OP_BUY && ty!=OP_SELL){ GlobalVariableDel(OpnKey(tk)); done[i]=true; continue; }
       datetime ot=OrderOpenTime(); string sy=OrderSymbol(); int mg=OrderMagicNumber(); double op=OrderOpenPrice();
       string key   =ProcKey      (ot,ty,sy,mg,op);
       string keyLeg=ProcKeyLegacy(ot,ty,sy,mg,op);
       if(IsProcessedAny(key,keyLeg)){ GlobalVariableDel(OpnKey(tk)); done[i]=true; continue; }   // Gruppen-Pfad war schneller
-      if(HasOpenRemainder(ot,sy,ty,mg,op)) continue;   // (auch unregistrierter) Rest noch offen -> spaeter
-      // Alle registrierten Geschwister-Legs derselben Position einsammeln und aggregieren
+      if(HasOpenRemainder(ot,sy,ty,mg,op)) continue;   // remainder (even an unregistered one) still open -> later
+      // Collect and aggregate all registered sibling legs of the same position
       double manNet=0, eaNet=0; bool hasMan=false, eaFault=false, defer=false;
       datetime maxCt=0; int grp[]; int nG=0;
       for(int j=i;j<nReg;j++)
@@ -1538,7 +1538,7 @@ void ResolveByTicketRegistry()
          if(!OrderSelect(regT[j],SELECT_BY_TICKET)) continue;
          if(OrderOpenTime()!=ot || OrderType()!=ty || OrderSymbol()!=sy) continue;
          if(OrderMagicNumber()!=mg || MathAbs(OrderOpenPrice()-op)>0.0000001) continue;
-         if(OrderCloseTime()==0){ defer=true; break; }   // registriertes Geschwister noch offen -> ganze Gruppe spaeter
+         if(OrderCloseTime()==0){ defer=true; break; }   // registered sibling still open -> whole group later
          double lnet=OrderProfit()+OrderSwap()+OrderCommission();
          if(GlobalVariableCheck(EaKey(OrderTicket()))){ eaNet+=lnet; if(GlobalVariableCheck(EacfKey(OrderTicket()))) eaFault=true; }
          else                                         { manNet+=lnet; hasMan=true; }
@@ -1546,26 +1546,26 @@ void ResolveByTicketRegistry()
          ArrayResize(grp,nG+1); grp[nG]=j; nG++;
       }
       if(defer || nG==0) continue;
-      // v0.65b: dasselbe Ticket waehlen wie der Gruppen-Pfad (kleinstes = Einstieg). Sonst journalisiert
-      //   derselbe Trade je nach Aufloesungspfad ein anderes Ticket und die Akte findet ihn nicht wieder.
+      // v0.65b: pick the same ticket as the group path (smallest = entry). Otherwise the same trade
+      //   is journaled with a different ticket per resolution path and the trade record loses it.
       for(int k3=0;k3<nG;k3++) if(regT[grp[k3]]<tk) tk=regT[grp[k3]];
       bool sameDay=(DayKeyOf(maxCt-EffResetHour()*3600)==(long)ServerDayKey());
       double tot=manNet+eaNet;
       if(!sameDay)      Journal("CLOSE",sy,"-",0,0,0,0,0,"Close aus vorherigem Servertag — zaehlt nicht fuer die heutige Serie, net "+DoubleToString(tot,2),tk,tot);
-      else if(hasMan)   ApplyResult(manNet,tk,sy,ty);   // wie Gruppen-Pfad: Trader-Anteil zaehlt fuer die Serie
+      else if(hasMan)   ApplyResult(manNet,tk,sy,ty);   // like the group path: the trader's share counts for the series
       else if(eaFault)  ApplyResult(eaNet, tk,sy,ty);
       else              Journal("CLOSE",sy,"-",0,0,0,0,0,"EA-Schutz-Close (zaehlt nicht fuer die Serie), net "+DoubleToString(tot,2),tk,tot);
-      Shot("close",tk);                                              // v0.47: Ausstiegs-Bild fuer den Vorher/Nachher-Vergleich
-      GlobalVariableDel(SlSeenKey(tk)); GlobalVariableDel(TpSeenKey(tk));   // v0.47: Tracking-Marker des geschlossenen Tickets aufraeumen
+      Shot("close",tk);                                              // v0.47: exit snapshot for the before/after comparison
+      GlobalVariableDel(SlSeenKey(tk)); GlobalVariableDel(TpSeenKey(tk));   // v0.47: clean up the tracking marker of the closed ticket
       AddProcessed(key,maxCt);
       for(int k2=0;k2<nG;k2++){ GlobalVariableDel(OpnKey(regT[grp[k2]])); done[grp[k2]]=true; }
       g_gvDirty=true;
    }
 }
 
-//--- R5/R6/R19/R25: history-basierte, idempotente Verlustauflösung (P0-2/P0-4) ---
-// v0.65: Klartext zum Sperrgrund. Leer, wenn nichts gespeichert ist (Sperre aus einer aelteren Version
-//   oder aus der Lockstate-Datei wiederhergestellt) — dann bleibt es bei der neutralen Formulierung.
+//--- R5/R6/R19/R25: history-based, idempotent loss resolution (P0-2/P0-4) ---
+// v0.65: plain-text reason for the lock. Empty if nothing was stored (lock from an older version
+//   or restored from the lockstate file) — then the neutral wording stands.
 string LockWhyText()
 {
    if(!GlobalVariableCheck(GV_LOCK_WHY)) return "";
@@ -1581,18 +1581,18 @@ string LockWhyText()
    if(w==9) return T("why.week");
    return "";
 }
-// v0.65: Einmaliger Nachtrag aus der Kontohistorie. Schreibt AUSSCHLIESSLICH Journal-Zeilen —
-//   keine Regel-Wertung, kein Anfassen von Verlustserie, Tagesbudget, Sperren oder Dedup-Markern.
-//   Das Event heisst bewusst CLOSE_HIST und nicht CLOSE: Kalender und Statistik werten nur "CLOSE",
-//   sonst zaehlte jeder nachgetragene Trade ein zweites Mal ins Netto.
-//   Grenze, die der Nutzer kennen muss: OrdersHistoryTotal() sieht nur, was der History-Tab anzeigt.
-//   Steht dort ein Zeitfilter, wird auch nur dieser Ausschnitt nachgetragen.
+// v0.65: one-off backfill from the account history. Writes JOURNAL LINES ONLY —
+//   no rule evaluation, no touching of loss series, daily budget, locks or dedup markers.
+//   The event is deliberately named CLOSE_HIST and not CLOSE: calendar and statistics only count "CLOSE",
+//   otherwise every backfilled trade would count into the net a second time.
+//   Limit the user must know: OrdersHistoryTotal() only sees what the history tab shows.
+//   If a time filter is set there, only that slice gets backfilled.
 void BackfillHistory()
 {
    if(!InpHistoryBackfill) return;
    if(GlobalVariableCheck(GV_BACKFILL) && (long)GlobalVariableGet(GV_BACKFILL)==(long)AccountNumber()) return;
    int tot=OrdersHistoryTotal();
-   if(tot<=0) return;   // Historie noch nicht geladen -> naechster Cycle. KEIN Guard setzen.
+   if(tot<=0) return;   // History not loaded yet -> next cycle. Do NOT set the guard.
    int cnt=0, skipType=0, skipScope=0, seenMagic=-1; double sum=0;
    for(int i=0;i<tot;i++)
    {
@@ -1600,7 +1600,7 @@ void BackfillHistory()
       int ty=OrderType();
       if(ty!=OP_BUY && ty!=OP_SELL){ skipType++; continue; }   // Ein-/Auszahlungen
       int mg=OrderMagicNumber(); if(seenMagic<0) seenMagic=mg;
-      if(!InScope(mg)){ skipScope++; continue; }               // fremde Magics haben keine Akte
+      if(!InScope(mg)){ skipScope++; continue; }               // foreign magics have no trade record
       double net=OrderProfit()+OrderSwap()+OrderCommission();
       Journal("CLOSE_HIST",OrderSymbol(),(ty==OP_BUY?"BUY":"SELL"),OrderLots(),OrderOpenPrice(),
               OrderStopLoss(),OrderTakeProfit(),0,
@@ -1608,8 +1608,8 @@ void BackfillHistory()
               OrderTicket(),net);
       cnt++; sum+=net;
    }
-   // IMMER protokollieren, auch bei 0 Treffern — sonst ist hinterher nicht feststellbar, ob der
-   //   Nachtrag ueberhaupt lief und woran er scheiterte (genau dieser Fall ist eingetreten).
+   // ALWAYS log, even with 0 hits — otherwise there is no telling afterwards whether the
+   //   backfill ran at all and what it failed on (exactly this case occurred).
    Journal("INFO","-","-",0,0,0,0,0,StringFormat(
       "Backfill: %d nachgetragen (Summe %.2f) | Historie=%d, uebersprungen: %d kein Trade, %d ausser Reichweite | InpMagic=%d, erste Magic in der Historie=%d, Scope=%d",
       cnt,sum,tot,skipType,skipScope,InpMagic,seenMagic,(int)InpWatchScope));
@@ -1651,27 +1651,27 @@ bool HasOpenRemainder(datetime openTime,string sym,int type,int magic,double ope
 void ResolveHistory()
 {
    datetime floor=(datetime)GlobalVariableGet(GV_LAST_CLOSE);
-   // v0.41-fix: ZUKUNFTS-Floor abfangen. Wurde GV_LAST_CLOSE je mit kaputtem Server-Offset geseedet
-   //   (Erst-Attach in tickloser Phase), lag der Anker in der Zukunft -> ct<floor uebersprang JEDEN
-   //   Close fuer immer (0 CLOSE-Zeilen seit Tag 1). Selbstheilung: auf Tagesbeginn zuruecksetzen.
+   // v0.41-fix: catch a FUTURE floor. If GV_LAST_CLOSE was ever seeded with a broken server offset
+   //   (first attach during a tickless phase), the anchor sat in the future -> ct<floor skipped EVERY
+   //   close forever (0 CLOSE lines since day 1). Self-healing: reset to the start of the day.
    if(floor>SrvTime()+60)
    {
       Journal("INFO","-","-",0,0,0,0,0,StringFormat("GV_LAST_CLOSE lag in der ZUKUNFT (%s) -> zurueckgesetzt auf Tagesbeginn (Close-Wertung war dadurch blockiert)",TimeToString(floor)));
       floor=ServerDayStart(); GlobalVariableSet(GV_LAST_CLOSE,(double)floor); g_gvDirty=true;
    }
-   // History nach POSITION gruppieren (Key=OpenTime_Type_Symbol) -> Partial-Closes werden zu EINEM Ergebnis aggregiert
-   string   gKey[]; string gKeyLeg[]; datetime gOpen[]; string gSym[]; int gType[]; datetime gMin[]; datetime gMax[]; double gNet[]; double gEaNet[]; double gManNet[]; bool gHasMan[]; bool gEaFault[]; double gPrice[]; int gMagic[]; int gTick[];   // B4/6 (+§05 gEaFault, +§07 gKeyLeg fuer die Key-Migration, +v0.65 gTick)
-   // v0.65: gTick = kleinstes Ticket der Gruppe. Bis v0.64 schrieb dieser Pfad die CLOSE-Zeile mit Ticket 0 —
-   //   die Trade-Akte konnte eine Schliessung damit NIE ihrem Einstieg zuordnen und zeigte jeden Trade als
-   //   "offen", ohne Ergebnis und mit einer Zusammenfassung, die auf ewig "noch nicht verbucht" behauptete.
+   // Group history by POSITION (key=OpenTime_Type_Symbol) -> partial closes are aggregated into ONE result
+   string   gKey[]; string gKeyLeg[]; datetime gOpen[]; string gSym[]; int gType[]; datetime gMin[]; datetime gMax[]; double gNet[]; double gEaNet[]; double gManNet[]; bool gHasMan[]; bool gEaFault[]; double gPrice[]; int gMagic[]; int gTick[];   // B4/6 (+§05 gEaFault, +§07 gKeyLeg for the key migration, +v0.65 gTick)
+   // v0.65: gTick = smallest ticket of the group. Up to v0.64 this path wrote the CLOSE line with ticket 0 —
+   //   so the trade record could NEVER match a close to its entry and showed every trade as
+   //   "offen" (open), without a result and with a summary claiming "noch nicht verbucht" (not booked yet) forever.
    int gN=0, tot=OrdersHistoryTotal();
    for(int i=0;i<tot;i++)
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)) continue;
       int ty=OrderType(); if(ty!=OP_BUY && ty!=OP_SELL) continue;
-      // v0.40-fix: registrierte Panel-Tickets IMMER verarbeiten — laeuft die Master-Instanz mit anderem
-      //   InpMagic (Input-Verstellung/Chart-Divergenz), fielen unsere eigenen Trades sonst aus der Wertung
-      //   (genau so gingen die CLOSE-Eintraege verloren: Master hatte InpMagic=0, Trades Magic 990201).
+      // v0.40-fix: ALWAYS process registered panel tickets — if the master instance runs with a different
+      //   InpMagic (input changed / chart divergence), our own trades would otherwise drop out of the evaluation
+      //   (exactly how the CLOSE entries got lost: master had InpMagic=0, trades had magic 990201).
       if(!InScope(OrderMagicNumber()) && !GlobalVariableCheck(OpnKey(OrderTicket()))) continue;
       datetime ct=OrderCloseTime(); if(ct<floor) continue;
       string key=ProcKey(OrderOpenTime(),ty,OrderSymbol(),OrderMagicNumber(),OrderOpenPrice());
@@ -1686,41 +1686,41 @@ void ResolveHistory()
          gKey[gi]=key; gKeyLeg[gi]=ProcKeyLegacy(OrderOpenTime(),ty,OrderSymbol(),OrderMagicNumber(),OrderOpenPrice());
          gOpen[gi]=OrderOpenTime(); gSym[gi]=OrderSymbol(); gType[gi]=ty;
          gPrice[gi]=OrderOpenPrice(); gMagic[gi]=OrderMagicNumber();
-         gTick[gi]=OrderTicket();   // v0.65: Einstiegs-Ticket der Gruppe
+         gTick[gi]=OrderTicket();   // v0.65: entry ticket of the group
          gMin[gi]=ct; gMax[gi]=ct; gNet[gi]=0; gEaNet[gi]=0; gManNet[gi]=0; gHasMan[gi]=false; gEaFault[gi]=false; gN++;
       }
       gNet[gi]+=net; if(ct<gMin[gi]) gMin[gi]=ct; if(ct>gMax[gi]) gMax[gi]=ct;
-      if(OrderTicket()<gTick[gi]) gTick[gi]=OrderTicket();   // v0.65: kleinstes = das urspruengliche Einstiegs-Ticket
+      if(OrderTicket()<gTick[gi]) gTick[gi]=OrderTicket();   // v0.65: smallest = the original entry ticket
       if(ea){ gEaNet[gi]+=net; if(fault) gEaFault[gi]=true; } else { gManNet[gi]+=net; gHasMan[gi]=true; }   // B4/6: EA- vs Trader-Anteil getrennt (+§05-fix: Fault-EA-Close markieren)
    }
    if(gN==0) return;
-   // P1: Gruppen chronologisch nach Close-Zeit (gMax) aufsteigend werten -> Verlustserie/Cooldown in echter Reihenfolge (Broker-History ist nicht garantiert sortiert)
+   // P1: evaluate groups chronologically by close time (gMax) ascending -> loss series/cooldown in real order (broker history is not guaranteed to be sorted)
    int ord[]; ArrayResize(ord,gN); for(int a=0;a<gN;a++) ord[a]=a;
    for(int a=1;a<gN;a++){ int kk=ord[a]; int b=a-1; while(b>=0 && gMax[ord[b]]>gMax[kk]){ ord[b+1]=ord[b]; b--; } ord[b+1]=kk; }
    datetime earliestDeferred=0; bool haveDeferred=false; datetime maxProcessed=floor;
    for(int oi=0;oi<gN;oi++)
    {
       int g=ord[oi];
-      // Teil-Schliessung: solange ein Rest-Ticket dieser Position offen ist -> NICHT werten (nur diese Gruppe ueberspringen)
+      // Partial close: as long as a remaining ticket of this position is open -> do NOT evaluate (skip only this group)
       if(HasOpenRemainder(gOpen[g],gSym[g],gType[g],gMagic[g],gPrice[g]))
       {
-         // §06-fix (mittel): Deferral zeitlich deckeln. Ein 0.01-Lot-Rest konnte die Verlustwertung (R5/R6/R25) UNBEGRENZT
-         //   aufhalten, obwohl der Verlust laengst realisiert ist ("0.99 von 1.0 Lot schliessen, Rest offen lassen").
-         //   Nach 10 min wird ein bereits realisierter VERLUST gewertet — nur Verluste, damit ein realisierter Teil-Gewinn
-         //   die Serie nicht vorzeitig zuruecksetzt, falls der Rest noch ins Minus dreht.
+         // §06-fix (medium): cap the deferral in time. A 0.01-lot remainder could hold up the loss evaluation (R5/R6/R25) INDEFINITELY
+         //   although the loss is long since realized ("close 0.99 of 1.0 lot, leave the rest open").
+         //   After 10 min an already realized LOSS is evaluated — losses only, so that a realized partial profit
+         //   does not reset the series prematurely if the remainder still turns negative.
          double effNet = gHasMan[g] ? gManNet[g] : (gEaFault[g] ? gEaNet[g] : 0);
          bool   stale  = (SrvTime()-gMax[g] >= 600);
          if(!(stale && effNet<0 && !IsProcessedAny(gKey[g],gKeyLeg[g])))
          { if(!haveDeferred || gMin[g]<earliestDeferred){ earliestDeferred=gMin[g]; haveDeferred=true; } continue; }
          Journal("CLOSE",gSym[g],"-",0,0,0,0,0,"Teil-Close: realisierter Verlust nach 10 min gewertet (Rest noch offen), net "+DoubleToString(effNet,2),gTick[g],effNet);
       }
-      if(IsProcessedAny(gKey[g],gKeyLeg[g])) continue;          // schon gewertet (idempotent, inkl. Alt-Marker)
-      // B4/6: gab es einen Trader-Close-Anteil -> der zaehlt fuer Serie/Cooldown/Revenge.
+      if(IsProcessedAny(gKey[g],gKeyLeg[g])) continue;          // already evaluated (idempotent, incl. legacy markers)
+      // B4/6: if there was a trader-close share -> it counts for series/cooldown/revenge.
       // §05-fix (hoch): auch ein reiner EA-Close mit TRADER-VERSCHULDEN (R7 SL entfernt / R1 Ueberrisiko / R8) zaehlt —
-      //   sonst waescht "SL entfernen und den EA schliessen lassen" die Verlustserie (Laundering). NUR echte Schutz-Flats
-      //   (Lock-SafeCloseAll / R12) bleiben ausgeschlossen (kein Trader-Verschulden).
-      // §07-fix: Verluste eines VERGANGENEN Servertags nicht mehr in die Serie des neuen Tages zaehlen (RollNewDay hat
-      //   CONSEC bereits genullt) — sonst startete der neue Tag mit geerbten Verlusten und Cooldown/Sperre feuerten zu frueh.
+      //   otherwise "remove the SL and let the EA close it" launders the loss series. ONLY genuine protective flats
+      //   (Lock-SafeCloseAll / R12) stay excluded (not the trader's fault).
+      // §07-fix: losses of a PAST server day no longer count into the new day's series (RollNewDay has
+      //   already zeroed CONSEC) — otherwise the new day started with inherited losses and cooldown/lock fired too early.
       bool sameDay = (DayKeyOf(gMax[g]-EffResetHour()*3600) == (long)ServerDayKey());
       if(!sameDay)         Journal("CLOSE",gSym[g],"-",0,0,0,0,0,"Close aus vorherigem Servertag — zaehlt nicht fuer die heutige Serie, net "+DoubleToString(gNet[g],2),gTick[g],gNet[g]);
       else if(gHasMan[g])  ApplyResult(gManNet[g],gTick[g],gSym[g],gType[g]);
@@ -1729,31 +1729,31 @@ void ResolveHistory()
       AddProcessed(gKey[g],gMax[g]);
       if(gMax[g]>maxProcessed) maxProcessed=gMax[g];
    }
-   // Floor sicher setzen: nie ueber einen noch offenen (deferred) Close hinaus -> spaeter erneut scannbar
+   // Set the floor safely: never beyond a still-open (deferred) close -> stays scannable later
    datetime newFloor = haveDeferred ? (earliestDeferred>1?earliestDeferred-1:floor) : maxProcessed;
    if(newFloor<floor) newFloor=floor;
    GlobalVariableSet(GV_LAST_CLOSE,(double)newFloor);
-   // v0.22: die drei O(N_GlobalVariables)-Sweeps NICHT bei jedem Close (Wine-Freeze-Schutz) — reine Aufraeum-Housekeeping, 60s reicht
+   // v0.22: do NOT run the three O(N_GlobalVariables) sweeps on every close (Wine freeze protection) — pure cleanup housekeeping, 60s is enough
    static uint s_lastPruneMs=0;
    if(GetTickCount()-s_lastPruneMs >= 60000)
    {
       s_lastPruneMs=GetTickCount();
-      // v0.43-fix (KRITISCH): Karenz von 6h. Frueher wurden die Dedup-Marker SOFORT mit dem Floor gepruned
-      //   (nur der allerletzte ueberlebte). Fuer ResolveHistory war das ok (der Floor selbst schuetzt), aber
-      //   der Ticket-Fallback prueft genau diese Marker -> er fand keine und wertete ALLES ein zweites Mal
-      //   (doppelte CLOSE-Zeilen, doppelte Verlustserie, doppeltes Netto im Kalender).
-      PruneGV("RGP_",   newFloor-21600);           // verarbeitete Positionen erst nach 6h vergessen (Dedup fuer beide Pfade)
-      PruneGV("RGM_",   SrvTime()-2*86400);        // v0.45: "im Cockpit gezeigt"-Marker erst nach 2 Tagen (hier im 60s-Block, nicht alle 2s)
+      // v0.43-fix (CRITICAL): 6h grace period. Previously the dedup markers were pruned IMMEDIATELY along with the floor
+      //   (only the very last one survived). For ResolveHistory that was fine (the floor itself protects), but
+      //   the ticket fallback checks exactly those markers -> it found none and evaluated EVERYTHING a second time
+      //   (duplicate CLOSE lines, duplicated loss series, duplicated net in the calendar).
+      PruneGV("RGP_",   newFloor-21600);           // forget processed positions only after 6h (dedup for both paths)
+      PruneGV("RGM_",   SrvTime()-2*86400);        // v0.45: "shown in cockpit" markers only after 2 days (here in the 60s block, not every 2s)
       PruneShots();                                // v0.47: alte Screenshots loeschen (InpShotKeepDays)
-      PruneGV("RGEACF_",SrvTime()-2*86400);     // §05-fix: Fault-Marker VOR RGEAC_ pruenen (RGEAC_ ist kein Praefix von RGEACF_, aber Reihenfolge egal)
+      PruneGV("RGEACF_",SrvTime()-2*86400);     // §05-fix: prune fault markers BEFORE RGEAC_ (RGEAC_ is not a prefix of RGEACF_, but the order does not matter)
       PruneGV("RGEAC_", SrvTime()-2*86400);     // alte EA-Close-Marker aufraeumen
       PruneRevenge();                              // R25: abgelaufene Revenge-Fenster (v0.17)
-      PruneNaked();                                // §06-fix: R7-Grace-Marker geschlossener Tickets (O(N_GV) -> nur hier, nicht je Enforcement-Cycle)
+      PruneNaked();                                // §06-fix: R7 grace markers of closed tickets (O(N_GV) -> only here, not per enforcement cycle)
    }
-   g_gvDirty=true;                                 // v0.22: Flush gebuendelt am Cycle-Ende (nicht hier synchron im Close-Tick)
+   g_gvDirty=true;                                 // v0.22: flush batched at the end of the cycle (not synchronously here in the close tick)
 }
 
-//--- R7: naked = ohne SL/TP. Frist ab OrderOpenTime (restart-fest, kein In-Memory-State) ----------
+//--- R7: naked = without SL/TP. Deadline from OrderOpenTime (restart-safe, no in-memory state) ----------
 
 //--- Close-Queue: ticketbasiert, Retry-Limit, Backoff, Error-Codes, Journal je Versuch ---
 int  QFind(int ticket){ for(int i=0;i<ArraySize(g_qTicket);i++) if(g_qTicket[i]==ticket) return i; return -1; }
@@ -1763,9 +1763,9 @@ void QRemoveAt(int idx)
    for(int i=idx;i<n-1;i++){ g_qTicket[i]=g_qTicket[i+1]; g_qReason[i]=g_qReason[i+1]; g_qTries[i]=g_qTries[i+1]; g_qNextMs[i]=g_qNextMs[i+1]; }
    ArrayResize(g_qTicket,n-1); ArrayResize(g_qReason,n-1); ArrayResize(g_qTries,n-1); ArrayResize(g_qNextMs,n-1);
 }
-void RequestClose(int ticket,string reason)   // Lots werden beim Close live aus OrderLots() gelesen (partial-close-fest)
+void RequestClose(int ticket,string reason)   // Lots are read live from OrderLots() at close time (partial-close safe)
 {
-   if(QFind(ticket)>=0) return;            // schon eingereiht -> kein Doppel-Close
+   if(QFind(ticket)>=0) return;            // already queued -> no double close
    int n=ArraySize(g_qTicket);
    ArrayResize(g_qTicket,n+1); ArrayResize(g_qReason,n+1); ArrayResize(g_qTries,n+1); ArrayResize(g_qNextMs,n+1);
    g_qTicket[n]=ticket; g_qReason[n]=reason; g_qTries[n]=0; g_qNextMs[n]=GetTickCount();
@@ -1774,10 +1774,10 @@ bool IsRetryableClose(int err)
 {
    switch(err)
    {  // transiente Fehler -> kurzer Backoff, erneut versuchen
-      case 4:   case 6:   case 8:   case 128: case 129:   // 132=ERR_MARKET_CLOSED wird in ProcessCloseQueue separat behandelt (langer Backoff)
+      case 4:   case 6:   case 8:   case 128: case 129:   // 132=ERR_MARKET_CLOSED is handled separately in ProcessCloseQueue (long backoff)
       case 135: case 136: case 137: case 138: case 146: return true;
    }
-   return false;   // sonst: harter Backoff, schneller Richtung FINAL-FAIL
+   return false;   // otherwise: hard backoff, faster towards FINAL-FAIL
 }
 uint CloseBackoffMs(int tries)
 {
@@ -1786,7 +1786,7 @@ uint CloseBackoffMs(int tries)
    if(ms<1) ms=1;
    return (uint)ms;
 }
-// v0.31: Signatur der In-Scope-Positionen (Ticket + SL + TP) -> Aenderung bei GLEICHER Anzahl = User hat SL/TP modifiziert.
+// v0.31: signature of the in-scope positions (ticket + SL + TP) -> a change with the SAME count = the user modified SL/TP.
 double OrderScopeSig(int &cnt)
 {
    cnt=0; double s=0.0; int n=OrdersTotal();
@@ -1799,18 +1799,18 @@ double OrderScopeSig(int &cnt)
    }
    return s;
 }
-// §06-fix (mittel): Zwischen Enqueue und tatsaechlichem Close koennen Sekunden bis (bei err=132 Markt zu) Stunden liegen.
-//   Bisher pruefte die Queue nur "existiert/offen", nie ob der GRUND noch besteht: eine inzwischen geheilte Position
-//   (SL/TP nachgetragen, Risiko verkleinert) oder eine Position nach abgelaufener Sperre wurde trotzdem zwangsgeschlossen
-//   (Slippage-Kosten ohne Regelgrund). Jetzt wird der Grund unmittelbar vor dem Close re-validiert.
+// §06-fix (medium): between enqueue and the actual close there can be seconds up to (with err=132, market closed) hours.
+//   So far the queue only checked "exists/open", never whether the REASON still holds: a position healed meanwhile
+//   (SL/TP added, risk reduced), or a position after an expired lock, was force-closed anyway
+//   (slippage cost without a rule reason). Now the reason is re-validated immediately before the close.
 bool CloseReasonStillValid(int ticket,string reason)
 {
    if(!OrderSelect(ticket,SELECT_BY_TICKET)) return false;
    if(OrderCloseTime()!=0) return false;
    int ty=OrderType();
-   if(StringFind(reason,"R22")==0) return (InpCloseManualTrades && OrderMagicNumber()==0);   // R22 bleibt gueltig, solange die Order manuell und die Regel aktiv ist
-   if(StringFind(reason,"Lock")==0) return IsLocked();               // Sperre inzwischen abgelaufen (z.B. ueber Mitternacht)?
-   if(ty!=OP_BUY && ty!=OP_SELL) return true;                        // Pending: Loeschen kostet nichts -> nicht weiter pruefen
+   if(StringFind(reason,"R22")==0) return (InpCloseManualTrades && OrderMagicNumber()==0);   // R22 stays valid as long as the order is manual and the rule is active
+   if(StringFind(reason,"Lock")==0) return IsLocked();               // lock expired in the meantime (e.g. across midnight)?
+   if(ty!=OP_BUY && ty!=OP_SELL) return true;                        // pending: deleting costs nothing -> no further checks
    if(StringFind(reason,"R7")==0)
       return ((EffRequireSL() && OrderStopLoss()==0.0) || (EffRequireTP() && OrderTakeProfit()==0.0));
    if(StringFind(reason,"R1 ")==0)
@@ -1837,18 +1837,18 @@ void ProcessCloseQueue()
       if((int)(nowMs - g_qNextMs[i]) < 0) continue;                          // Backoff laeuft (B17: wrap-sicher)
       int ticket=g_qTicket[i];
       if(!OrderSelect(ticket,SELECT_BY_TICKET)){ QRemoveAt(i); continue; }   // weg/ungueltig
-      if(OrderCloseTime()!=0){ QRemoveAt(i); continue; }                     // bereits geschlossen (nicht durch uns)
+      if(OrderCloseTime()!=0){ QRemoveAt(i); continue; }                     // already closed (not by us)
       int    tp =OrderType();
       string sym=OrderSymbol();
-      // Grund re-validieren — VOR beiden Zweigen. Vorher stand die Pruefung erst hinter dem Pending-Zweig, dadurch wurde
-      // eine eingereihte Pending-Order auch dann noch geloescht, wenn der Grund inzwischen entfallen war (z.B. Sperre
-      // abgelaufen oder InpCloseManualTrades zwischenzeitlich aus).
+      // Re-validate the reason — BEFORE both branches. Previously the check sat behind the pending branch, so a queued
+      // pending order was still deleted even when the reason had gone away in the meantime (e.g. lock
+      // expired or InpCloseManualTrades switched off meanwhile).
       if(!CloseReasonStillValid(ticket,g_qReason[i]))
       { Journal("CLOSE",sym,"-",0,0,0,0,0,"Queue verworfen — Grund entfallen: "+g_qReason[i],ticket); QRemoveAt(i); continue; }
-      if(!OrderSelect(ticket,SELECT_BY_TICKET)){ QRemoveAt(i); continue; }   // Auswahl nach der Pruefung wiederherstellen
+      if(!OrderSelect(ticket,SELECT_BY_TICKET)){ QRemoveAt(i); continue; }   // restore the order selection after the check
       if(tp!=OP_BUY && tp!=OP_SELL)                                          // Pending -> loeschen
       {
-         if(IsTradeContextBusy()) return;   // v0.31: Kontext KURZ vor OrderDelete erneut pruefen -> nicht in einen laufenden User-Modify hinein (= Wine-Crash)
+         if(IsTradeContextBusy()) return;   // v0.31: re-check the context JUST before OrderDelete -> not into an ongoing user modify (= Wine crash)
          if(OrderDelete(ticket)){ Journal("CLOSE",sym,"-",0,0,0,0,0,"Queue DELETE ok: "+g_qReason[i]); QRemoveAt(i); }
          else
          {
@@ -1858,31 +1858,31 @@ void ProcessCloseQueue()
          }
          continue;
       }
-      RefreshRates();   // (Grund-Re-Validierung ist oben, vor dem Pending-Zweig, passiert)
+      RefreshRates();   // (the reason re-validation happened above, before the pending branch)
       double lots =OrderLots();
       double price=(tp==OP_BUY) ? MarketInfo(sym,MODE_BID) : MarketInfo(sym,MODE_ASK);
-      if(IsTradeContextBusy()) return;   // v0.31: Kontext UNMITTELBAR vor OrderClose erneut pruefen -> kein Schliessen in einen laufenden User-Modify (= Wine-Crash, Kernursache)
+      if(IsTradeContextBusy()) return;   // v0.31: re-check the context IMMEDIATELY before OrderClose -> no closing into an ongoing user modify (= Wine crash, root cause)
       if(OrderClose(ticket,lots,price,InpSlippage,clrRed))
       {
-         MarkEaClosed(ticket,g_qReason[i]);                                  // B5/B8: Marker ERST nach bestaetigtem Close (+ §05-fix: Fault-Grund fuer Verlustserie)
+         MarkEaClosed(ticket,g_qReason[i]);                                  // B5/B8: set the marker ONLY after a confirmed close (+ §05-fix: fault reason for the loss series)
          Journal("CLOSE",sym,"-",lots,0,0,0,0,StringFormat("Queue OK (Versuch %d): %s",g_qTries[i]+1,g_qReason[i]),ticket);
          QRemoveAt(i);
       }
       else
       {
          int  err  =GetLastError();
-         if(OrderSelect(ticket,SELECT_BY_TICKET) && OrderCloseTime()!=0)     // B5: false-Rueckgabe, aber serverseitig DOCH geschlossen (Requote/Timeout)
+         if(OrderSelect(ticket,SELECT_BY_TICKET) && OrderCloseTime()!=0)     // B5: returned false, but closed on the server side ANYWAY (requote/timeout)
          {
             MarkEaClosed(ticket,g_qReason[i]);
             Journal("CLOSE",sym,"-",lots,0,0,0,0,StringFormat("Queue OK (nach false-Rueckgabe err=%d): %s",err,g_qReason[i]),ticket);
             QRemoveAt(i);
          }
-         else if(err==132)                                                  // P1: ERR_MARKET_CLOSED -> langer Backoff, NICHT eskalieren (kein Request-Storm uebers Wochenende)
+         else if(err==132)                                                  // P1: ERR_MARKET_CLOSED -> long backoff, do NOT escalate (no request storm over the weekend)
          {
-            g_qNextMs[i] = nowMs + 900000;   // 15 min warten, Ticket bleibt in der Queue
+            g_qNextMs[i] = nowMs + 900000;   // wait 15 min, the ticket stays in the queue
             Journal("CLOSE",sym,"-",lots,0,0,0,0,StringFormat("Queue WAIT Markt geschlossen (err=132, 15min Backoff): %s",g_qReason[i]));
          }
-         else                                                               // echter Fehlversuch -> Backoff/Retry, KEIN Marker
+         else                                                               // real failed attempt -> backoff/retry, NO marker
          {
             bool retry=IsRetryableClose(err);
             g_qTries[i] += (retry ? 1 : 2);
@@ -1897,7 +1897,7 @@ void ProcessCloseQueue()
 }
 
 //--- Lockstate-Datei: GV-Spiegel mit HMAC-light, fail-closed bei Beschaedigung ---
-uint LsHash(string s)   // gesalzene djb2-Variante (HMAC-light, kein echtes Crypto)
+uint LsHash(string s)   // salted djb2 variant (HMAC-light, not real crypto)
 {
    string d=LOCKSALT+s+LOCKSALT;
    uint h=5381;
@@ -1918,10 +1918,10 @@ string LsPayload()
           IntegerToString((int)cd)+";"+
           DoubleToString(GlobalVariableGet(GV_DAY_RISK),4)+";"+
           IntegerToString((int)GlobalVariableGet(GV_CONSEC))+";"+
-          DoubleToString(g_initBalConfirmed ? g_initialBalance : 0,2);   // §04-fix (mittel): R4b-Basis in der Datei — ueberlebt den 4-Wochen-GV-Ablauf (Feld 9, ans Ende = alte 8-Feld-Dateien lesbar). NUR bestaetigte Basis — sonst wuerde die Auto-Basis ueber die Datei zur "bestaetigten"
+          DoubleToString(g_initBalConfirmed ? g_initialBalance : 0,2);   // §04-fix (medium): R4b base in the file — survives the 4-week GV expiry (field 9, appended at the end = old 8-field files stay readable). CONFIRMED base ONLY — otherwise the auto base would become the "confirmed" one via the file
 }
-// §04-fix (mittel): gespeicherte R4b-Basis aus der (signierten) Lockstate-Datei — fuer die OnInit-Kaskade,
-// wenn die GlobalVariables nach >4 Wochen Pause abgelaufen sind und InpInitialBalance nicht gesetzt ist.
+// §04-fix (medium): stored R4b base from the (signed) lockstate file — for the OnInit cascade,
+// when the GlobalVariables have expired after a >4-week pause and InpInitialBalance is not set.
 double LsStoredInitBal()
 {
    string payload; if(!ReadLockstateRaw(payload) || payload=="CORRUPT") return 0;
@@ -1933,25 +1933,25 @@ void WriteLockstate()
 {
    string payload=LsPayload();
    string line="MMTLS1;"+payload+";"+IntegerToString((long)LsHash(payload));
-   if(line==g_lockSig) return;            // unveraendert -> kein Disk-Write
-   // v0.63-FIX (fail-open, im Test gefunden): Dieser Spiegel lief JEDEN Cycle (~1s), der Abgleich
-   //   ReconcileLockstate nur alle 5s. Wer RG_HARD_LOCK per F3 loeschte, sah die Sperre binnen einer
-   //   Sekunde AUCH aus der signierten Datei verschwinden — der Spiegel ueberholte den Waechter und
-   //   loeschte genau das Beweisstueck, aus dem die Sperre haette zurueckgeholt werden sollen.
-   //   Jetzt gilt: bevor eine GEAENDERTE Lage auf die Platte geht, wird gegen die Datei abgeglichen.
-   //   Eine dort noch AKTIVE Sperre wandert vorher in die GVs zurueck (ReconcileLockstate schreibt selbst).
-   //   KEIN IsTradeContextBusy-Gate hier (Verify-Fund gegen die erste Fassung dieses Fixes): dieser Spiegel ist
-   //   die vom GV-Flush UNABHAENGIGE, absturzsichere Persistenz. PersistLatch() ueberspringt bei belegtem
-   //   Trade-Kontext den Flush und verlaesst sich darauf, dass die .dat trotzdem geschrieben wird. Haette man
+   if(line==g_lockSig) return;            // unchanged -> no disk write
+   // v0.63-FIX (fail-open, found in testing): this mirror ran EVERY cycle (~1s), the reconciliation
+   //   ReconcileLockstate only every 5s. Whoever deleted RG_HARD_LOCK via F3 saw the lock vanish within a
+   //   second from the signed file TOO — the mirror overtook the watchdog and
+   //   deleted exactly the piece of evidence the lock was supposed to be restored from.
+   //   Now: before a CHANGED state goes to disk, it is reconciled against the file.
+   //   A lock still ACTIVE there moves back into the GVs beforehand (ReconcileLockstate writes on its own).
+   //   NO IsTradeContextBusy gate here (verify finding against the first version of this fix): this mirror is
+   //   the crash-safe persistence INDEPENDENT of the GV flush. On a busy trade context PersistLatch() skips
+   //   the flush and relies on the .dat being written anyway. Had this been gated
    //   hier ebenfalls gegatet, schwiegen bei R4b-Ausloesung waehrend einer Close-Queue-Retry BEIDE Schichten
-   //   gleichzeitig — ein Absturz in diesem Fenster haette den Hard-Lock verloren. Der zusaetzliche Lesezugriff
-   //   ist dieselbe winzige Datei, die hier ohnehin geschrieben wird.
+   //   at the same time — a crash in that window would have lost the hard lock. The extra read access
+   //   is to the same tiny file that gets written here anyway.
    if(!g_lsGuard)
    {
       g_lsGuard=true; ReconcileLockstate(true); g_lsGuard=false;
-      payload=LsPayload();               // Abgleich kann Sperren zurueckgeholt haben
+      payload=LsPayload();               // the reconciliation may have restored locks
       line="MMTLS1;"+payload+";"+IntegerToString((long)LsHash(payload));
-      if(line==g_lockSig) return;        // ReconcileLockstate hat bereits geschrieben
+      if(line==g_lockSig) return;        // ReconcileLockstate has already written
    }
    int h=FileOpen(LOCKFILE,FILE_WRITE|FILE_TXT|FILE_ANSI);
    if(h==INVALID_HANDLE){ PrintFormat("Mamal: Lockstate-Schreibfehler %d",GetLastError()); return; }
@@ -1959,15 +1959,15 @@ void WriteLockstate()
    FileClose(h);
    g_lockSig=line;
    if(!GlobalVariableCheck(GV_LS_SEEN) || GlobalVariableGet(GV_LS_SEEN)<=0.5)
-   { GlobalVariableSet(GV_LS_SEEN,1); g_gvDirty=true; }   // ab jetzt ist ein Fehlen der Datei ein Befund
+   { GlobalVariableSet(GV_LS_SEEN,1); g_gvDirty=true; }   // from now on a missing file is a finding
 }
-bool ReadLockstateRaw(string &payloadOut)   // true=Datei vorhanden; payloadOut="CORRUPT" wenn ungueltig
+bool ReadLockstateRaw(string &payloadOut)   // true=file present; payloadOut="CORRUPT" if invalid
 {
    payloadOut="";
    if(!FileIsExist(LOCKFILE)) return false;
-   // §06-fix (mittel): Datei EXISTIERT, laesst sich aber nicht oeffnen (Sharing-Lock durch Virenscanner/Backup/Sync, I/O-Fehler).
-   //   Das wurde bisher wie "Erststart" behandelt -> der restriktivere Datei-Zustand wurde ueberschrieben (fail-OPEN).
-   //   Jetzt: kurzer Retry, danach wie CORRUPT behandeln (fail-closed) statt die Sperre stillschweigend zu verlieren.
+   // §06-fix (medium): the file EXISTS but cannot be opened (sharing lock by antivirus/backup/sync, I/O error).
+   //   That used to be treated like a "first start" -> the more restrictive file state got overwritten (fail-OPEN).
+   //   Now: short retry, then treat it like CORRUPT (fail-closed) instead of silently losing the lock.
    int h=INVALID_HANDLE;
    for(int a=0;a<3 && h==INVALID_HANDLE;a++)
    { h=FileOpen(LOCKFILE,FILE_READ|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE); if(h==INVALID_HANDLE) Sleep(20); }
@@ -1981,33 +1981,33 @@ bool ReadLockstateRaw(string &payloadOut)   // true=Datei vorhanden; payloadOut=
    payloadOut=payload;
    return true;
 }
-// §05-fix (hoch): auch PERIODISCH aus Cycle aufrufbar. ReconcileLockstate() lief bisher nur in OnInit — intraday las
-//   Cycle die Sperren direkt aus den GlobalVariables, die per F3 loeschbar sind (Sperre weg, und WriteLockstate spiegelte
-//   danach den entsperrten Zustand mit gueltiger Signatur zurueck = EA wusch seine eigene Tamper-Erkennung). Jetzt holt
-//   der periodische Aufruf noch AKTIVE Sperren aus der signierten Datei zurueck und journalt die GV-Loeschung als TAMPER.
-void ReconcileLockstate(bool periodic=false)   // restriktivsten Zustand aus GV + Datei; fail-closed bei Beschaedigung
+// §05-fix (high): can also be called PERIODICALLY from the cycle. ReconcileLockstate() used to run only in OnInit — intraday,
+//   the cycle read the locks straight from the GlobalVariables, which are deletable via F3 (lock gone, and WriteLockstate then mirrored
+//   the unlocked state back with a valid signature = the EA laundered its own tamper detection). Now the
+//   periodic call restores still ACTIVE locks from the signed file and journals the GV deletion as TAMPER.
+void ReconcileLockstate(bool periodic=false)   // most restrictive state from GV + file; fail-closed on corruption
 {
    string payload; bool had=ReadLockstateRaw(payload);
-   // v0.63 (Verify-Fund, kritisch): Eine FEHLENDE Datei galt bisher als Erststart und blieb folgenlos —
-   //   damit liess sich der Schutz mit einem Explorer-Klick plus einem F3-Loeschen sauber aushebeln:
-   //   erst die Datei weg (faellt niemandem auf), dann die GlobalVariable weg, und der naechste Schreibvorgang
-   //   legte die Datei aus dem entschaerften Zustand korrekt signiert neu an. Kein Race, voll reproduzierbar.
-   //   Ab dem ersten erfolgreichen Schreiben merkt sich der EA deshalb, dass es die Datei GAB (GV_LS_SEEN);
-   //   verschwindet sie danach, ist das ein Manipulationsbefund und wird wie eine korrupte Datei behandelt.
+   // v0.63 (verify finding, critical): a MISSING file used to count as a first start and had no consequences —
+   //   so the protection could be defeated cleanly with one Explorer click plus one F3 delete:
+   //   first the file gone (nobody notices), then the GlobalVariable gone, and the next write
+   //   recreated the file from the defused state, correctly signed. No race, fully reproducible.
+   //   Therefore, from the first successful write on, the EA remembers that the file EXISTED (GV_LS_SEEN);
+   //   if it disappears afterwards, that is a tampering finding and is treated like a corrupt file.
    if(!had)
    {
       if(GlobalVariableCheck(GV_LS_SEEN) && GlobalVariableGet(GV_LS_SEEN)>0.5)
       { GlobalVariableSet(GV_LOCK_UNTIL,(double)NextServerMidnight()); GlobalVariableSet(GV_LOCK_WHY,6); GlobalVariablesFlush();
-        // v0.64: Erzwungener Alert NUR beim Zustandswechsel. Heilt der Zustand nicht aus (schreibgeschuetzter
-        //   Ordner, Datei-Rechte), feuerte der Zweig sonst in JEDEM Cycle einen modalen Dialog — das haette
-        //   das Terminal unbedienbar gemacht und waere schlimmer als die verpasste Meldung, die es behebt.
+        // v0.64: forced alert ONLY on a state change. If the state does not heal (write-protected
+        //   folder, file permissions), this branch would otherwise fire a modal dialog in EVERY cycle — that would have
+        //   made the terminal unusable and would be worse than the missed message it fixes.
         if(!g_lsMissWarned)
         { g_lsMissWarned=true;
           Notify(T("tamper.lockstateMissing"),false,true);
           Journal("TAMPER","-","-",0,0,0,0,0,"Lockstate-Datei fehlt (geloescht?) -> fail-closed (Tagessperre)"); }
-        g_lsGuard=true; WriteLockstate(); g_lsGuard=false;   // direkt schreiben: der Abgleich hat nichts mehr zu lesen
+        g_lsGuard=true; WriteLockstate(); g_lsGuard=false;   // write directly: the reconciliation has nothing left to read
         return; }
-      if(!periodic) WriteLockstate(); return;   // echter Erststart: anlegen, kein Alarm
+      if(!periodic) WriteLockstate(); return;   // genuine first start: create it, no alert
    }
    if(payload=="CORRUPT")
    {
@@ -2016,10 +2016,10 @@ void ReconcileLockstate(bool periodic=false)   // restriktivsten Zustand aus GV 
       { g_lsCorruptWarned=true;
         Notify(T("tamper.lockstateCorrupt"),false,true);
         Journal("TAMPER","-","-",0,0,0,0,0,"Lockstate korrupt -> fail-closed (Tagessperre)"); }
-      g_lsGuard=true; WriteLockstate(); g_lsGuard=false;   // v0.64: ohne Guard rief WriteLockstate den Abgleich
-      return;                                              //   erneut auf -> zwei Alerts und zwei TAMPER-Zeilen je Korruption
+      g_lsGuard=true; WriteLockstate(); g_lsGuard=false;   // v0.64: without the guard WriteLockstate called the reconciliation
+      return;                                              //   again -> two alerts and two TAMPER lines per corruption
    }
-   g_lsMissWarned=false; g_lsCorruptWarned=false;   // Datei ist wieder lesbar und gueltig -> Latches frei fuer den naechsten echten Befund
+   g_lsMissWarned=false; g_lsCorruptWarned=false;   // file is readable and valid again -> latches free for the next real finding
    string p[]; int k=StringSplit(payload,(ushort)';',p);
    if(k>=8)
    {
@@ -2031,10 +2031,10 @@ void ReconcileLockstate(bool periodic=false)   // restriktivsten Zustand aus GV 
       long   fCool  =StringToInteger(p[5]);
       double fDayR  =StringToDouble(p[6]);
       int    fConsec=(int)StringToInteger(p[7]);
-      bool   restored=false;   // eine noch AKTIVE Sperre musste aus der Datei zurueckgeholt werden -> GV manipuliert
+      bool   restored=false;   // a still ACTIVE lock had to be restored from the file -> GV was tampered with
       if(fHard==1 && !IsHardLocked()){ GlobalVariableSet(GV_HARD_LOCK,1); restored=true; if(!periodic) Notify(T("tamper.hardLockRestored"),false,true); }
       datetime gLockU=GlobalVariableCheck(GV_LOCK_UNTIL)?(datetime)GlobalVariableGet(GV_LOCK_UNTIL):0;
-      if((datetime)fLockU>gLockU && (datetime)fLockU>SrvTime()){ GlobalVariableSet(GV_LOCK_UNTIL,(double)fLockU); restored=true; }   // nur noch AKTIVE Tagessperre zurueckholen (abgelaufene nicht -> RollNewDay-Clear bleibt)
+      if((datetime)fLockU>gLockU && (datetime)fLockU>SrvTime()){ GlobalVariableSet(GV_LOCK_UNTIL,(double)fLockU); restored=true; }   // only restore a still ACTIVE day lock (not an expired one -> the RollNewDay clear stands)
       if(fWeek==WeekIdx() && (!GlobalVariableCheck(GV_WEEK_LOCK)||(long)GlobalVariableGet(GV_WEEK_LOCK)!=WeekIdx()))
          { GlobalVariableSet(GV_WEEK_LOCK,(double)WeekIdx()); restored=true; }
       if(fTgt==1 && fDay==(long)ServerDayKey() && !TargetHit()) GlobalVariableSet(GV_TARGET_HIT,1);
@@ -2045,7 +2045,7 @@ void ReconcileLockstate(bool periodic=false)   // restriktivsten Zustand aus GV 
          if(fDayR  >GlobalVariableGet(GV_DAY_RISK))    GlobalVariableSet(GV_DAY_RISK,fDayR);
          if(fConsec>(int)GlobalVariableGet(GV_CONSEC)) GlobalVariableSet(GV_CONSEC,(double)fConsec);
       }
-      if(k>=9)   // §04-fix (mittel): R4b-Basis aus der Datei zuruecklesen, falls die GVs (4-Wochen-Ablauf) sie verloren haben — Feld 9 enthaelt nur BESTAETIGTE Basen
+      if(k>=9)   // §04-fix (medium): read the R4b base back from the file if the GVs (4-week expiry) lost it — field 9 holds CONFIRMED bases only
       {
          double fInit=StringToDouble(p[8]);
          if(fInit>0 && (!GlobalVariableCheck(GV_INIT_BAL) || GlobalVariableGet(GV_INIT_BAL)<=0))
@@ -2059,18 +2059,18 @@ void ReconcileLockstate(bool periodic=false)   // restriktivsten Zustand aus GV 
 }
 
 // v0.17: robuster TickValue (Wert je Tick je Lot, i.d.R. Konto-Waehrung). Fallback, falls Broker 0 liefert,
-// damit das Risiko in der Enforcement nie faelschlich als 0 erscheint (sonst wuerde R1/R12/R17 nicht greifen).
+// so that the risk never wrongly appears as 0 in enforcement (otherwise R1/R12/R17 would not take effect).
 double TickVal(string s)
 {
    double tv=MarketInfo(s,MODE_TICKVALUE);
    if(tv>0){ return tv; }
    double ts=MarketInfo(s,MODE_TICKSIZE), cs=MarketInfo(s,MODE_LOTSIZE);
-   if(ts>0 && cs>0)   // grobe Schaetzung in Quote-Waehrung (ohne FX-Konvertierung) -> besser als 0
+   if(ts>0 && cs>0)   // rough estimate in quote currency (no FX conversion) -> better than 0
    {
-      // §07-fix: Die Schaetzung ist SELBSTKONSISTENT — CalcLot und EnforceRisk rechnen mit demselben falschen Wert,
-      //   der Fehler blieb dadurch unsichtbar. Eine verlaessliche FX-Konvertierung ist ohne Broker-spezifische
-      //   Symbolnamen nicht seriös herzuleiten; also wird der Zustand jetzt wenigstens SICHTBAR gemacht
-      //   (Panel/Cockpit-Flag + taegliche Warnung), damit man das Symbol/die Kontowaehrung prueft.
+      // §07-fix: the estimate is SELF-CONSISTENT — CalcLot and EnforceRisk compute with the same wrong value,
+      //   which kept the error invisible. A reliable FX conversion cannot be derived soundly without broker-specific
+      //   symbol names; so the state is at least made VISIBLE now
+      //   (panel/cockpit flag + daily warning), so that the symbol/account currency gets checked.
       g_tvEstimate=true;
       if(DayKeyOf(g_lastTvWarnDay)!=DayKeyOf(SrvTime()))
       { g_lastTvWarnDay=SrvTime(); PrintFormat("Mamal: WARN TickValue fuer %s nicht verfuegbar -> Schaetzung in QUOTE-Waehrung (Risiko ungenau, NICHT konvertiert!). Symbol/Kontowaehrung pruefen.", s);
@@ -2079,7 +2079,7 @@ double TickVal(string s)
    }
    return 0;
 }
-// R3-Basis: EINE %-Basis fuer additiven Pfad UND Rekonstruktion (stabile Tagesbasis, kein Live-Equity-Drift)
+// R3 base: ONE % base for the additive path AND for reconstruction (stable daily base, no live equity drift)
 double DayRiskBase()
 {
    double b = GlobalVariableCheck(GV_DAYSTART_EQ) ? GlobalVariableGet(GV_DAYSTART_EQ) : 0;
@@ -2095,11 +2095,11 @@ double RiskPctOfBase(string s,double lots,double open,double sl,double base)
    return (MathAbs(open-sl)/ts)*tv*lots/base*100.0;
 }
 
-//--- R3-Reconciliation: Tagesbudget (RG_DAY_RISK) aus Broker-Daten rekonstruieren (crash-fest) ---
-// R3 zaehlt HEUTE EROEFFNETES Risiko ("Schuesse"), KEIN Refund. Nach Crash/Restart kann der additive
-// RG_DAY_RISK fehlen -> aus offenen + heute geschlossenen TOOL-Trades (Magic) rekonstruieren, jede
-// Position EINMAL (ProcKey-Gruppierung, Partial-Closes summieren zur Entry-Lotzahl). Denominator =
-// stabile Tagesbasis (RG_DAYSTART_EQ), NICHT Live-Equity -> kein intraday-Drift. Anwendung via max(persisted,rekonstruiert).
+//--- R3 reconciliation: rebuild the daily budget (RG_DAY_RISK) from broker data (crash-proof) ---
+// R3 counts risk OPENED TODAY ("shots"), NO refund. After a crash/restart the additive
+// RG_DAY_RISK can be missing -> rebuild it from open + today's closed TOOL trades (Magic), each
+// position ONCE (ProcKey grouping, partial closes summed back to the entry lot size). Denominator =
+// stable daily base (RG_DAYSTART_EQ), NOT live equity -> no intraday drift. Applied via max(persisted, reconstructed).
 void RDR_Add(string &k[],double &lots[],double &open[],string &sym[],int &type[],double &sl[],bool &hasSL[],int &n,
              string key,double lt,double op,string sm,int ty,double slv)
 {
@@ -2110,7 +2110,7 @@ void RDR_Add(string &k[],double &lots[],double &open[],string &sym[],int &type[]
 double ReconstructedDayRiskPct()
 {
    long   today = ServerDayKey();
-   double base  = DayRiskBase(); if(base<=0) return 0;   // gleiche Basis wie der additive R3-Pfad
+   double base  = DayRiskBase(); if(base<=0) return 0;   // same base as the additive R3 path
 
    string gKey[]; double gLots[]; double gOpen[]; string gSym[]; int gType[]; double gSL[]; bool gHasSL[];
    int gN=0;
@@ -2119,13 +2119,13 @@ double ReconstructedDayRiskPct()
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
       int ty=OrderType(); if(ty!=OP_BUY && ty!=OP_SELL) continue;
-      if(OrderMagicNumber()!=InpMagic) continue;                       // R3 = nur Tool-Trades (wie der additive Pfad)
-      if(DayKeyOf(OrderOpenTime()-InpDayResetHour*3600)!=today) continue;                   // gestern eroeffnet -> kein heutiger Schuss
+      if(OrderMagicNumber()!=InpMagic) continue;                       // R3 = tool trades only (like the additive path)
+      if(DayKeyOf(OrderOpenTime()-InpDayResetHour*3600)!=today) continue;                   // opened yesterday -> not a shot from today
       RDR_Add(gKey,gLots,gOpen,gSym,gType,gSL,gHasSL,gN,
               ProcKey(OrderOpenTime(),ty,OrderSymbol(),OrderMagicNumber(),OrderOpenPrice()),
               OrderLots(),OrderOpenPrice(),OrderSymbol(),ty,OrderStopLoss());
    }
-   // (2) heute eroeffnete Tool-Positionen aus History (Teil-Closes summieren zur Entry-Lotzahl, EINMAL pro Position)
+   // (2) tool positions opened today from history (sum partial closes back to the entry lot size, ONCE per position)
    int tot=OrdersHistoryTotal();
    for(int i=0;i<tot;i++)
    {
@@ -2142,8 +2142,8 @@ double ReconstructedDayRiskPct()
    for(int g=0;g<gN;g++)
    {
       double rp = gHasSL[g] ? RiskPctOfBase(gSym[g],gLots[g],gOpen[g],gSL[g],base) : 0;
-      // §07-fix: Diese Zeile lief alle 15 s erneut und hat die Audit-CSV den ganzen Tag mit identischen INFO-Zeilen
-      //   geflutet (eine SL-lose Position = ~5.760 Zeilen/Tag). Jetzt nur noch als Print, max. 1x/Tag.
+      // §07-fix: This line ran again every 15 s and flooded the audit CSV all day long with identical INFO lines
+      //   (one position without SL = ~5,760 lines/day). Now only as a Print, max. 1x/day.
       if(rp<=0)
       { rp=EffRiskPct();
         if(DayKeyOf(g_lastRdrWarnDay)!=DayKeyOf(SrvTime()))
@@ -2156,19 +2156,19 @@ void ReconcileDayRisk()
 {
    double persisted     = GlobalVariableCheck(GV_DAY_RISK) ? GlobalVariableGet(GV_DAY_RISK) : 0;
    double reconstructed = ReconstructedDayRiskPct();
-   if(reconstructed > persisted + 0.0001)   // nur RAISEN (kein Refund) -> max(persisted, rekonstruiert)
+   if(reconstructed > persisted + 0.0001)   // only RAISE (no refund) -> max(persisted, reconstructed)
    {
       GlobalVariableSet(GV_DAY_RISK, reconstructed); GlobalVariablesFlush();
       Journal("INFO","-","-",0,0,0,0,reconstructed,StringFormat("R3 Reconcile DayRisk %.2f%% -> %.2f%% (rekonstruiert)",persisted,reconstructed));
    }
 }
 
-// v0.28: Master-Wahl per Heartbeat (terminal-weite GlobalVariables). Nur der Master erzwingt/schreibt.
-// Master stirbt/entfernt -> Heartbeat wird stale (>6s) -> naechste Instanz uebernimmt. Fail-safe: solange
-// mind. eine Instanz laeuft, ist das Konto ueberwacht. Enforcement ist kontoweit (nach Magic, nicht Symbol),
-// also reicht EINE Instanz voellig.
-//  Fixe nach Verify: Identitaet in DOUBLE (ChartID>2^53 -> long->double->long verlor sich); Uhr = TimeLocal
-//  (fuer alle Instanzen im Terminal identisch, kein Server-Offset-Drift); Stale bidirektional (Uhr-Ruecksprung).
+// v0.28: master election via heartbeat (terminal-wide GlobalVariables). Only the master enforces/writes.
+// Master dies/is removed -> heartbeat goes stale (>6s) -> the next instance takes over. Fail-safe: as long as
+// at least one instance is running, the account is monitored. Enforcement is account-wide (by Magic, not symbol),
+// so ONE instance is entirely enough.
+//  Fixes after verify: identity in DOUBLE (ChartID>2^53 -> long->double->long lost itself); clock = TimeLocal
+//  (identical for all instances in the terminal, no server-offset drift); stale check bidirectional (clock jumping back).
 bool ClaimMaster()
 {
    double   myKey = (double)ChartID();
@@ -2178,45 +2178,45 @@ bool ClaimMaster()
    double   dt  = (double)((long)now-(long)hb); if(dt<0.0) dt=-dt;   // Betrag: vergangen ODER zukunft = stale
    if(mid==myKey)   // ich bin bereits Master -> Heartbeat auffrischen (double round-trip exakt -> erkenne mich wieder)
    { GlobalVariableSet(GV_MASTER_HB,(double)now); return true; }
-   if(mid==0.0)   // §07-fix: freien Slot ATOMAR beanspruchen — zwei gleichzeitig startende Instanzen konnten sich sonst
-   {              //   beide als Master sehen (Set war nicht atomar). SetOnCondition setzt nur, wenn der Wert noch 0 ist.
-      // v0.42-fix (KRITISCH): SetOnCondition legt eine FEHLENDE Variable NICHT an (Err 4058) -> nach einem
-      //   GlobalVariableDel(GV_MASTER) (alte Deinit-Freigabe / F3) war NIE wieder eine Master-Wahl moeglich.
-      //   Slot bei Bedarf erst anlegen (Temp, Wert 0.0) — die Claim-Atomik bleibt: es gewinnt genau EINER.
+   if(mid==0.0)   // §07-fix: claim a free slot ATOMICALLY — otherwise two instances starting at the same time could both
+   {              //   see themselves as master (Set was not atomic). SetOnCondition only sets if the value is still 0.
+      // v0.42-fix (CRITICAL): SetOnCondition does NOT create a MISSING variable (Err 4058) -> after a
+      //   GlobalVariableDel(GV_MASTER) (old deinit release / F3) a master election was NEVER possible again.
+      //   Create the slot first if needed (temp, value 0.0) — the claim atomicity remains: exactly ONE wins.
       if(!GlobalVariableCheck(GV_MASTER)) GlobalVariableTemp(GV_MASTER);
       if(!GlobalVariableSetOnCondition(GV_MASTER,myKey,0.0)) return false;   // ein anderer war schneller
       GlobalVariableSet(GV_MASTER_HB,(double)now); return true;
    }
    if(dt>10.0)   // verwaist (>10s Schwelle: Puffer gegen langsame/eingefrorene Cycles unter Wine; Hysterese verhindert Doppel-Handeln bei Wett-Claim)
-   { if(!GlobalVariableSetOnCondition(GV_MASTER,myKey,mid)) return false;    // nur uebernehmen, wenn der Slot noch dem stalen Master gehoert
+   { if(!GlobalVariableSetOnCondition(GV_MASTER,myKey,mid)) return false;    // only take over if the slot still belongs to the stale master
      GlobalVariableSet(GV_MASTER_HB,(double)now); return true; }
-   return false;   // anderer ist frischer Master
+   return false;   // another one is the fresher master
 }
 void Cycle()
 {
-   UpdateSrvOffset();   // §04-fix (mittel): Offset auch aus OnTimer nachziehen — TimeCurrent bewegt sich mit JEDER Market-Watch-Quote, nicht nur mit Chart-Ticks
-   if(g_armed!=0 && GetTickCount()-g_armMs > 30000) g_armed=0;   // v0.28: FOMO-Arm-Timeout auf JEDER Instanz (nicht nur Master)
+   UpdateSrvOffset();   // §04-fix (medium): also refresh the offset from OnTimer — TimeCurrent moves with EVERY Market Watch quote, not only with chart ticks
+   if(g_armed!=0 && GetTickCount()-g_armMs > 30000) g_armed=0;   // v0.28: FOMO arm timeout on EVERY instance (not just the master)
 
-   // v0.28: Einzel-Instanz-Sperre + Hysterese. Nur der bestaetigte Master (>=2 Cycles in Folge) erzwingt + schreibt Dateien
-   // (Journal/Lockstate/Cockpit/Flush). Verhindert Datei-Kollision bei EA auf mehreren Charts (= Wine-Crash beim TP/SL-Verschieben)
-   // UND Startup-/Wett-Claim-Bursts. Passive Instanzen zeigen nur ihr Panel; BUY/SELL funktioniert auf jedem Chart (Klick-Pfad).
+   // v0.28: single-instance lock + hysteresis. Only the confirmed master (>=2 cycles in a row) enforces + writes files
+   // (journal/lockstate/cockpit/flush). Prevents file collisions when the EA runs on several charts (= Wine crash when moving TP/SL)
+   // AND startup/race-claim bursts. Passive instances only show their panel; BUY/SELL works on any chart (click path).
    g_masterStreak = ClaimMaster() ? (g_masterStreak+1) : 0;
    if(g_masterStreak < 2)
    {
-      // v0.38 (Verify): abweichendes InpMagic auf einem passiven Chart = dessen Panel-Trades waeren fuer den
-      //   Master unsichtbar (weder InScope noch R22) -> unbewacht. Einmalig deutlich warnen.
+      // v0.38 (verify): a differing InpMagic on a passive chart = its panel trades would be
+      //   invisible to the master (neither InScope nor R22) -> unguarded. Warn clearly, once.
       static bool magicWarned=false;
       if(!magicWarned && GlobalVariableCheck(GV_MAGIC) && (int)GlobalVariableGet(GV_MAGIC)!=InpMagic)
       { magicWarned=true; Notify(TF("cfg.magicMismatchMaster",IntegerToString(InpMagic),IntegerToString((int)GlobalVariableGet(GV_MAGIC)))); }
-      // v0.42-fix: KEIN Master heisst KEIN Enforcement, KEINE Close-Wertung, KEINE Cockpit-Daten.
+      // v0.42-fix: NO master means NO enforcement, NO close evaluation, NO cockpit data.
       //   Dieser Zustand war bisher voellig unsichtbar (Panel lief weiter) — jetzt laut melden.
-      // v0.43-fix: NUR alarmieren, wenn WIRKLICH NIEMAND Master ist (Slot frei/verwaist). Eine passive
-      //   Instanz ist der Normalfall (genau EINE ist Master) — die darf nicht dauernd warnen.
+      // v0.43-fix: only alarm if REALLY NOBODY is master (slot free/orphaned). A passive
+      //   instance is the normal case (exactly ONE is master) — it must not warn constantly.
       bool someoneIsMaster = (GlobalVariableCheck(GV_MASTER) && GlobalVariableGet(GV_MASTER)!=0.0
                               && GlobalVariableCheck(GV_MASTER_HB)
                               && MathAbs((double)((long)TimeLocal()-(long)GlobalVariableGet(GV_MASTER_HB)))<=10.0);
-      // v0.45 (Verify): zeitbasiert statt cycle-basiert (Cycle-Takt haengt an InpTimerSeconds) und Latch
-      //   wird beim Wechsel in den Master-Zustand ebenfalls entschaerft (g_noMasterSince=0 im Master-Pfad).
+      // v0.45 (verify): time-based instead of cycle-based (the cycle rate depends on InpTimerSeconds) and the latch
+      //   is also cleared when switching into the master state (g_noMasterSince=0 in the master path).
       if(!someoneIsMaster){ if(g_noMasterSince==0) g_noMasterSince=SrvTime(); }
       else { g_noMasterSince=0; g_noMasterWarned=false; }
       if(g_noMasterSince>0 && SrvTime()-g_noMasterSince>=30 && !g_noMasterWarned)
@@ -2232,10 +2232,10 @@ void Cycle()
       if(nowp-g_lastPanelMs >= (uint)InpPanelMs){ g_lastPanelMs=nowp; DrawPanel(ddp, TotalDDpct(), !IsTradeAllowed()); }
       return;
    }
-   GlobalVariableSet(GV_MAGIC,(double)InpMagic);   // v0.38: Master publiziert sein InpMagic (Divergenz-Check der passiven Charts)
-   g_noMasterSince=0; g_noMasterWarned=false;      // v0.45: als Master ist der Ausfall-Latch entschaerft
-   // v0.38-fix (Verify): Selbstheilung — startete der EA VOR dem Broker-Handshake (Autostart-Race:
-   //   Balance/Historie noch leer -> Basis 0, fail-closed), Basis nachziehen sobald Kontodaten da sind.
+   GlobalVariableSet(GV_MAGIC,(double)InpMagic);   // v0.38: master publishes its InpMagic (divergence check for the passive charts)
+   g_noMasterSince=0; g_noMasterWarned=false;      // v0.45: as master the outage latch is cleared
+   // v0.38-fix (verify): self-healing — if the EA started BEFORE the broker handshake (autostart race:
+   //   balance/history still empty -> base 0, fail-closed), refresh the base as soon as account data is there.
    if(g_initialBalance<=0 && AccountBalance()>0)
    {
       double dep=DepositBase();
@@ -2247,29 +2247,29 @@ void Cycle()
       Notify(TF("base.reloaded",DoubleToString(g_initialBalance,2),(dep>0)?"Einzahlung":"Balance"));
    }
    long today=ServerDayKey();
-   // §07-fix (hoch): Tages-Roll nur mit Bestaetigung durch die (lokal nicht faelschbare) Broker-Zeit -> PC-Uhr vorstellen
-   //   wischt Sperre/Basis/Serie nicht mehr weg.
+   // §07-fix (high): daily roll only with confirmation from the (locally unforgeable) broker time -> moving the PC clock forward
+   //   no longer wipes lock/base/streak.
    if(!GlobalVariableCheck(GV_DAYSTART_DAY)) RollNewDay(false);
    else if((long)GlobalVariableGet(GV_DAYSTART_DAY)!=today)
    { if(ServerDayRollConfirmed((long)GlobalVariableGet(GV_DAYSTART_DAY))) RollNewDay(false);
      else WarnUnconfirmedRoll("Tageswechsel"); }
-   // v0.30-fix: EFF-Limits + Schutz-aus-Zaehler EINMAL pro Tag, NUR vom Master (hier sind wir im Master-Pfad) -> deterministisch = Master-Input, kein loses Limit durch Init-Reihenfolge/Handoff
+   // v0.30-fix: EFF limits + protection-off counter ONCE per day, ONLY from the master (we are in the master path here) -> deterministic = master input, no loose limit from init order/handoff
    if(!GlobalVariableCheck(GV_EFF_DAY) || (long)GlobalVariableGet(GV_EFF_DAY)!=today)
    { GlobalVariableSet(GV_EFF_DAY,(double)today);
      if(InpDailyLossPct>0) GlobalVariableSet(GV_EFF_DL,InpDailyLossPct);   // Tageswechsel: ein evtl. gelockertes Limit greift jetzt
      if(InpMaxLossPct>0)   GlobalVariableSet(GV_EFF_ML,InpMaxLossPct);
-     // §06-fix: alle uebrigen sperr-relevanten Inputs ebenfalls erst am Tageswechsel aus dem Input uebernehmen (Lockern nur hier)
+     // §06-fix: take all remaining lock-relevant inputs from the input only at the day change as well (loosening only here)
      GlobalVariableSet(GV_EFF_WEEK,   InpWeeklyLossPct);
      GlobalVariableSet(GV_EFF_WARN,   InpMaxLossWarnPct);
      GlobalVariableSet(GV_EFF_GIVE,   InpGivebackPct);
-     GlobalVariableSet(GV_EFF_RISK,   DesiredRiskPct());   // v0.36: Wochenwahl (oder Input-Default) — nicht mehr der Roh-Input
+     GlobalVariableSet(GV_EFF_RISK,   DesiredRiskPct());   // v0.36: weekly choice (or input default) — no longer the raw input
      GlobalVariableSet(GV_EFF_LOCKAFT,(double)InpLockAfter);
      GlobalVariableSet(GV_EFF_CDAFT,  (double)InpCooldownAfter);
      GlobalVariableSet(GV_EFF_CDMIN,  (double)InpCooldownMin);
      GlobalVariableSet(GV_EFF_REQSL,  InpRequireSL?1:0);
      GlobalVariableSet(GV_EFF_REQTP,  InpRequireTP?1:0);
      GlobalVariableSet(GV_EFF_CORR,   InpUseCorrCap?1:0);
-     GlobalVariableSet(GV_TIGHT_LATCH,InpTightenOnly?1:0);   // Latch nur hier neu setzen -> intraday nicht abschaltbar
+     GlobalVariableSet(GV_TIGHT_LATCH,InpTightenOnly?1:0);   // re-set the latch only here -> cannot be switched off intraday
      GlobalVariableSet(GV_PROTOFF,0); GlobalVariableSet(GV_PROT_LATCH,0);
      GlobalVariableSet(GV_BLOCKS,0); GlobalVariableSet(GV_FILLS,0); GlobalVariableSet(GV_BLK_BURST,0);   // v0.32: Versuche-Zaehler taeglich zuruecksetzen
      g_gvDirty=true; }
@@ -2279,42 +2279,42 @@ void Cycle()
    if(base<=0){ base=MathMax(AccountBalance(),eq); if(base<=0) base=1; GlobalVariableSet(GV_DAYSTART_EQ,base); }
 
    double dailyDDpct = (base-eq)/base*100.0;   if(dailyDDpct<0) dailyDDpct=0;
-   double totalDDpct = TotalDDpct();           // P0-2: guarded (g_initialBalance<=0 -> 0, keine Division durch 0)
+   double totalDDpct = TotalDDpct();           // P0-2: guarded (g_initialBalance<=0 -> 0, no division by 0)
 
    // R18: Wochenwechsel + Wochenlimit
-   long wk=WeekIdx();   // mit gespeichertem (effektivem) Wochenstart -> eine Input-Aenderung verschiebt den Key NICHT (kein kuenstlicher Roll)
-   bool wkOk = (!GlobalVariableCheck(GV_WEEK_IDX)) || ServerWeekRollConfirmed((long)GlobalVariableGet(GV_WEEK_IDX));   // §07-fix: auch der Wochen-Roll braucht Broker-Bestaetigung
+   long wk=WeekIdx();   // with the stored (effective) week start -> an input change does NOT shift the key (no artificial roll)
+   bool wkOk = (!GlobalVariableCheck(GV_WEEK_IDX)) || ServerWeekRollConfirmed((long)GlobalVariableGet(GV_WEEK_IDX));   // §07-fix: the weekly roll needs broker confirmation too
    if(GlobalVariableCheck(GV_WEEK_IDX) && (long)GlobalVariableGet(GV_WEEK_IDX)!=wk && !wkOk) WarnUnconfirmedRoll("Wochenwechsel");
    if(wkOk && (!GlobalVariableCheck(GV_WEEK_IDX) || (long)GlobalVariableGet(GV_WEEK_IDX)!=wk))
-   { if(InpWeekStartDay!=EffWeekStart()){ GlobalVariableSet(GV_EFF_WS,(double)InpWeekStartDay); wk=WeekIdx(); }   // §05-fix: geaenderten Wochenstart NUR am echten Rollover uebernehmen, dann konsistent neu berechnen
+   { if(InpWeekStartDay!=EffWeekStart()){ GlobalVariableSet(GV_EFF_WS,(double)InpWeekStartDay); wk=WeekIdx(); }   // §05-fix: adopt a changed week start ONLY at a real rollover, then recompute consistently
      GlobalVariableSet(GV_WEEK_IDX,(double)wk);
-     GlobalVariableSet(GV_WEEKSTART_EQ,MathMax(MathMax(AccountBalance(),eq),ReconstructedBalanceAt(ServerWeekStart())));   // §04-fix (mittel): verspaeteter Wochen-Roll (Weekend-Gap) -> Anker-Balance aus History statt gefallenem Ist-Stand
+     GlobalVariableSet(GV_WEEKSTART_EQ,MathMax(MathMax(AccountBalance(),eq),ReconstructedBalanceAt(ServerWeekStart())));   // §04-fix (medium): delayed weekly roll (weekend gap) -> anchor balance from history instead of the dropped current value
      GlobalVariableSet(GV_WEEK_LOCK,0);
-     // v0.36: Wochen-Risiko in die neue Woche uebernehmen; eine vorgemerkte Erhoehung greift JETZT.
-     // v0.62-FIX (R23): Der Roll schreibt GV_WEEK_RISK_IDX NICHT mehr. Vorher setzte er ihn auf die neue
-     //   Woche -> WeekRiskSet() blieb dauerhaft true -> das geforderte woechentliche Festlegen fand faktisch
-     //   nur EIN einziges Mal statt (beim allerersten Mal). Der Index bedeutet jetzt ausschliesslich
-     //   "in DIESER Woche bestaetigt" und wird nur noch von SetWeekRisk() gesetzt — also nur durch eine
-     //   echte Bestaetigung des Traders.
-     //   Wichtig: der WERT wandert weiter (GV_WEEK_RISK/GV_EFF_RISK), sonst faellt EffRiskPct() auf den
-     //   Input-Default und R1/R2/R12 wuerden Wochenend-Positionen am Montag zwangsschliessen.
-     //   Wichtig 2: die Entscheidung "Pflicht ja/nein" faellt NICHT hier. Der Roll laeuft nur auf dem
+     // v0.36: carry the weekly risk into the new week; a pre-booked increase takes effect NOW.
+     // v0.62-FIX (R23): The roll no longer writes GV_WEEK_RISK_IDX. Before, it set it to the new
+     //   week -> WeekRiskSet() stayed true permanently -> the required weekly commitment in fact happened
+     //   only ONE single time (the very first time). The index now means exclusively
+     //   "confirmed in THIS week" and is only set by SetWeekRisk() — that is, only by a
+     //   real confirmation from the trader.
+     //   Important: the VALUE still travels on (GV_WEEK_RISK/GV_EFF_RISK), otherwise EffRiskPct() falls back to the
+     //   input default and R1/R2/R12 would force-close weekend positions on Monday.
+     //   Important 2: the decision "mandatory yes/no" is NOT made here. The roll runs only on the
      //   Master; haenge dieses Gate an dessen Inputs, koennte ein Chart mit InpRequireWeeklyRisk=false
-     //   die Pflicht fuer alle anderen Instanzen aufheben. Gegatet wird lokal ueber WeekRiskPending().
-     //   Wichtig 3 (v0.62): Eine VORGEMERKTE Aenderung wird bei aktiver Pflicht NICHT vom Roll aktiviert.
-     //   Sie ist ein Vorschlag des Traders, keine Anweisung — und R23 verlangt fuer jede Woche eine
-     //   Bestaetigung. Sonst gaebe es zwei Schaeden: (a) eine vorgemerkte SENKUNG wuerde GV_EFF_RISK
-     //   autonom druecken, und EnforceRisk (R1) liefe im SELBEN Cycle -> Wochenend-Positionen wuerden am
-     //   Montag zwangsliquidiert, der Verlust-Close zaehlte als Trader-Verschulden in Serie/Cooldown;
-     //   (b) eine vorgemerkte ERHOEHUNG wuerde die ganze Auto-Scale-Kaskade (Idee/Heat/Tagesbudget) in
-     //   einer Woche lockern, die der Trader nie bestaetigt hat. Die Vormerkung bleibt deshalb stehen und
-     //   wird erst von SetWeekRisk() verbraucht — sie belegt bis dahin nur das Eingabefeld vor.
+     //   lift the obligation for all other instances. Gating happens locally via WeekRiskPending().
+     //   Important 3 (v0.62): A PRE-BOOKED change is NOT activated by the roll while the obligation is active.
+     //   It is a suggestion by the trader, not an instruction — and R23 demands a confirmation for every
+     //   week. Otherwise there would be two kinds of damage: (a) a pre-booked REDUCTION would push GV_EFF_RISK
+     //   down autonomously, and EnforceRisk (R1) would run in the SAME cycle -> weekend positions would be
+     //   force-liquidated on Monday, and the losing close would count as the trader's fault in streak/cooldown;
+     //   (b) a pre-booked INCREASE would loosen the whole auto-scale cascade (idea/heat/daily budget) in
+     //   a week the trader never confirmed. The pre-booking therefore stays in place and
+     //   is only consumed by SetWeekRisk() — until then it merely pre-fills the input field.
      if(GlobalVariableCheck(GV_WEEK_RISK) && GlobalVariableGet(GV_WEEK_RISK)>0)
      { double pend=PendingWeekRisk(); double old=GlobalVariableGet(GV_WEEK_RISK);
-       bool   hold = WeekRiskPending();                       // Bestaetigung steht aus -> nichts autonom aendern
+       bool   hold = WeekRiskPending();                       // confirmation is pending -> change nothing autonomously
        double nr = (pend>0 && !hold) ? pend : old; if(nr>RiskCap()) nr=RiskCap();
        GlobalVariableSet(GV_WEEK_RISK,nr);
-       GlobalVariableSet(GV_EFF_RISK,nr);   // Wert wandert mit; ohne das faellt EffRiskPct() auf den Input-Default (R1-Zwangsclose)
+       GlobalVariableSet(GV_EFF_RISK,nr);   // the value travels along; without it EffRiskPct() falls back to the input default (R1 force-close)
        if(!hold)
        { if(GlobalVariableCheck(GV_WEEK_RISK_NXT)) GlobalVariableDel(GV_WEEK_RISK_NXT);
          if(pend>0 && MathAbs(nr-old)>0.0001) Notify(TF("cfg.weekRiskNowActive",DoubleToString(nr,2))); }
@@ -2332,7 +2332,7 @@ void Cycle()
 
    // R13: Tages-Hoch, Tagesziel, Giveback
    double peak=GlobalVariableGet(GV_PEAK_EQ); if(peak<=0){ peak=eq; GlobalVariableSet(GV_PEAK_EQ,eq); g_gvDirty=true; }
-   if(eq>peak){ peak=eq; GlobalVariableSet(GV_PEAK_EQ,eq); g_gvDirty=true; }   // §07-fix: Peak wurde nie als dirty markiert -> ging bei Crash verloren (R13-Giveback-Anker)
+   if(eq>peak){ peak=eq; GlobalVariableSet(GV_PEAK_EQ,eq); g_gvDirty=true; }   // §07-fix: peak was never marked dirty -> lost on a crash (R13 giveback anchor)
    double profitPct     = (eq-base)/base*100.0;
    double peakProfitPct = (peak-base)/base*100.0;
    double dropFromPeak  = (peak-eq)/base*100.0;
@@ -2341,19 +2341,19 @@ void Cycle()
    if(EffGivebackPct()>0 && !IsLocked() && peakProfitPct>=InpGivebackArmPct && dropFromPeak>=EffGivebackPct())
    { GlobalVariableSet(GV_LOCK_UNTIL,(double)NextServerMidnight()); GlobalVariableSet(GV_LOCK_WHY,3); g_gvDirty=true; Notify(TF("lock.giveback",DoubleToString(peakProfitPct,2),DoubleToString(profitPct,2))); }
 
-   TightenOnlyLimits();   // v0.30: Verlust-Limits nur enger stellbar; Lockern erst zum Tageswechsel
+   TightenOnlyLimits();   // v0.30: loss limits can only be set tighter; loosening only at the day change
 
    bool tradingDisabled = !IsTradeAllowed();
-   bool protLatch = (GlobalVariableGet(GV_PROT_LATCH)>0.5);   // v0.30-fix: GETEILTER Latch -> Master-Handoff zaehlt dieselbe Schutz-aus-Episode nicht doppelt
+   bool protLatch = (GlobalVariableGet(GV_PROT_LATCH)>0.5);   // v0.30-fix: SHARED latch -> a master handoff does not count the same protection-off episode twice
    if(tradingDisabled && !protLatch)
    { double poc=GlobalVariableGet(GV_PROTOFF)+1; GlobalVariableSet(GV_PROTOFF,poc); GlobalVariableSet(GV_PROT_LATCH,1);
-     GlobalVariableSet(GV_PROT_SINCE,(double)SrvTime()); PersistLatch();   // §07-fix: Beginn der Schutz-aus-Phase merken
+     GlobalVariableSet(GV_PROT_SINCE,(double)SrvTime()); PersistLatch();   // §07-fix: remember the start of the protection-off phase
      Notify(TF("watchdog.autoTradingOff",IntegerToString((int)poc))); Journal("PROTECT_OFF","-","-",0,0,0,0,0,StringFormat("AutoTrading AUS — Watchdog kann NICHT schliessen (heute #%d)",(int)poc)); }
    if(!tradingDisabled && protLatch)
    {
-      // §07-fix: Der AutoTrading-Schalter ist der billigste Ein-Klick-Bypass — das Enforcement steht still, waehrend die
-      //   zeitbasierten Fristen (Cooldown, Tages-/Wochensperre, Revenge) ungebremst weiterliefen. Aussitzen brachte also
-      //   einen Vorteil. Jetzt: die Ausfallzeit wird auf alle noch AKTIVEN Fristen aufgeschlagen.
+      // §07-fix: The AutoTrading switch is the cheapest one-click bypass — enforcement stands still while the
+      //   time-based deadlines (cooldown, daily/weekly lock, revenge) kept running unchecked. So sitting it out paid
+      //   off. Now: the downtime is added onto all deadlines that are still ACTIVE.
       datetime ps=(datetime)GlobalVariableGet(GV_PROT_SINCE);
       int off=(ps>0)?(int)(SrvTime()-ps):0; if(off<0) off=0; if(off>86400) off=86400;   // Deckel: max 1 Tag
       if(off>5)
@@ -2377,39 +2377,39 @@ void Cycle()
    if(!IsDayLocked() && !IsHardLocked() && dailyDDpct>=EffDailyLoss())
    { GlobalVariableSet(GV_LOCK_UNTIL,(double)NextServerMidnight()); GlobalVariableSet(GV_LOCK_WHY,1); PersistLatch(); WriteLockstate(); Notify(TF("lock.dailyLoss",DoubleToString(dailyDDpct,2))); }
 
-   // §05-fix (hoch): Sperren periodisch (5s) gegen die signierte Lockstate-Datei abgleichen. Faengt das intraday-Loeschen
-   //   der RG_*-GlobalVariables per F3 -> aktive Sperre wird aus der Datei wiederhergestellt (nicht vom EA ueberschrieben).
-   if(!IsTradeContextBusy() && GetTickCount()-g_lastLockReconcileMs >= 5000){ g_lastLockReconcileMs=GetTickCount(); ReconcileLockstate(true); }   // nicht waehrend einer Trade-Op (Wine-Schutz, wie GV-Flush/History-Scan)
+   // §05-fix (high): reconcile locks periodically (5s) against the signed lockstate file. Catches intraday deletion
+   //   of the RG_* GlobalVariables via F3 -> an active lock is restored from the file (not overwritten by the EA).
+   if(!IsTradeContextBusy() && GetTickCount()-g_lastLockReconcileMs >= 5000){ g_lastLockReconcileMs=GetTickCount(); ReconcileLockstate(true); }   // not during a trade op (Wine protection, like GV flush/history scan)
 
-   // v0.22: Voll-History-Scan NICHT 2-3x/Sek (Wine-Freeze-Schutz). Trigger: History-Anzahl geaendert (echter Close -> sofort erfasst, KEIN Enforcement-Loch fuer R5/R6) ODER 2s-Heartbeat (deferred Partial-Close / count-maskierte Faelle).
-   // v0.23: waehrend eine Handelsoperation laeuft (User zieht SL/TP ODER EA schliesst) KEIN schwerer History-Scan/Flush -> nicht mit MT4s eigenem Trade-I/O kollidieren (Wine-Crash beim SL/TP-Verschieben). Wird sofort nachgeholt sobald frei (idempotent, Heartbeat/OnTimer).
+   // v0.22: full history scan NOT 2-3x/sec (Wine freeze protection). Trigger: history count changed (real close -> captured immediately, NO enforcement gap for R5/R6) OR 2s heartbeat (deferred partial close / count-masked cases).
+   // v0.23: while a trade operation is running (user drags SL/TP OR the EA closes) NO heavy history scan/flush -> do not collide with MT4's own trade I/O (Wine crash when moving SL/TP). Caught up immediately once free (idempotent, heartbeat/OnTimer).
    static int  s_lastHistTot   = -1;
    static uint s_lastResolveMs = 0;
    int histTot = OrdersHistoryTotal();
-   // v0.42/v0.45: Cycle-Puls nur noch als Log-Print (nicht mehr ins Audit-Journal — 1.440 INFO-Zeilen/Tag
-   //   verdraengten echte Ereignisse aus der Cockpit-Ansicht). Diagnose bleibt im Experten-Log verfuegbar.
+   // v0.42/v0.45: cycle pulse now only as a log Print (no longer into the audit journal — 1,440 INFO lines/day
+   //   crowded real events out of the cockpit view). Diagnostics stay available in the expert log.
    static uint s_pulseMs=0;
    if(GetTickCount()-s_pulseMs>=60000)
    { s_pulseMs=GetTickCount();
      PrintFormat("Mamal CycleDiag: Ctx=%s HistTotal=%d RGOPN=%d Floor=%s",IsTradeContextBusy()?"BUSY":"frei",histTot,CountOpn(),TimeToString((datetime)GlobalVariableGet(GV_LAST_CLOSE))); }
    if(!IsTradeContextBusy() && (histTot != s_lastHistTot || GetTickCount()-s_lastResolveMs >= 2000))
-   { s_lastHistTot = histTot; s_lastResolveMs = GetTickCount(); BackfillHistory(); ResolveHistory(); ResolveByTicketRegistry(); ResolveManualHistory(); HistoryVisibilityWatch(); }   // P0-2/P0-4: Verlustserie aus History (+§06 Sichtbarkeits-Wachhund, +v0.40 Ticket-Fallback, +v0.44 manuelle Trades fuers Cockpit)
-   if(GetTickCount()-g_lastReconcileMs >= 15000){ g_lastReconcileMs=GetTickCount(); ReconcileDayRisk(); }   // R3: Tagesbudget gedrosselt (15s) aus Broker-Daten abgleichen
+   { s_lastHistTot = histTot; s_lastResolveMs = GetTickCount(); BackfillHistory(); ResolveHistory(); ResolveByTicketRegistry(); ResolveManualHistory(); HistoryVisibilityWatch(); }   // P0-2/P0-4: loss streak from history (+§06 visibility watchdog, +v0.40 ticket fallback, +v0.44 manual trades for the cockpit)
+   if(GetTickCount()-g_lastReconcileMs >= 15000){ g_lastReconcileMs=GetTickCount(); ReconcileDayRisk(); }   // R3: reconcile the daily budget, throttled (15s), against broker data
 
-   // v0.31: User-Modify erkennen (gleiche Anzahl In-Scope-Orders, aber SL/TP geaendert) -> ~2s KEINE neue Enforcement-Enqueue, damit die EA keinen Trade schliesst, den der User gerade bearbeitet (= Wine-Crash-Kernursache).
+   // v0.31: detect user modify (same number of in-scope orders, but SL/TP changed) -> ~2s NO new enforcement enqueue, so the EA does not close a trade the user is currently editing (= root cause of the Wine crash).
    int scN; double scSig=OrderScopeSig(scN);
    if(scN==g_lastScopeN && MathAbs(scSig-g_lastScopeSig)>0.0000001)
    { if(GetTickCount()-g_modifyQuietMs >= 2000) g_modifyQuietStart=GetTickCount();   // vorherige Serie war abgelaufen -> neue Serie beginnt
      g_modifyQuietMs=GetTickCount(); }
    g_lastScopeN=scN; g_lastScopeSig=scSig;
-   // §06-fix (mittel): das Quiet-Fenster ist gleitend und war dadurch UNBEGRENZT verlaengerbar — fortlaufendes SL/TP-Wackeln
-   //   konnte R1/R7/R8/R12 dauerhaft unterdruecken (R7 wurde de facto freiwillig). Jetzt hart gedeckelt: nach 10 s
-   //   ununterbrochener Modify-Serie laeuft das Enforcement wieder, egal wie oft weitergewackelt wird.
+   // §06-fix (medium): the quiet window is sliding and could therefore be extended INDEFINITELY — continuous SL/TP wiggling
+   //   could suppress R1/R7/R8/R12 permanently (R7 became de facto voluntary). Now hard-capped: after 10 s
+   //   of an uninterrupted modify series enforcement runs again, no matter how much the wiggling continues.
    bool modifyQuiet = (GetTickCount()-g_modifyQuietMs < 2000) && (GetTickCount()-g_modifyQuietStart < 10000);
 
-   // v0.47: SL/TP-Verschiebungen je Ticket protokollieren (Verhaltens-Analyse im Cockpit). Bewusst NICHT
-   //   waehrend einer laufenden User-Modify-Serie — sonst wuerde jeder Zwischenschritt des Ziehens
-   //   einzeln als eigene Verschiebung gezaehlt. Erst wenn der Nutzer losgelassen hat, zaehlt das Ergebnis.
+   // v0.47: log SL/TP moves per ticket (behaviour analysis in the cockpit). Deliberately NOT
+   //   during an ongoing user modify series — otherwise every intermediate step of the drag would
+   //   be counted separately as its own move. Only once the user has let go does the result count.
    { static uint s_trackMs=0;
      if(!modifyQuiet && !IsTradeContextBusy() && GetTickCount()-s_trackMs>=2000){ s_trackMs=GetTickCount(); TrackSLTP(); } }
 
@@ -2418,26 +2418,26 @@ void Cycle()
    if(!tradingDisabled && canEnforce)
    {
       g_lastEnforceMs = GetTickCount();
-      if(!modifyQuiet)        EnforceManualTrades();                            // R22: unabhaengig von der Sperre — nur Panel-Trades sind erlaubt
+      if(!modifyQuiet)        EnforceManualTrades();                            // R22: independent of the lock — only panel trades are allowed
       if(IsLocked())          SafeCloseAll();                                   // Sperre = flat, dringend (Close-Site prueft Kontext erneut)
-      else if(!modifyQuiet)   { EnforceSLTP(); EnforceRisk(); EnforceRR(); EnforceHeat(); EnforceIdea(); EnforceEntryState(); }   // waehrend User-Modify: NICHT neu enqueuen (+§05: R5/R13/R16/R25, +§06: R2-Monitor)
-      ProcessCloseQueue();   // Detection hat enqueued -> jetzt tatsaechlich schliessen (Retry/Backoff/Journal; Kontext-Recheck an der Close-Site)
+      else if(!modifyQuiet)   { EnforceSLTP(); EnforceRisk(); EnforceRR(); EnforceHeat(); EnforceIdea(); EnforceEntryState(); }   // during user modify: do NOT re-enqueue (+§05: R5/R13/R16/R25, +§06: R2 monitor)
+      ProcessCloseQueue();   // detection has enqueued -> now actually close (retry/backoff/journal; context recheck at the close site)
    }
 
    uint now=GetTickCount();
    if(now - g_lastPanelMs >= (uint)InpPanelMs){ g_lastPanelMs=now; DrawPanel(dailyDDpct,totalDDpct,tradingDisabled); }
-   WriteLockstate();   // Lockstate-Spiegel aktuell halten (nur bei Aenderung -> Disk; fail-closed .dat, unabhaengig vom GV-Flush)
-   if(g_gvDirty && !IsTradeContextBusy()){ GlobalVariablesFlush(); g_gvDirty=false; }   // v0.22: EIN gebuendelter Flush pro Cycle statt bis zu 4 synchronen; v0.23: nicht waehrend einer Trade-Op flushen (.dat-Spiegel oben bleibt crash-sichere fail-closed Sperr-Persistenz, Flush kommt naechsten Cycle)
-   if(InpCockpit && GetTickCount()-g_lastCockpitMs>=2000){ g_lastCockpitMs=GetTickCount(); WriteCockpit(); }   // v0.26/v0.37: Live-Zustand fuers Cockpit alle 2s. KEIN IsTradeContextBusy-Gate — WriteCockpit macht nur Datei-I/O, fasst den Trade-Thread nie an (sonst veraltete die JSON bei belegtem Kontext, z.B. Close-Queue-Retries)
+   WriteLockstate();   // keep the lockstate mirror current (only on change -> disk; fail-closed .dat, independent of the GV flush)
+   if(g_gvDirty && !IsTradeContextBusy()){ GlobalVariablesFlush(); g_gvDirty=false; }   // v0.22: ONE bundled flush per cycle instead of up to 4 synchronous ones; v0.23: do not flush during a trade op (the .dat mirror above stays the crash-safe fail-closed lock persistence, the flush comes next cycle)
+   if(InpCockpit && GetTickCount()-g_lastCockpitMs>=2000){ g_lastCockpitMs=GetTickCount(); WriteCockpit(); }   // v0.26/v0.37: live state for the cockpit every 2s. NO IsTradeContextBusy gate — WriteCockpit only does file I/O, never touches the trade thread (otherwise the JSON went stale while the context was busy, e.g. close-queue retries)
    // v0.39: Dashboard-Kommando (Tighten-Only). Einzig erlaubtes Kommando: "endday" = freiwillige Selbstsperre
-   //   bis Server-Mitternacht. Lockern ist ueber diesen Kanal PRINZIPIELL unmoeglich (nur Sperre setzen).
+   //   until server midnight. Loosening is IN PRINCIPLE impossible over this channel (only setting a lock).
    if(FileIsExist(COCKPIT_CMD))
    {
       string cmd="";
       int hc=FileOpen(COCKPIT_CMD,FILE_READ|FILE_TXT|FILE_ANSI);
       if(hc!=INVALID_HANDLE){ cmd=FileReadString(hc); FileClose(hc); }
-      // v0.39-fix (Verify): FileDelete-Ergebnis pruefen — eine nicht loeschbare Datei (Read-Only/AV-Lock)
-      //   wuerde sonst JEDEN Cycle erneut verarbeitet (Journal-/Alert-Spam im Sekundentakt).
+      // v0.39-fix (verify): check the FileDelete result — a file that cannot be deleted (read-only/AV lock)
+      //   would otherwise be processed again EVERY cycle (journal/alert spam every second).
       static bool cmdStuck=false;
       if(!FileDelete(COCKPIT_CMD))
       { if(!cmdStuck){ cmdStuck=true; PrintFormat("Mamal: mamal_cmd.txt nicht loeschbar (err=%d) — Kommando wird ignoriert bis Datei entfernt.",GetLastError()); } }
@@ -2446,29 +2446,29 @@ void Cycle()
          cmdStuck=false;
          if(StringFind(cmd,"endday")==0)
          {
-            // MathMax: eine evtl. bereits LAENGERE Sperre darf durch endday nie verkuerzt werden (strict tighten-only).
-            // Guard: nur wirken, wenn die Sperre sich tatsaechlich VERLAENGERT (kein Doppel-Journal bei erneutem Klick).
+            // MathMax: a possibly already LONGER lock must never be shortened by endday (strict tighten-only).
+            // Guard: only act if the lock actually EXTENDS (no double journal on a repeated click).
             double cur=GlobalVariableCheck(GV_LOCK_UNTIL)?GlobalVariableGet(GV_LOCK_UNTIL):0;
             double nxt=(double)NextServerMidnight();
             if(nxt>cur)
             {
                GlobalVariableSet(GV_LOCK_UNTIL,nxt); GlobalVariableSet(GV_LOCK_WHY,4);
-               GlobalVariablesFlush(); WriteLockstate();   // v0.39-fix (Verify): SOFORT persistieren — die cmd-Datei ist bereits geloescht, ein Crash im 1s-Fenster darf die freiwillige Sperre nicht verlieren
+               GlobalVariablesFlush(); WriteLockstate();   // v0.39-fix (verify): persist IMMEDIATELY — the cmd file is already deleted, a crash in the 1s window must not lose the voluntary lock
                Journal("SELF_LOCK","-","-",0,0,0,0,0,"Tag beendet per Dashboard — Selbstsperre bis Server-Mitternacht");
                Notify(T("lock.selfLock"));
             }
          }
       }
    }
-   GlobalVariableSet(GV_MASTER_HB,(double)TimeLocal());   // v0.28: Heartbeat auch am Cycle-ENDE (langsamer Cycle -> Passive sehen ihn nicht faelschlich stale -> kein Wett-Claim mitten im Schreiben)
+   GlobalVariableSet(GV_MASTER_HB,(double)TimeLocal());   // v0.28: heartbeat also at the END of the cycle (slow cycle -> passives do not wrongly see it as stale -> no race claim in the middle of writing)
 }
 
-// v0.33: R7-Grace-Uhr pro Ticket ab dem Moment, in dem SL/TP ENTFERNT wurde (nicht ab OrderOpenTime).
-//        Sonst haette ein alter Trade nach SL-Entfernen 0s Grace (elapsed-ab-Open laengst > 4s).
-// §06-fix (mittel): Grace-Uhr PERSISTENT pro Ticket (GlobalVariable statt Instanz-Array). Vorher lebte sie nur im RAM:
-//   Terminal-Neustart, Recompile, Timeframe-Wechsel oder ein Master-Handoff schenkten jedes Mal eine frische Frist, und
-//   ein kurzes Wieder-Setzen des SL setzte die Uhr sofort zurueck -> eine nackte Position liess sich beliebig lange halten.
-//   Jetzt: Uhr ueberlebt Neustarts, und nach dem Wieder-Setzen von SL/TP wird sie erst nach einer HEILFRIST (60 s) geloescht.
+// v0.33: R7 grace clock per ticket from the moment SL/TP was REMOVED (not from OrderOpenTime).
+//        Otherwise an old trade would have 0s grace after the SL was removed (elapsed-since-open long > 4s).
+// §06-fix (medium): grace clock PERSISTENT per ticket (GlobalVariable instead of an instance array). Before it lived only in RAM:
+//   terminal restart, recompile, timeframe change or a master handoff granted a fresh deadline every time, and
+//   briefly re-setting the SL reset the clock immediately -> a naked position could be held for as long as you liked.
+//   Now: the clock survives restarts, and after SL/TP is re-set it is only deleted after a HEALING PERIOD (60 s).
 string NkKey(int t){  return "RG_NK_" +IntegerToString(t); }   // seit wann nackt
 string NkhKey(int t){ return "RG_NKH_"+IntegerToString(t); }   // seit wann wieder geheilt (SL/TP gesetzt)
 datetime NakedSince(int ticket, datetime now)
@@ -2478,14 +2478,14 @@ datetime NakedSince(int ticket, datetime now)
    GlobalVariableSet(NkKey(ticket),(double)now); g_gvDirty=true;
    return now;
 }
-void NakedClear(int ticket, datetime now)   // SL/TP wieder da -> Uhr erst nach Heilfrist loeschen (kein Reset per Kurz-Toggle)
+void NakedClear(int ticket, datetime now)   // SL/TP back -> delete the clock only after the healing period (no reset via a short toggle)
 {
    if(!GlobalVariableCheck(NkKey(ticket))) return;
    if(!GlobalVariableCheck(NkhKey(ticket))){ GlobalVariableSet(NkhKey(ticket),(double)now); g_gvDirty=true; return; }
    if(now-(datetime)GlobalVariableGet(NkhKey(ticket)) >= 60)
    { GlobalVariableDel(NkKey(ticket)); GlobalVariableDel(NkhKey(ticket)); g_gvDirty=true; }
 }
-void PruneNaked()   // Marker fuer nicht mehr offene Tickets entfernen (O(N_GV) -> nur im 60s-Housekeeping aufrufen)
+void PruneNaked()   // remove markers for tickets that are no longer open (O(N_GV) -> only call in the 60s housekeeping)
 {
    for(int i=GlobalVariablesTotal()-1;i>=0;i--)
    {
@@ -2499,7 +2499,7 @@ void PruneNaked()   // Marker fuer nicht mehr offene Tickets entfernen (O(N_GV) 
    }
 }
 
-void EnforceSLTP()   // R7 (v0.33: 4s Grace ab SL/TP-ENTFERNUNG, gilt auch fuer Panel-Trades; News-Blackout -> sofort)
+void EnforceSLTP()   // R7 (v0.33: 4s grace from SL/TP REMOVAL, also applies to panel trades; news blackout -> immediately)
 {
    if(IsTradeContextBusy()) return;
    int grace = InNewsBlackout() ? InpSLTPGraceNews : InpSLTPGraceSeconds;
@@ -2511,13 +2511,13 @@ void EnforceSLTP()   // R7 (v0.33: 4s Grace ab SL/TP-ENTFERNUNG, gilt auch fuer 
       if(OrderType()!=OP_BUY && OrderType()!=OP_SELL) continue;
       if(!InScope(OrderMagicNumber())) continue;             // P1-11
       int  ticket = OrderTicket();
-      bool naked  =( (EffRequireSL() && OrderStopLoss()==0.0) || (EffRequireTP() && OrderTakeProfit()==0.0) );   // §06-fix: SL/TP-Pflicht tighten-only (nicht intraday abschaltbar)
-      if(!naked){ NakedClear(ticket, now); continue; }       // SL/TP (wieder) da -> Uhr erst nach Heilfrist loeschen
+      bool naked  =( (EffRequireSL() && OrderStopLoss()==0.0) || (EffRequireTP() && OrderTakeProfit()==0.0) );   // §06-fix: SL/TP obligation is tighten-only (cannot be switched off intraday)
+      if(!naked){ NakedClear(ticket, now); continue; }       // SL/TP (back) there -> delete the clock only after the healing period
       datetime since   = NakedSince(ticket, now);            // seit wann nackt (persistent, ueberlebt Neustart)
       int      elapsed = (int)(now - since);
-      if(elapsed >= grace)                                    // 4s abgelaufen (News: sofort) -> TRADE schliessen (nicht MT4)
+      if(elapsed >= grace)                                    // 4s elapsed (news: immediately) -> close the TRADE (not MT4)
          RequestClose(ticket,StringFormat("R7 SL/TP fehlt (%ds nach Entfernen, Grace %ds)",elapsed,grace));
-      // sonst: noch innerhalb der Frist -> Zeit, SL/TP nachzutragen
+      // otherwise: still within the deadline -> time to add SL/TP
    }
 }
 
@@ -2532,7 +2532,7 @@ void EnforceRisk()   // R1
       if(OrderType()!=OP_BUY && OrderType()!=OP_SELL) continue;
       if(!InScope(OrderMagicNumber())) continue;             // P1-11
       double sl=OrderStopLoss(); if(sl==0.0) continue;
-      double rp=RiskPctOfBase(OrderSymbol(),OrderLots(),OrderOpenPrice(),sl,DayRiskBase());   // B11: stabile Tagesbasis statt Live-Equity (fallende Equity schliesst keine korrekte Position)
+      double rp=RiskPctOfBase(OrderSymbol(),OrderLots(),OrderOpenPrice(),sl,DayRiskBase());   // B11: stable daily base instead of live equity (falling equity must not close a correct position)
       if(rp > EffRiskPct()*InpRiskTolFactor)   // §06-fix: Risiko/Trade tighten-only
          RequestClose(OrderTicket(),StringFormat("R1 Risiko zu gross (%.2f%%)",rp));
    }
@@ -2548,9 +2548,9 @@ void EnforceRR()   // R8
       if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
       if(OrderType()!=OP_BUY && OrderType()!=OP_SELL) continue;
       if(!InScope(OrderMagicNumber())) continue;             // P1-11
-      // §07-fix: Tool-Trades waren KATEGORISCH ausgenommen (B3) — ein nachtraeglich verschlechterter TP blieb damit bei
-      //   aktivem R8 unenforced. Der eigentliche Zweck war nur, Fill-Slippage direkt nach dem Entry zu tolerieren:
-      //   deshalb jetzt nur noch eine Schonfrist von 60 s statt einer Dauer-Ausnahme.
+      // §07-fix: tool trades were CATEGORICALLY exempt (B3) — a TP worsened after the fact therefore stayed
+      //   unenforced while R8 was active. The actual purpose was only to tolerate fill slippage right after the entry:
+      //   hence now only a grace period of 60 s instead of a permanent exemption.
       if(OrderMagicNumber()==InpMagic && (SrvTime()-OrderOpenTime())<60) continue;
       double sl=OrderStopLoss(), tp=OrderTakeProfit();
       if(sl==0.0 || tp==0.0) continue;
@@ -2581,9 +2581,9 @@ void EnforceHeat()   // R12
    RequestClose(newest,"R12 Gesamtrisiko-Deckel");
 }
 
-// §06-fix (mittel): R2-Monitor. Fuer den Idee-Cap gab es NUR ein Entry-Gate — eine einmal ueberschrittene Idee
-//   (z.B. per SL-Entfernen durchs Gate geschmuggelt) blieb dauerhaft ueber dem Cap, ohne dass irgendetwas korrigierte.
-//   Analog zu EnforceHeat: die JUENGSTE Position der betroffenen Idee schliessen, eine Korrektur pro Cycle.
+// §06-fix (medium): R2 monitor. For the idea cap there was ONLY an entry gate — an idea that had once exceeded it
+//   (e.g. smuggled through the gate by removing the SL) stayed above the cap permanently, without anything correcting it.
+//   Analogous to EnforceHeat: close the YOUNGEST position of the affected idea, one correction per cycle.
 void EnforceIdea()
 {
    if(IsTradeContextBusy()) return;
@@ -2606,15 +2606,15 @@ void EnforceIdea()
          if(OrderOpenTime()>=nt){ nt=OrderOpenTime(); newest=OrderTicket(); }
       }
       if(newest>0) RequestClose(newest,"R2 Idee-Cap ueberschritten");
-      return;                                                // eine Korrektur pro Cycle (wie EnforceHeat)
+      return;                                                // one correction per cycle (like EnforceHeat)
    }
 }
 
-// §06-fix (mittel): History-Sichtbarkeits-Wachhund. R5/R6/R25 und die R3-Rekonstruktion lesen ueber OrdersHistoryTotal(),
-//   das in MT4 NUR die im Kontohistorie-Tab eingestellte Periode liefert. Stellt der Nutzer den Tab auf einen alten
-//   Zeitraum, sind die heutigen Closes unsichtbar -> Verlustserie/Cooldown/Sperre feuern nie, ohne jede Erkennung.
-//   Wachhund: verschwundene In-Scope-Tickets muessen in der History auffindbar sein. Zwei-Pass-Verfahren (Verdachtsliste),
-//   damit ein kurzer Timing-Versatz direkt nach dem Close keinen Fehlalarm ausloest.
+// §06-fix (medium): history visibility watchdog. R5/R6/R25 and the R3 reconstruction read via OrdersHistoryTotal(),
+//   which in MT4 only returns the period selected in the account history tab. If the user sets the tab to an old
+//   period, today's closes are invisible -> loss streak/cooldown/lock never fire, without any detection.
+//   Watchdog: in-scope tickets that disappeared must be findable in the history. Two-pass procedure (suspect list),
+//   so that a short timing offset right after the close does not trigger a false alarm.
 void HistoryVisibilityWatch()
 {
    int cur[]; int n=0;
@@ -2625,7 +2625,7 @@ void HistoryVisibilityWatch()
       if(!InScope(OrderMagicNumber())) continue;
       ArrayResize(cur,n+1); cur[n]=OrderTicket(); n++;
    }
-   // Pass 2: alte Verdachtsfaelle erneut pruefen -> immer noch unsichtbar = History gefiltert
+   // Pass 2: re-check old suspects -> still invisible = history is filtered
    for(int s=ArraySize(g_suspTicket)-1;s>=0;s--)
    {
       int t=g_suspTicket[s];
@@ -2635,13 +2635,13 @@ void HistoryVisibilityWatch()
       GlobalVariableSet(GV_LOCK_UNTIL,(double)NextServerMidnight()); GlobalVariableSet(GV_LOCK_WHY,5); g_gvDirty=true;
    }
    ArrayResize(g_suspTicket,0);
-   // Pass 1: seit dem letzten Lauf verschwundene Tickets, die (noch) nicht in der History stehen -> Verdacht
+   // Pass 1: tickets that disappeared since the last run and are (not yet) in the history -> suspect
    for(int a=0;a<ArraySize(g_seenTicket);a++)
    {
       int t=g_seenTicket[a]; bool still=false;
       for(int b=0;b<n;b++) if(cur[b]==t){ still=true; break; }
       if(still) continue;
-      if(OrderSelect(t,SELECT_BY_TICKET) && OrderCloseTime()!=0) continue;   // sauber in der History
+      if(OrderSelect(t,SELECT_BY_TICKET) && OrderCloseTime()!=0) continue;   // cleanly in the history
       int m=ArraySize(g_suspTicket); ArrayResize(g_suspTicket,m+1); g_suspTicket[m]=t;
    }
    ArrayResize(g_seenTicket,n);
@@ -2649,9 +2649,9 @@ void HistoryVisibilityWatch()
 }
 
 // §05-fix (hoch): Entry-Regeln (R5 Cooldown / R13 Tagesziel / R16 Session / R25 Revenge) NACHTRAEGLICH durchsetzen.
-//   Bisher lebten sie NUR im DoEntry-Klickpfad -> eine per Terminal/Mobile/Pending-Fill entstandene In-Scope-Position
-//   blieb offen (nur R1/R7/R12/Lock wurden revertiert). Jetzt: In-Scope-Pendings im Sperrfenster loeschen und In-Scope-
-//   Positionen schliessen, die WAEHREND eines aktiven Sperrfensters eroeffnet wurden (Locks deckt SafeCloseAll separat ab).
+//   So far they lived ONLY in the DoEntry click path -> an in-scope position created via terminal/mobile/pending fill
+//   stayed open (only R1/R7/R12/lock were reverted). Now: delete in-scope pendings inside the lock window and close in-scope
+//   positions that were opened WHILE a lock window was active (locks are covered separately by SafeCloseAll).
 void EnforceEntryState()
 {
    if(IsTradeContextBusy()) return;
@@ -2659,14 +2659,14 @@ void EnforceEntryState()
    bool th = TargetHit();
    bool blockNew = cd || th || OffSession();   // Zustaende, in denen ein NEUER Entry blockiert wuerde
    datetime cend   = (datetime)GlobalVariableGet(GV_COOLDOWN);
-   datetime cstart = (EffCooldownMin()>0) ? cend-(datetime)(EffCooldownMin()*60) : cend;   // Cooldown-Beginn (= Zeit des ausloesenden Verlusts), effektive Dauer
+   datetime cstart = (EffCooldownMin()>0) ? cend-(datetime)(EffCooldownMin()*60) : cend;   // cooldown start (= time of the triggering loss), effective duration
    for(int i=OrdersTotal()-1;i>=0;i--)
    {
       if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
-      if(!InScope(OrderMagicNumber())) continue;             // P1-11: fremde Magics nur bei TOOL_PLUS_MANUAL/ALL_POSITIONS
+      if(!InScope(OrderMagicNumber())) continue;             // P1-11: foreign magics only under TOOL_PLUS_MANUAL/ALL_POSITIONS
       int      ty=OrderType();
       datetime ot=OrderOpenTime();
-      if(ty!=OP_BUY && ty!=OP_SELL)                          // Pending -> im Sperrfenster gar nicht erst fuellen lassen
+      if(ty!=OP_BUY && ty!=OP_SELL)                          // Pending -> do not even let it fill during the lock window
       {
          bool pBuy=(ty==OP_BUYLIMIT || ty==OP_BUYSTOP);
          if(blockNew || RevengeBlocked(OrderSymbol(),pBuy)) RequestClose(OrderTicket(),"R5/R13/R16/R25 Pending im Sperrfenster");
@@ -2675,29 +2675,29 @@ void EnforceEntryState()
       bool isBuy=(ty==OP_BUY);
       if(cd && EffCooldownMin()>0 && ot>=cstart)             // waehrend Cooldown eroeffnet (haette R5-Gate blockiert)
       { RequestClose(OrderTicket(),"R5 Cooldown-Entry (nachtraeglich revertiert)"); continue; }
-      if(OffSessionAt(ot))                                   // ausserhalb Session / im News-Fenster eroeffnet (R16)
+      if(OffSessionAt(ot))                                   // opened outside the session / inside the news window (R16)
       { RequestClose(OrderTicket(),"R16 Off-Session-Entry (nachtraeglich revertiert)"); continue; }
-      if(InpRevengeMin>0 && RevengeBlocked(OrderSymbol(),isBuy))   // Gegen-Trade im aktiven Revenge-Fenster (R25)
+      if(InpRevengeMin>0 && RevengeBlocked(OrderSymbol(),isBuy))   // counter-trade inside the active revenge window (R25)
       {
          datetime ru=(datetime)GlobalVariableGet(RevUntilKey(OrderSymbol()));
          datetime rs=ru-(datetime)(InpRevengeMin*60);
          if(ot>=rs){ RequestClose(OrderTicket(),"R25 Revenge-Entry (nachtraeglich revertiert)"); continue; }
       }
-      // R13 TargetHit: keine verlaessliche Open-Zeit-Referenz fuer laufende Positionen -> nur Pendings (oben) werden geloescht;
-      //   eine bereits offene Position laeuft weiter (Vertrag: Ziel blockt NEUE Trades, flatten nicht).
+      // R13 TargetHit: no reliable open-time reference for running positions -> only pendings (above) are deleted;
+      //   an already open position keeps running (contract: the target blocks NEW trades, it does not flatten).
    }
 }
 
-// R22 (v0.35): NUR PANEL-TRADES. Alles, was NICHT ueber den BUY/SELL-Knopf des Tools entstanden ist, wird sofort
-//   geschlossen — denn nur der Panel-Pfad durchlaeuft die Entry-Gates (R1 Lot-Berechnung, R2/R3/R12/R17-Budgets,
-//   Cooldown, Session, Revenge). Ein Handy-Trade umging bisher saemtliche Regeln und wurde bei aktiver Sperre nicht
-//   einmal geschlossen (nur 1x/min gewarnt) — das war die letzte grosse Luecke im Detect-and-Revert.
-//   BEWUSSTE ABGRENZUNG: nur Magic 0 (= manuell/Handy/Orderfenster). Trades anderer EAs haben eine eigene
-//   Magic-Nummer und bleiben unangetastet, damit ein zweiter EA auf dem Konto nicht abgeraeumt wird.
+// R22 (v0.35): PANEL TRADES ONLY. Anything that did NOT come from the tool's BUY/SELL button is closed
+//   immediately — because only the panel path passes the entry gates (R1 lot calculation, R2/R3/R12/R17 budgets,
+//   cooldown, session, revenge). A phone trade used to bypass every rule and, with a lock active, was not even
+//   closed (only warned 1x/min) — that was the last big hole in detect-and-revert.
+//   DELIBERATE BOUNDARY: magic 0 only (= manual/phone/order window). Trades of other EAs carry their own
+//   magic number and stay untouched, so a second EA on the account does not get wiped out.
 void EnforceManualTrades()
 {
    if(!InpCloseManualTrades) return;
-   if(InpMagic==0) return;   // FAILSAFE: bei Magic 0 waeren die eigenen Panel-Trades von manuellen nicht unterscheidbar -> R22 wuerde sie abraeumen (Warnung in OnInit)
+   if(InpMagic==0) return;   // FAILSAFE: with magic 0 our own panel trades would be indistinguishable from manual ones -> R22 would wipe them (warning in OnInit)
    if(IsTradeContextBusy()) return;
    for(int i=OrdersTotal()-1;i>=0;i--)
    {
@@ -2709,7 +2709,7 @@ void EnforceManualTrades()
    }
 }
 
-void SafeCloseAll()   // bei Lock: alle In-Scope-Positionen/Pendings in die Close-Queue (Retry/Backoff/Journal)
+void SafeCloseAll()   // on lock: all in-scope positions/pendings into the close queue (retry/backoff/journal)
 {
    int foreign=0;
    for(int i=OrdersTotal()-1;i>=0;i--)
@@ -2721,7 +2721,7 @@ void SafeCloseAll()   // bei Lock: alle In-Scope-Positionen/Pendings in die Clos
       if(tp==OP_BUY || tp==OP_SELL) RequestClose(OrderTicket(),"Lock SafeCloseAll");
       else                          RequestClose(OrderTicket(),"Lock SafeCloseAll (pending)");
    }
-   // P0-1: GESPERRT, aber ausserhalb des Scope offene Positionen -> der Watchdog schliesst sie NICHT -> laut warnen (max 1x/min)
+   // P0-1: LOCKED, but positions open outside the scope -> the watchdog does NOT close them -> warn loudly (max 1x/min)
    if(foreign>0)
    {
       static datetime lastForeignWarn=0;
@@ -2735,9 +2735,9 @@ void SafeCloseAll()   // bei Lock: alle In-Scope-Positionen/Pendings in die Clos
 }
 
 //--- Risiko / Auto-Lot ---------------------------------------------
-// §07-fix: Fehlen Tickdaten (TICKSIZE/TickValue = 0), lieferten die Risiko-Funktionen 0 % — eine womoeglich riesige
-//   Position war fuer R1/R12/R17 damit UNSICHTBAR (fail-open), ohne jede Warnung. Jetzt: konservativ mit Risiko/Trade
-//   bewerten (zaehlt in den Summen mit, loest aber allein keinen Zwangs-Close aus, da EnforceRisk gegen Limit*Toleranz
+// §07-fix: with tick data missing (TICKSIZE/TickValue = 0) the risk functions returned 0 % — a possibly huge
+//   position was thus INVISIBLE to R1/R12/R17 (fail-open), without any warning. Now: valued conservatively with risk/trade
+//   (counts into the sums, but on its own triggers no forced close, since EnforceRisk compares against limit*tolerance
 //   prueft) + taeglich einmal warnen.
 double RiskUnknownPct(string s)
 {
@@ -2753,11 +2753,11 @@ double RiskPctOf(string s,double lots,double open,double sl)
    if(ts<=0 || tv<=0) return RiskUnknownPct(s);
    return (MathAbs(open-sl)/ts)*tv*lots/eq*100.0;
 }
-// §06-fix (mittel): Positionen OHNE SL trugen 0 % zu Heat/Idee/R17 bei. Damit liess sich jedes Portfolio-Gate umgehen:
-//   SL kurz entfernen -> neuer Trade passiert R12/R2 -> SL binnen der R7-Grace zurueck. Fuer die ENTRY-Gates werden nackte
-//   Positionen jetzt konservativ mit Risiko/Trade bewertet (conservative=true). Die MONITOR-Pfade (EnforceHeat/EnforceIdea)
-//   rechnen bewusst weiter SL-basiert, damit eine nackte Position nicht faelschlich eine ANDERE Position schliessen laesst
-//   (dafuer ist R7 zustaendig, das die nackte Position selbst schliesst).
+// §06-fix (medium): positions WITHOUT SL contributed 0 % to heat/idea/R17. That made every portfolio gate bypassable:
+//   briefly remove the SL -> the new trade passes R12/R2 -> SL back within the R7 grace. For the ENTRY gates, naked
+//   positions are now valued conservatively with risk/trade (conservative=true). The MONITOR paths (EnforceHeat/EnforceIdea)
+//   deliberately keep computing SL-based, so a naked position does not wrongly cause ANOTHER position to be closed
+//   (R7 is responsible for that, and closes the naked position itself).
 double TotalOpenRiskPct(bool conservative=false)
 {
    double sum=0;
@@ -2788,7 +2788,7 @@ double IdeaOpenRiskPct(string s,bool isBuy,bool conservative=false)
 }
 double SLLinePrice(){ if(ObjectFind(0,SLLINE)<0) return 0.0; return ObjectGetDouble(0,SLLINE,OBJPROP_PRICE,0); }
 
-int LotDigits(double step){ if(step>=1.0) return 0; if(step>=0.1) return 1; if(step>=0.01) return 2; if(step>=0.001) return 3; return 4; }   // §07-fix: Nachkommastellen aus dem Broker-Lotstep statt fix 2
+int LotDigits(double step){ if(step>=1.0) return 0; if(step>=0.1) return 1; if(step>=0.01) return 2; if(step>=0.001) return 3; return 4; }   // §07-fix: decimal places from the broker lot step instead of a fixed 2
 double CalcLot(double dist,double &riskPctOut)
 {
    riskPctOut=0;
@@ -2800,11 +2800,11 @@ double CalcLot(double dist,double &riskPctOut)
    double lot=riskMoney/((dist/ts)*tv);
    double step=MarketInfo(Symbol(),MODE_LOTSTEP); if(step<=0) step=0.01;
    double mx=MarketInfo(Symbol(),MODE_MAXLOT);
-   // §07-fix: NormalizeDouble(lot,2) rundete bei LOTSTEP<0.01 (z.B. 0.001) wieder AUF — aus 0.014 wurde 0.01->0.01,
-   //   aus 0.015 aber 0.02 = bis zu +100 % Risiko ueber dem Limit (und sofortiger Self-Close durch R1). Jetzt wird auf
-   //   die Nachkommastellen des BROKER-Lotstep normalisiert, nie ueber den abgerundeten Wert hinaus.
-   lot=MathFloor(lot/step + 0.0000001)*step; lot=NormalizeDouble(lot,LotDigits(step));   // +eps (v0.40): Binaer-FP verlor sonst gelegentlich einen Lot-Step
-   if(mx>0 && lot>mx) lot=mx;   // B16: nur klemmen, wenn Broker einen gueltigen MaxLot liefert (sonst wuerde mx=0 das Lot auf 0 setzen)
+   // §07-fix: NormalizeDouble(lot,2) rounded UP again when LOTSTEP<0.01 (e.g. 0.001) — 0.014 became 0.01->0.01,
+   //   but 0.015 became 0.02 = up to +100 % risk above the limit (and an immediate self-close by R1). Now it normalizes
+   //   to the decimal places of the BROKER lot step, never beyond the rounded-down value.
+   lot=MathFloor(lot/step + 0.0000001)*step; lot=NormalizeDouble(lot,LotDigits(step));   // +eps (v0.40): binary FP otherwise lost a lot step now and then
+   if(mx>0 && lot>mx) lot=mx;   // B16: only clamp if the broker supplies a valid MaxLot (otherwise mx=0 would set the lot to 0)
    if(lot>0) riskPctOut=((dist/ts)*tv*lot)/eq*100.0;
    return lot;
 }
@@ -2815,8 +2815,8 @@ void DoEntry(bool isBuy)
    if(!IsTradeAllowed()){ Notify(T("block.autoTradingOff")); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"AutoTrading aus"); return; }
    if(IsLocked()){ Notify(T("block.locked")); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"gesperrt"); return; }
    if(BaseWarn()){ Notify(T("block.baseUnsure")); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"P1-2 Basis unsicher"); return; }
-   // v0.49: Wochen-Risiko muss BEWUSST festgelegt sein, bevor gehandelt wird. Jede neue Woche
-   //   erzwingt die Entscheidung erneut — das ist der Kern der Wochendisziplin, kein technischer Zwang.
+   // v0.49: the weekly risk must be set DELIBERATELY before trading. Every new week
+   //   forces the decision again — that is the core of the weekly discipline, not a technical constraint.
    if(WeekRiskPending())
    { Notify(T("block.weekRiskMissing"));
      Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"Wochen-Risiko nicht festgelegt"); return; }
@@ -2833,8 +2833,8 @@ void DoEntry(bool isBuy)
    }
 
    double slp=SLLinePrice();
-   // §07-fix (R11-Luecken): diese Ablehnpfade schrieben bisher KEIN Journal — im "audit-tauglichen" Journal fehlten damit
-   //   genau die Fehlversuche, die fuer die Disziplin-Statistik interessant sind.
+   // §07-fix (R11 gaps): these rejection paths used to write NO journal entry — so the "audit-grade" journal was missing
+   //   exactly those failed attempts that matter for the discipline statistics.
    if(slp<=0){ Notify(T("block.noSlLine")); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"R7 keine SL-Linie gesetzt"); return; }
    RefreshRates();
    double entry=isBuy ? MarketInfo(Symbol(),MODE_ASK) : MarketInfo(Symbol(),MODE_BID);
@@ -2850,25 +2850,25 @@ void DoEntry(bool isBuy)
    double mn=MarketInfo(Symbol(),MODE_MINLOT);
    if(InpMaxLot>0 && lot>InpMaxLot)
    { double stp=MarketInfo(Symbol(),MODE_LOTSTEP); if(stp<=0) stp=0.01;
-     lot=NormalizeDouble(MathFloor(InpMaxLot/stp + 0.0000001)*stp,LotDigits(stp));   // §07-fix: nach dem Klemmen wieder auf den Lot-Step ausrichten (sonst OrderSend err 131 "invalid volume"); +eps v0.40 (FP)
+     lot=NormalizeDouble(MathFloor(InpMaxLot/stp + 0.0000001)*stp,LotDigits(stp));   // §07-fix: realign to the lot step after clamping (otherwise OrderSend err 131 "invalid volume"); +eps v0.40 (FP)
      rp=RiskPctOf(Symbol(),lot,entry,slp); }
    if(lot<mn || lot<=0){ Notify(TF("block.lotBelowMin",DoubleToString(mn,2))); Journal("BLOCKED",Symbol(),dir,lot,entry,slp,0,rp,"R15 Lot unter Broker-Minimum"); return; }
-   double r3rp = RiskPctOfBase(Symbol(), lot, entry, slp, DayRiskBase());   // R3 nutzt dieselbe Tagesbasis wie die Rekonstruktion (nicht Live-Equity)
+   double r3rp = RiskPctOfBase(Symbol(), lot, entry, slp, DayRiskBase());   // R3 uses the same day baseline as the reconstruction (not live equity)
 
    double ideaR=IdeaOpenRiskPct(Symbol(),isBuy,true); double ic=EffIdeaCap();   // §06-fix: nackte Positionen konservativ mitzaehlen
    if(ideaR + rp > ic + 0.01)
    { Notify(TF("block.ideaCap",Symbol(),DoubleToString(ideaR,2),DoubleToString(ic,2))); Journal("BLOCKED",Symbol(),dir,lot,entry,slp,0,rp,"R2 Idee-Cap"); return; }
 
-   ReconcileDayRisk();   // R3: vor dem Gate Tagesbudget abgleichen (max persisted/rekonstruiert)
+   ReconcileDayRisk();   // R3: reconcile the day budget before the gate (max persisted/reconstructed)
    double dayR=GlobalVariableGet(GV_DAY_RISK); double db=EffDay();
    if(dayR + r3rp > db + 0.01)
    { Notify(TF("block.dayBudget",DoubleToString(dayR,2),DoubleToString(r3rp,2),DoubleToString(db,2))); Journal("BLOCKED",Symbol(),dir,lot,entry,slp,0,r3rp,"R3 Tagesbudget"); return; }
 
-   double heat=TotalOpenRiskPct(true); double hc=EffHeat();   // §06-fix: nackte Positionen konservativ mitzaehlen (Gate nicht per SL-Entfernen umgehbar)
+   double heat=TotalOpenRiskPct(true); double hc=EffHeat();   // §06-fix: count naked positions conservatively (gate not bypassable by removing the SL)
    if(heat + rp > hc + 0.01)
    { Notify(TF("block.heat",DoubleToString(heat,2),DoubleToString(rp,2),DoubleToString(hc,2))); Journal("BLOCKED",Symbol(),dir,lot,entry,slp,0,rp,"R12 Heat"); return; }
 
-   if(EffUseCorrCap())   // §06-fix: R17 tighten-only (einmal an -> intraday nicht abschaltbar)
+   if(EffUseCorrCap())   // §06-fix: R17 tighten-only (once on -> cannot be switched off intraday)
    {
       double cc = EffCorrCap();
       double mx = MaxCurrencyExposurePct(Symbol(), isBuy, rp, true);
@@ -2877,22 +2877,22 @@ void DoEntry(bool isBuy)
    }
 
    int    dig=(int)MarketInfo(Symbol(),MODE_DIGITS);
-   // v0.46: gezogene TP-Linie hat Vorrang — aber nur, wenn sie auf der richtigen Seite liegt.
-   //   Sonst (und wenn InpTpLine=false) bleibt der Auto-TP aus InpRR. R8-Mindest-CRV prueft weiter unten.
+   // v0.46: a dragged TP line takes precedence — but only if it sits on the correct side.
+   //   Otherwise (and if InpTpLine=false) the auto TP from InpRR stays. The R8 minimum R:R is checked further below.
    double tp =isBuy ? entry+dist*InpRR : entry-dist*InpRR;
    double tpl=TPLinePrice();
    if(tpl>0 && ((isBuy && tpl>entry) || (!isBuy && tpl<entry))) tp=tpl;
    double slN=NormalizeDouble(slp,dig), tpN=NormalizeDouble(tp,dig), pxN=NormalizeDouble(entry,dig);
 
-   // §07-fix: vor dem Senden Kontext pruefen und Preis auffrischen — zwischen der Lot-/Gate-Rechnung (mehrere
-   //   Order-Scans) und dem OrderSend konnte der Preis veraltet sein, und ein laufender Trade-Kontext fuehrte
-   //   unter Wine zum Fehlschlag. Ausserdem war ein fehlgeschlagener OrderSend bisher NICHT im Journal (R11-Luecke).
+   // §07-fix: check the context and refresh the price before sending — between the lot/gate computation (several
+   //   order scans) and the OrderSend the price could be stale, and a busy trade context led to
+   //   failure under Wine. Also, a failed OrderSend used to NOT be in the journal (R11 gap).
    if(IsTradeContextBusy()){ Notify(T("misc.tradeContextBusy")); Journal("BLOCKED",Symbol(),dir,lot,entry,slp,0,rp,"Handelskontext belegt"); return; }
    RefreshRates();
    pxN = NormalizeDouble(isBuy ? MarketInfo(Symbol(),MODE_ASK) : MarketInfo(Symbol(),MODE_BID), dig);
    int ticket=OrderSend(Symbol(), isBuy?OP_BUY:OP_SELL, lot, pxN, InpSlippage, slN, tpN, "Mamal", InpMagic, 0, isBuy?clrDodgerBlue:clrTomato);
    if(ticket<0){ int oerr=GetLastError(); Notify(TF("misc.orderSendFailed",IntegerToString(oerr),DoubleToString(lot,2))); Journal("BLOCKED",Symbol(),dir,lot,pxN,slN,tpN,rp,StringFormat("OrderSend fehlgeschlagen err=%d",oerr)); return; }
-   GlobalVariableSet(GV_DAY_RISK, dayR+r3rp);   // R3-Budget auf Tagesbasis (gleiche Einheit wie Rekonstruktion)
+   GlobalVariableSet(GV_DAY_RISK, dayR+r3rp);   // R3 budget on the day baseline (same unit as the reconstruction)
    GlobalVariableSet(GV_LAST_ENTRY,(double)SrvTime());
    GlobalVariableSet(OpnKey(ticket),(double)SrvTime());   // v0.40: Panel-Ticket registrieren (Close-Erkennung magic-/tab-unabhaengig)
    GlobalVariablesFlush();
@@ -2902,12 +2902,12 @@ void DoEntry(bool isBuy)
    g_panelSig="";
 }
 
-// v0.21: SL-Linie erst nach InpSlClicksToMove Klicks in dieselbe Zone setzen (verhindert versehentliches Setzen beim ersten Klick).
+// v0.21: only set the SL line after InpSlClicksToMove clicks into the same zone (prevents accidental setting on the first click).
 void SlZoneClick(double price)
 {
    int  need = (InpSlClicksToMove<1 ? 1 : InpSlClicksToMove);
    uint now  = GetTickCount();
-   double tol = price*0.0015; double tpip=InpSlZonePips*Pip(); if(tpip>tol) tol=tpip; if(tol<=0) tol=Pip();   // ~0,15% des Preises oder Pip-Untergrenze
+   double tol = price*0.0015; double tpip=InpSlZonePips*Pip(); if(tpip>tol) tol=tpip; if(tol<=0) tol=Pip();   // ~0.15% of the price or the pip floor
    bool sameZone = (g_slClicks>0 && MathAbs(price-g_slClickPrice)<=tol && (now-g_slClickMs) < 10000);
    if(sameZone) g_slClicks++;
    else       { g_slClicks=1; g_slClickPrice=price; }   // neue Zone -> Zaehler neu
@@ -2937,8 +2937,8 @@ string PreviewText()
    if(InpMaxLot>0 && lot>InpMaxLot){ lot=InpMaxLot; rp=RiskPctOf(Symbol(),lot,entry,slp); }
    double mn=MarketInfo(Symbol(),MODE_MINLOT);
    if(lot<mn || lot<=0) return TF("preview.lotBelowMin",isBuy?"BUY":"SELL",DoubleToString(dist/Pip(),0),UnitStr());
-   double riskEur = rp/100.0*AccountEquity();   // rp = %% der Equity -> €-Risiko per Definition
-   // Format: "<DIR> <detail>" — DrawPanel splittet am ersten Space fuer die farbige Richtung
+   double riskEur = rp/100.0*AccountEquity();   // rp = %% of equity -> € risk by definition
+   // Format: "<DIR> <detail>" — DrawPanel splits at the first space to color the direction
    return StringFormat("%s %.2f Lot  %.0f %s  %s%%  %s%.0f", isBuy?"BUY":"SELL", lot, dist/Pip(), UnitStr(), Dec2(rp), CurSym(), riskEur);
 }
 
@@ -2946,7 +2946,7 @@ string PreviewText()
 double Frac(double v,double lim){ if(lim<=0) return 0.0; double f=v/lim; if(f<0)f=0; if(f>1)f=1; return f; }
 color  BarCol(double f){ if(f<0.5) return C'38,194,129'; if(f<0.8) return C'244,183,64'; return C'240,73,90'; }   // gruen / amber / rot
 
-// Tausender-Gruppierung (deutsch: Punkt) fuer Equity-Anzeige
+// thousands grouping (German: dot) for the equity display
 string GroupInt(double v)
 {
    string s=StringFormat("%.0f",MathAbs(v)); int n=StringLen(s); string o="";
@@ -2963,12 +2963,12 @@ string PeriodStr()
 }
 // v0.25: Distanz-Einheit je Instrument (FX=Pips, Index/CFD/Metall=Pkt)
 string UnitStr(){ return (((int)MarketInfo(Symbol(),MODE_PROFITCALCMODE))==0) ? "Pips" : "Pkt"; }
-// v0.25: deutsches Dezimal-Komma (Anzeige) — konsistent zur Punkt-Tausendertrennung der Equity
-// v0.53: Panel-Texte DE/EN — automatisch aus der Uebersetzungstabelle erzeugt.
-//   T(key) liefert den Text in der eingestellten Sprache. Ein unbekannter Schluessel gibt
-//   den Schluessel selbst zurueck: faellt im Panel sofort auf, statt leer zu bleiben.
-// v0.54: Uebersetzten Text mit Werten fuellen. Die Tabelle nutzt {0}/{1}/{2} statt %s/%d,
-//   damit die Reihenfolge der Werte je Sprache frei bleibt (im Englischen steht sie oft anders).
+// v0.25: German decimal comma (display) — consistent with the dot thousands separator of the equity
+// v0.53: panel texts DE/EN — generated automatically from the translation table.
+//   T(key) returns the text in the configured language. An unknown key returns
+//   the key itself: stands out in the panel at once instead of staying blank.
+// v0.54: fill translated text with values. The table uses {0}/{1}/{2} instead of %s/%d,
+//   so the order of the values stays free per language (in English it often differs).
 string TF(string k,string a0="",string a1="",string a2="",string a3="")
 {
    string s=T(k);
@@ -3148,10 +3148,10 @@ string T(string k)
    return k;
 }
 string Dec2(double v){ string s=StringFormat("%.2f",v); StringReplace(s,".",","); return s; }
-// v0.25: Panel-Text hart begrenzen (kein Ueberlauf auf den Chart); Volltext bleibt im Log
+// v0.25: hard-limit the panel text (no overflow onto the chart); the full text stays in the log
 string Clip(string s,int mx){ return (StringLen(s)<=mx) ? s : (StringSubstr(s,0,mx-1)+"…"); }
-// v0.37: einfacher Wort-Umbruch fuer die Meldungsbox — MT4-OBJ_LABEL bricht nicht selbst um, also Text in maxLines Zeilen
-//   à perLine Zeichen aufteilen. Passt nicht alles rein, bekommt die letzte Zeile ein "…". Ergebnis in out[0..maxLines-1].
+// v0.37: simple word wrap for the message box — MT4 OBJ_LABEL does not wrap by itself, so split the text into maxLines lines
+//   of perLine characters each. If it does not all fit, the last line gets a "…". Result in out[0..maxLines-1].
 void WrapText(string s,int perLine,int maxLines,string &out[])
 {
    ArrayResize(out,maxLines); for(int i=0;i<maxLines;i++) out[i]="";
@@ -3162,7 +3162,7 @@ void WrapText(string s,int perLine,int maxLines,string &out[])
       if(StringLen(words[w])==0) continue;                                       // Doppel-Spaces ueberspringen
       string cand=(StringLen(cur)==0) ? words[w] : (cur+" "+words[w]);
       if(StringLen(cand)<=perLine){ cur=cand; continue; }
-      if(line>=maxLines-1)                                                       // letzte Zeile: Rest anhaengen + Clip setzt das "…"
+      if(line>=maxLines-1)                                                       // last line: append the remainder + Clip sets the "…"
       {
          string rest=cur;
          for(int r=w;r<wc;r++) rest=(StringLen(rest)==0)?words[r]:(rest+" "+words[r]);
@@ -3174,23 +3174,23 @@ void WrapText(string s,int perLine,int maxLines,string &out[])
    if(StringLen(cur)>0 && line<maxLines) out[line]=Clip(cur,perLine);
 }
 
-// v0.37: Panel-Geometrie skalieren. Bei Windows-Skalierung >100% rendert MT4 die SCHRIFT groesser, laesst die Pixel-
-//   Koordinaten aber unskaliert -> Ueberlappung. Loesung: alle Positionen/Groessen (NICHT die Fontgroesse, die MT4 selbst
-//   skaliert) mit demselben Faktor multiplizieren. Zentral in den 5 Zeichen-Helfern angewandt.
+// v0.37: scale the panel geometry. With Windows scaling >100% MT4 renders the FONT bigger but leaves the pixel
+//   coordinates unscaled -> overlap. Solution: multiply all positions/sizes (NOT the font size, which MT4 scales
+//   itself) by the same factor. Applied centrally in the 5 drawing helpers.
 double PScale()
 {
    double s=InpPanelScale;
-   if(s<=0)   // v0.37: AUTO — aus Bildschirm-DPI ableiten (96 dpi = 100%, 144 = 150%)
+   if(s<=0)   // v0.37: AUTO — derive it from the screen DPI (96 dpi = 100%, 144 = 150%)
    {
       int dpi=(int)TerminalInfoInteger(TERMINAL_SCREEN_DPI);
-      s = (dpi>0) ? (dpi/96.0) : 1.0;   // DPI nicht verfuegbar -> neutral
+      s = (dpi>0) ? (dpi/96.0) : 1.0;   // DPI not available -> neutral
       if(s<1.0) s=1.0;                  // AUTO nie unter 100% (kleine DPI-Werte sollen nichts schrumpfen)
    }
-   // v0.48-fix: ein MANUELL gesetzter Wert darf ausdruecklich auch verkleinern (0.7 = 70%).
-   //   Vorher klemmte die 1.0-Untergrenze jeden Wunsch nach einem kleineren Panel weg.
+   // v0.48-fix: a MANUALLY set value is explicitly allowed to shrink as well (0.7 = 70%).
+   //   Before, the 1.0 lower bound clamped away every wish for a smaller panel.
    if(s<0.5) s=0.5; if(s>3.0) s=3.0;
-   // v0.46: Auto-Fit — passt das Panel herunter, wenn es sonst hoeher als das Chart-Fenster waere.
-   //   Verhindert abgeschnittene Buttons auf kleinen Charts / geteiltem Bildschirm.
+   // v0.46: auto-fit — scales the panel down if it would otherwise be taller than the chart window.
+   //   Prevents cut-off buttons on small charts / a split screen.
    if(InpPanelAutoFit)
    {
       int ph=(int)ChartGetInteger(0,CHART_HEIGHT_IN_PIXELS);
@@ -3198,7 +3198,7 @@ double PScale()
       {
          double need=(PanelH()+28)*s;                     // Panel + Rand oben/unten (PanelH rechnet unskaliert)
          if(need>ph) s=s*((double)ph/need);
-         if(s<0.6) s=0.6;                                  // nicht unlesbar klein werden
+         if(s<0.6) s=0.6;                                  // must not get unreadably small
       }
    }
    return s;
@@ -3220,7 +3220,7 @@ void Lbl(string name,int x,int y,string text,color col,int size,string font="Tah
    ObjectSetString (0,name,OBJPROP_TEXT,text);
    ObjectSetInteger(0,name,OBJPROP_COLOR,col);
 }
-// Rechteck mit separater Rahmenfarbe (fuer Karten-Rand / Chips)
+// rectangle with a separate border color (for card edge / chips)
 void RectB(string name,int x,int y,int w,int h,color bg,color border)
 {
    if(ObjectFind(0,name)<0){ ObjectCreate(0,name,OBJ_RECTANGLE_LABEL,0,0,0);
@@ -3235,7 +3235,7 @@ void RectB(string name,int x,int y,int w,int h,color bg,color border)
    ObjectSetInteger(0,name,OBJPROP_BGCOLOR,bg);
    ObjectSetInteger(0,name,OBJPROP_COLOR,border);
 }
-// rechtsbuendiges Label (Anker rechts) fuer Zahlen/Werte
+// right-aligned label (anchored right) for numbers/values
 void LblR(string name,int xRight,int y,string text,color col,int size,string font="Tahoma")
 {
    if(ObjectFind(0,name)<0){ ObjectCreate(0,name,OBJ_LABEL,0,0,0);
@@ -3264,12 +3264,12 @@ void Rect(string name,int x,int y,int w,int h,color col)
    ObjectSetInteger(0,name,OBJPROP_BGCOLOR,col);
    ObjectSetInteger(0,name,OBJPROP_COLOR,col);
 }
-// v0.49: Eingabefeld fuer das Wochen-Risiko. Der Text wird NUR dann neu geschrieben, wenn sich der
-//   gueltige Wert geaendert hat — sonst wuerde DrawPanel (2x/Sekunde) dem Nutzer beim Tippen
-//   staendig die Eingabe unter den Fingern wegloeschen.
-// v0.52: Kerzen-Drittel bestimmen — in welchem Abschnitt der laufenden Kerze wurde ausgefuehrt?
+// v0.49: input field for the weekly risk. The text is rewritten ONLY when the
+//   valid value has changed — otherwise DrawPanel (2x/second) would constantly erase the user's
+//   input from under their fingers while typing.
+// v0.52: determine the candle third — in which section of the running candle was the fill?
 //   0 = erstes Drittel (frueh, gruen), 1 = zweites (orange), 2 = letztes (spaet/hinterherlaufend, rot).
-//   Aussagekraft: Einstiege im letzten Drittel sind haeufig Reaktionen auf eine schon gelaufene Bewegung.
+//   Meaning: entries in the last third are often reactions to a move that has already run.
 int CandleThird(datetime t)
 {
    int per=PeriodSeconds(); if(per<=0) return 0;
@@ -3279,8 +3279,8 @@ int CandleThird(datetime t)
 }
 string CandleThirdTag(datetime t){ return StringFormat("K%d/3",CandleThird(t)+1); }   // "K1/3".."K3/3" (maschinenlesbar fuers Cockpit)
 
-// v0.52: Countdown direkt neben der laufenden Kerze (wie ein Chart-Indikator), zusaetzlich zum Panel.
-//   Anker: naechster Kerzen-Slot auf Hoehe des aktuellen Preises -> steht rechts neben der Kerze mit.
+// v0.52: countdown right next to the running candle (like a chart indicator), in addition to the panel.
+//   Anchor: next candle slot at the height of the current price -> it rides along right beside the candle.
 void DrawCandleClock()
 {
    string n=PFX+"cclock";
@@ -3288,12 +3288,12 @@ void DrawCandleClock()
    { if(ObjectFind(0,n)>=0) ObjectDelete(0,n); return; }
    int rest=(int)(Time[0]+PeriodSeconds()-TimeCurrent()); if(rest<0) rest=0;
    int per=PeriodSeconds(); if(per<=0) per=60;
-   // Farbe nach VERSTRICHENEM Drittel — gleiche Logik wie die Trade-Protokollierung
+   // color by ELAPSED third — same logic as the trade logging
    int th=CandleThird(TimeCurrent());
    color c=(th==0)?C'61,220,146':((th==1)?C'244,183,64':C'240,73,90');
    string txt=StringFormat("%02d:%02d",rest/60,rest%60);
    double price=(MarketInfo(Symbol(),MODE_BID)>0)?MarketInfo(Symbol(),MODE_BID):Close[0];
-   datetime anchor=Time[0]+per;                       // ein Slot rechts der laufenden Kerze
+   datetime anchor=Time[0]+per;                       // one slot right of the running candle
    if(ObjectFind(0,n)<0)
    {
       ObjectCreate(0,n,OBJ_TEXT,0,anchor,price);
@@ -3309,8 +3309,8 @@ void DrawCandleClock()
 }
 void EnsureRiskEdit(int y)
 {
-   // v0.50-fix: Altlasten der [-]/[+]-Variante entfernen. Ohne das blieben sie als "Geister"-Objekte
-   //   auf dem Chart liegen (die Zahl lag dann doppelt ueber dem Eingabefeld).
+   // v0.50-fix: remove leftovers of the [-]/[+] variant. Without this they stayed on the chart as "ghost"
+   //   objects (the number then sat doubled over the input field).
    if(ObjectFind(0,PFX+"rkv") >=0) ObjectDelete(0,PFX+"rkv");
    if(ObjectFind(0,PFX+"rmin")>=0) ObjectDelete(0,PFX+"rmin");
    if(ObjectFind(0,PFX+"rpls")>=0) ObjectDelete(0,PFX+"rpls");
@@ -3333,9 +3333,9 @@ void EnsureRiskEdit(int y)
    ObjectSetInteger(0,n,OBJPROP_BGCOLOR,C'20,27,38');
    ObjectSetInteger(0,n,OBJPROP_COLOR,C'234,240,249');
    ObjectSetInteger(0,n,OBJPROP_BORDER_COLOR, WeekRiskPending()?C'61,123,255':C'40,52,70');   // ungesetzt -> blau hervorgehoben
-   // v0.62: Steht die Wochenbestaetigung aus und hat der Trader in der Vorwoche schon eine Aenderung
-   //   vorgemerkt, dann ist DAS sein zuletzt gefasster Vorsatz — er gehoert ins Feld, nicht der alte Wert.
-   //   Bestaetigt wird trotzdem bewusst per SETZEN; ohne Bestaetigung bleibt die Vormerkung wirkungslos.
+   // v0.62: if the weekly confirmation is pending and the trader already staged a change in the
+   //   previous week, THAT is his most recently formed intention — it belongs in the field, not the old value.
+   //   Confirming still happens deliberately via "SETZEN" (set); without confirmation the staged value has no effect.
    string want=Dec2((WeekRiskPending() && PendingWeekRisk()>0) ? PendingWeekRisk() : DesiredRiskPct());
    if(created || g_rkEditSync!=want){ g_rkEditSync=want; ObjectSetString(0,n,OBJPROP_TEXT,want); }
 }
@@ -3358,12 +3358,12 @@ void Btn(string name,int x,int y,int w,int h,string text,color bg,int fsize=11)
 void EnsureSLLine()
 {
    if(ObjectFind(0,SLLINE)>=0)
-   { if(ObjectGetInteger(0,SLLINE,OBJPROP_COLOR)!=clrWhite) ObjectSetInteger(0,SLLINE,OBJPROP_COLOR,clrWhite); return; }   // v0.29: bestehende (rote) SL-Linie automatisch auf weiss umfaerben
+   { if(ObjectGetInteger(0,SLLINE,OBJPROP_COLOR)!=clrWhite) ObjectSetInteger(0,SLLINE,OBJPROP_COLOR,clrWhite); return; }   // v0.29: recolor an existing (red) SL line to white automatically
    double bid=MarketInfo(Symbol(),MODE_BID); if(bid<=0) bid=Close[0];
    double p=bid - InpDefaultSLpips*Pip();
    ObjectCreate(0,SLLINE,OBJ_HLINE,0,0,p);
    ObjectSetDouble (0,SLLINE,OBJPROP_PRICE,0,p);
-   ObjectSetInteger(0,SLLINE,OBJPROP_COLOR,clrWhite);   // v0.29: SL-Linie WEISS (Stop-Loss ist etwas Gutes, kein Gefahr-Rot)
+   ObjectSetInteger(0,SLLINE,OBJPROP_COLOR,clrWhite);   // v0.29: SL line WHITE (a stop-loss is a good thing, not danger red)
    ObjectSetInteger(0,SLLINE,OBJPROP_WIDTH,2);
    ObjectSetInteger(0,SLLINE,OBJPROP_STYLE,STYLE_SOLID);
    ObjectSetInteger(0,SLLINE,OBJPROP_SELECTABLE,true);
@@ -3371,7 +3371,7 @@ void EnsureSLLine()
    ObjectSetInteger(0,SLLINE,OBJPROP_HIDDEN,false);
    ObjectSetString (0,SLLINE,OBJPROP_TEXT,"Mamal SL");
 }
-// v0.46: TP-Linie nur wenn eingeschaltet. Grün = Ziel; wird sie gezogen, hat sie Vorrang vor InpRR.
+// v0.46: TP line only when switched on. Green = target; once dragged, it takes precedence over InpRR.
 double TPLinePrice(){ if(!InpTpLine || ObjectFind(0,TPLINE)<0) return 0.0; return ObjectGetDouble(0,TPLINE,OBJPROP_PRICE,0); }
 void EnsureTPLine()
 {
@@ -3388,9 +3388,9 @@ void EnsureTPLine()
    ObjectSetInteger(0,TPLINE,OBJPROP_HIDDEN,false);
    ObjectSetString (0,TPLINE,OBJPROP_TEXT,"Mamal TP");
 }
-// #14 Rule-Test-Harness: manipuliert NUR Zustand/Datei (oeffnet KEINE Trades) -> Regelverhalten testen.
-// Hart gegated: nur wenn InpTestMode && !InpFundedMode. Trade-basierte Szenarien (NoSL/BigLot/BadCRV)
-// reproduziert der User per Hand auf Demo (BUY/SELL klicken).
+// #14 rule test harness: manipulates ONLY state/file (opens NO trades) -> to test rule behavior.
+// Hard-gated: only if InpTestMode && !InpFundedMode. Trade-based scenarios (NoSL/BigLot/BadCRV)
+// are reproduced by the user manually on demo (click BUY/SELL).
 void TestAction(string which)
 {
    if(!InpTestMode || InpFundedMode) return;   // hart gegated
@@ -3407,31 +3407,31 @@ void TestAction(string which)
       Notify(T("test.lockstateCorrupted"));
       Journal("TEST","-","-",0,0,0,0,0,"TEST CorruptLock+Reconcile");
    }
-   else if(which=="reset")   // §05-fix (hoch): KEIN Universal-Unlock mehr. Nur selbst gesetzte TEST-Sperren auf einem Demo-Konto; Hard-Lock (R4b permanent) bleibt IMMER.
+   else if(which=="reset")   // §05-fix (high): NO universal unlock any more. Only self-set TEST locks on a demo account; hard lock (R4b permanent) ALWAYS stays.
    {
       bool demo        = IsDemo();
       bool testInduced = (GlobalVariableGet(GV_TEST_SET)>0.5);
-      if(!demo || !testInduced)   // echtes Konto ODER Sperre stammt aus echtem Regel-Event -> ablehnen
+      if(!demo || !testInduced)   // live account OR the lock came from a real rule event -> reject
       {
          Notify(TF("test.resetRejected",!demo?"kein Demo-Konto":"keine Test-Sperre aktiv"));
          Journal("TAMPER","-","-",0,0,0,0,0,StringFormat("Reset ABGELEHNT (demo=%d testInduced=%d) — echte Sperren bleiben",demo?1:0,testInduced?1:0));
          g_panelSig=""; return;
       }
       GlobalVariableSet(GV_LOCK_UNTIL,0); ClearLockWhy();
-      // Hard-Lock (GV_HARD_LOCK) wird bewusst NICHT geloescht - R4b ist permanent.
-      // v0.64 (verworfen): eine "nur Test-Sperren"-Ausnahme war nicht sicher zu bauen. Der Test-Knopf
-      //   konnte eine bereits ECHT ausgeloeste Sperre nachtraeglich als Test umetikettieren, und ein
-      //   echter Durchbruch WAEHREND einer Test-Sperre wurde gar nicht erst registriert. Vor allem aber
-      //   traegt die Demo-Bedingung nicht: Prop-Firm-Challenge-Konten laufen in MT4 ALS Demo-Konten -
-      //   genau dort waere das Aufheben am teuersten. Bleibt permanent; auf Demo per F3 loeschen.
+      // Hard lock (GV_HARD_LOCK) is deliberately NOT cleared - R4b is permanent.
+      // v0.64 (discarded): a "test locks only" exception could not be built safely. The test button
+      //   could relabel an already REALLY triggered lock as a test after the fact, and a
+      //   real breach DURING a test lock was not registered at all. Above all, though,
+      //   the demo condition does not hold: prop firm challenge accounts run in MT4 AS demo accounts -
+      //   exactly where lifting it would be most expensive. Stays permanent; on demo delete it via F3.
       GlobalVariableSet(GV_COOLDOWN,0);   GlobalVariableSet(GV_TARGET_HIT,0);
       if(GlobalVariableCheck(RevUntilKey(Symbol()))) GlobalVariableDel(RevUntilKey(Symbol()));
       if(GlobalVariableCheck(RevDirKey(Symbol())))   GlobalVariableDel(RevDirKey(Symbol()));
       GlobalVariableSet(GV_TEST_SET,0);
       GlobalVariablesFlush(); g_lockSig="";
-      // v0.63: Das hier ist die EINZIGE legitime Entsperrung. Sie muss den Spiegel direkt schreiben —
-      //   ginge sie durch den neuen Abgleich, holte der die eben geloeschte Test-Sperre sofort zurueck.
-      //   Der Hard-Lock bleibt trotzdem, er wurde oben bewusst nicht angefasst.
+      // v0.63: this here is the ONLY legitimate unlock. It has to write the mirror directly —
+      //   if it went through the new reconciliation, that would pull the just-deleted test lock right back.
+      //   The hard lock stays nonetheless, it was deliberately left untouched above.
       g_lsGuard=true; WriteLockstate(); g_lsGuard=false;
       Notify(T("test.locksReset"));
       Journal("TAMPER","-","-",0,0,0,0,0,"TEST Reset (nur Test-Sperren, Hard-Lock unberuehrt)");
@@ -3439,7 +3439,7 @@ void TestAction(string which)
    g_panelSig="";
 }
 // v0.25: Panel-Kartengeometrie an EINER Stelle (CreateControls + Klick-Guard nutzen dieselbe)
-int RiskRowOff(){ return InpRiskChooser ? 46 : 0; }   // v0.36: Risiko-Zeile schiebt alles darunter nach unten (v0.48: 32->46 fuer die Erklaer-Unterzeile)
+int RiskRowOff(){ return InpRiskChooser ? 46 : 0; }   // v0.36: the risk row pushes everything below it down (v0.48: 32->46 for the explanatory subline)
 int PanelH(){ int h=372; h+=RiskRowOff(); if(InpBreakEvenBtn) h+=26; if(InpTestMode && !InpFundedMode) h+=72; return h; }   // v0.26: +Cockpit, v0.36: +Risiko-Waehler, v0.37: +16 Meldungsbox, v0.40: +52 Close-Buttons, v0.46: +26 Risk-Free
 void CreateControls()
 {
@@ -3448,8 +3448,8 @@ void CreateControls()
    RectB(PFX+"card",12,16,300,cardH,C'14,18,25',C'33,42,56');   // Karte mit feinem Rand
    if(InpRiskChooser)   // v0.36: Risiko-Waehler [-] / Wert / [+]
    {
-      // v0.49: Eingabefeld statt [-]/[+] — der Wochenwert wird bewusst getippt und bestaetigt.
-      // v0.50-fix: Feld 170..228, Knopf 234..298 -> 6px Luft dazwischen, Knopf breit genug fuer "SETZEN".
+      // v0.49: input field instead of [-]/[+] — the weekly value is deliberately typed and confirmed.
+      // v0.50-fix: field 170..228, button 234..298 -> 6px gap between, button wide enough for "SETZEN" (set).
       EnsureRiskEdit(196);
       Btn(PFX+"rkset",234,196,64,22,T("btn.set"),C'28,74,92',8);
    }
@@ -3475,7 +3475,7 @@ void CreateControls()
    }
    EnsureSLLine();
    EnsureTPLine();
-   DrawCandleClock();   // v0.52: Countdown neben der Kerze   // v0.46: TP-Linie mitfuehren (nur wenn InpTpLine=true)
+   DrawCandleClock();   // v0.52: countdown next to the candle   // v0.46: keep the TP line updated (only if InpTpLine=true)
 }
 void Meter(string id,int y,string label,double val,double lim)
 {
@@ -3489,8 +3489,8 @@ void DrawPanel(double dd,double tdd,bool disabled)
 {
    EnsureSLLine();
    EnsureTPLine();
-   DrawCandleClock();   // v0.52: Countdown neben der Kerze   // v0.46: TP-Linie mitfuehren (nur wenn InpTpLine=true)
-   if(g_fgTries>0){ g_fgTries--; if(ChartGetInteger(0,CHART_FOREGROUND)!=0) ChartSetInteger(0,CHART_FOREGROUND,false); }   // v0.28: nur begrenzt oft (kein ChartSetInteger-Spam je Cycle); haelt es nicht -> User: F8 „Chart im Vordergrund" aus
+   DrawCandleClock();   // v0.52: countdown next to the candle   // v0.46: keep the TP line updated (only if InpTpLine=true)
+   if(g_fgTries>0){ g_fgTries--; if(ChartGetInteger(0,CHART_FOREGROUND)!=0) ChartSetInteger(0,CHART_FOREGROUND,false); }   // v0.28: only a limited number of times (no ChartSetInteger spam per cycle); if it does not hold -> user: turn off F8 „Chart im Vordergrund" (chart on foreground)
    int    consec=(int)GlobalVariableGet(GV_CONSEC);
    double dayR=GlobalVariableGet(GV_DAY_RISK);
    double heat=TotalOpenRiskPct();
@@ -3503,27 +3503,27 @@ void DrawPanel(double dd,double tdd,bool disabled)
    string st; color stcol; color pillBg, pillBd;
    if(disabled)        { st=T("status.guardOff");        stcol=C'244,183,64'; }
    else if(IsLocked()) { st=(IsHardLocked()?T("status.hardLock"):(IsWeekLocked()?T("status.weekLock"):T("status.dayLock"))); stcol=C'240,73,90'; }
-   else if(BaseWarn()) { st=T("status.baseWarn");    stcol=C'244,183,64'; }   // §07-fix: blockt jeden Entry -> darf nicht als "AKTIV" erscheinen
+   else if(BaseWarn()) { st=T("status.baseWarn");    stcol=C'244,183,64'; }   // §07-fix: blocks every entry -> must not appear as "AKTIV" (active)
    else if(WeekRiskPending())
-                       { st=T("status.setWeekRisk");  stcol=C'61,123,255'; }   // v0.49: Wochenentscheidung steht aus -> blockt Entries
+                       { st=T("status.setWeekRisk");  stcol=C'61,123,255'; }   // v0.49: the weekly decision is pending -> blocks entries
    else if(maxw)       { st=T("status.maxLossWarn");  stcol=C'244,183,64'; }
    else if(cool)       { st=T("status.cooldown");          stcol=C'244,183,64'; }
    else if(tgt)        { st=T("status.targetHit");     stcol=C'61,220,146'; }
    else if(off)        { st=T("status.offSession");    stcol=C'160,170,186'; }
    else                { st=T("status.active");             stcol=C'61,220,146'; }
-   // Pill-Tint aus dem Zustand ableiten (gruen / rot / amber / neutral)
+   // derive the pill tint from the state (green / red / amber / neutral)
    if(stcol==C'61,220,146')      { pillBg=C'15,36,25'; pillBd=C'28,77,52'; }
    else if(stcol==C'240,73,90')  { pillBg=C'40,18,22'; pillBd=C'90,34,40'; }
    else if(stcol==C'244,183,64') { pillBg=C'40,31,15'; pillBd=C'88,64,26'; }
    else                          { pillBg=C'22,28,38'; pillBd=C'40,50,64'; }
 
    bool noTrade=(IsLocked()||disabled||cool||tgt||off||maxw||BaseWarn()
-                 ||(WeekRiskPending()));   // §07-fix: BaseWarn graut die Buttons aus; v0.49: ausstehende Wochenwahl ebenfalls
+                 ||(WeekRiskPending()));   // §07-fix: BaseWarn greys the buttons out; v0.49: a pending weekly choice does too
    color bbuy = noTrade?C'46,53,66':C'21,156,100';
    color bsell= noTrade?C'46,53,66':C'216,63,80';
    color bacc = noTrade?C'70,80,96':C'61,220,146';
    color sacc = noTrade?C'70,80,96':C'255,107,120';
-   color HAIR = C'30,38,52';   // v0.25: EIN Hairline-Token fuer alle internen Trennlinien
+   color HAIR = C'30,38,52';   // v0.25: ONE hairline token for all internal separators
    color CAP  = C'146,158,178';// v0.25: EIN Caption-Token (Groesse 8)
 
    string prev=PreviewText();
@@ -3533,10 +3533,10 @@ void DrawPanel(double dd,double tdd,bool disabled)
    string cHeat=Dec2(heat)+"/"+Dec2(EffHeat());
    bool   budFull=(EffDay()>0 && dayR >= EffDay()-0.01);
    string cBud =TF("tile.limit.value",Dec2(MathMax(0,EffDay()-dayR)));                          // v0.25: verbleibendes Budget statt verbrauchtem
-   string cStp =StringFormat("%d/%d",consec,EffLockAfter());   // §06-fix: effektive Schwelle anzeigen (nicht den ggf. gelockerten Roh-Input)
-   color  stpCol = (consec>=EffLockAfter())?C'240,73,90':((consec>=EffLockAfter()-1 && consec>0)?C'244,183,64':C'205,214,228');   // amber 1 vor Sperre, rot bei Sperre
+   string cStp =StringFormat("%d/%d",consec,EffLockAfter());   // §06-fix: show the effective threshold (not the possibly loosened raw input)
+   color  stpCol = (consec>=EffLockAfter())?C'240,73,90':((consec>=EffLockAfter()-1 && consec>0)?C'244,183,64':C'205,214,228');   // amber 1 before the lock, red at the lock
 
-   // Zwei-Ton: Richtung (BUY/SELL) faerben, Rest mono — nur im normalen Handelszustand
+   // two-tone: color the direction (BUY/SELL), rest mono — only in the normal trading state
    string pdir="", pdet=prev;
    if(!flashOn && g_armed==0 && !noTrade)
    {
@@ -3545,17 +3545,17 @@ void DrawPanel(double dd,double tdd,bool disabled)
    }
 
    // v0.36: Risiko-Waehler-Anzeige (wirksamer Wert; bei vorgemerkter Erhoehung "→ X")
-   // v0.48: Risiko-Zeile lesbar machen — der Wert bleibt kurz (passt zwischen die Knoepfe),
-   //   die Erklaerung (Euro-Betrag + Wochenbindung) steht in einer eigenen Unterzeile.
+   // v0.48: make the risk row readable — the value stays short (fits between the buttons),
+   //   the explanation (euro amount + weekly commitment) sits in a subline of its own.
    string rkv="", rkSub="";
    if(InpRiskChooser)
    {
       rkv=StringFormat("%s %%",Dec2(EffRiskPct()));
       double rEur=AccountEquity()*EffRiskPct()/100.0;
       string eurTxt=CurSym()+GroupInt(rEur);   // v0.55: "je Trade"/"per trade" steckt in risk.sub.* (uebersetzt)
-      // v0.62: "unset" nur zeigen, wenn wirklich eine Bestaetigung AUSSTEHT. Ohne die Pflicht
-      //   (InpRequireWeeklyRisk=false) gilt der zuletzt gewaehlte Wert weiter — dann waere
-      //   "Wochenwert eintippen ..." eine Aufforderung ins Leere.
+      // v0.62: show "unset" only when a confirmation is really PENDING. Without the obligation
+      //   (InpRequireWeeklyRisk=false) the last chosen value stays valid — then
+      //   "Wochenwert eintippen ..." (type the weekly value) would be a prompt into the void.
       bool chosen=(GlobalVariableCheck(GV_WEEK_RISK) && GlobalVariableGet(GV_WEEK_RISK)>0
                    && !WeekRiskPending());
       if(WeekRiskPending())     rkSub=T("risk.sub.unset");
@@ -3563,15 +3563,15 @@ void DrawPanel(double dd,double tdd,bool disabled)
       else if(chosen)           rkSub=TF("risk.sub.fixed",eurTxt);
       else                      rkSub=T("risk.sub.unset");
    }
-   // v0.65b: nach Sperrart aufloesen. Ein gespeicherter Tages-Grund darf nie unter einer Hard- oder
-   //   Wochensperre erscheinen — sonst stuende dort mit voller Bestimmtheit etwas Falsches.
+   // v0.65b: resolve by lock type. A stored day reason must never show under a hard or
+   //   weekly lock — otherwise something false would stand there with full certainty.
    string lockWhy = IsHardLocked() ? T("why.maxloss")
                   : (IsWeekLocked() ? T("why.week")
                   : (IsDayLocked()  ? LockWhyText() : ""));
    int ro=RiskRowOff();
 
-   // v0.46: Spread + Kerzen-Restsekunde in die Signatur — sonst wuerde der Cache das Panel einfrieren
-   //   und der Countdown stuende still (DrawPanel zeichnet nur bei geaenderter Signatur).
+   // v0.46: spread + the candle's remaining second into the signature — otherwise the cache would freeze the panel
+   //   and the countdown would stand still (DrawPanel only draws on a changed signature).
    string tick="";
    if(InpShowCandleTime) tick=tick+IntegerToString((int)(Time[0]+PeriodSeconds()-TimeCurrent()));
    if(InpShowSpread)     tick=tick+"/"+DoubleToString((Point>0)?((MarketInfo(Symbol(),MODE_ASK)-MarketInfo(Symbol(),MODE_BID))/Point):0,0);
@@ -3585,11 +3585,11 @@ void DrawPanel(double dd,double tdd,bool disabled)
    Rect (PFX+"lg2",31,29,3,10,C'61,123,255');
    Rect (PFX+"lg3",36,25,3,14,C'61,123,255');
    Lbl  (PFX+"br1",46,25,"MAMAL",C'234,240,249',11,"Arial Bold");
-   Lbl  (PFX+"br2",90,25,"·TRADING",C'107,118,136',11,"Arial");     // v0.25: Luecke geschlossen (99->90; nach F7 ggf. 88-92 justieren)
+   Lbl  (PFX+"br2",90,25,"·TRADING",C'107,118,136',11,"Arial");     // v0.25: gap closed (99->90; adjust to 88-92 after F7 if needed)
    string cxs=Symbol()+" · "+PeriodStr(); int cw=14+StringLen(cxs)*5; if(cw>150) cw=150;   // v0.25: Chip dynamisch, rechtsbuendig
    RectB(PFX+"chip",298-cw,25,cw,18,C'20,27,38',C'33,42,56');
    LblR (PFX+"chiptx",293,28,cxs,CAP,8,"Tahoma");
-   // v0.46: Spread live + Restzeit der laufenden Kerze (gruen -> amber -> rot, je naeher der Schluss)
+   // v0.46: live spread + remaining time of the running candle (green -> amber -> red, the closer the close)
    string infoL=""; color infoC=CAP;
    if(InpShowSpread)
    {
@@ -3613,13 +3613,13 @@ void DrawPanel(double dd,double tdd,bool disabled)
    Rect (PFX+"hhair",12,54,300,1,HAIR);
 
    // Status-Pill + Kapital
-   int pw=24+StringLen(st)*8+12; if(pw>184) pw=184;   // v0.25: fette Grossbuchstaben (8px/Zeichen) + Klemme, kein Ueberlauf
+   int pw=24+StringLen(st)*8+12; if(pw>184) pw=184;   // v0.25: bold capitals (8px/char) + clamp, no overflow
    RectB(PFX+"pill",26,62,pw,22,pillBg,pillBd);
    Rect (PFX+"pdot",36,70,7,7,stcol);
    Lbl  (PFX+"ptx",50,66,st,stcol,10,"Arial Bold");
-   // v0.65: WARUM gesperrt. Ohne das steht dort nur "TAG GESPERRT" und der Trader raet — im Zweifel rechnet
-   //   er seinen Tagesverlust nach, findet 0,28 % von 2,00 % und haelt das Tool fuer kaputt, obwohl in
-   //   Wahrheit die Verlustserie gesperrt hat.
+   // v0.65: WHY locked. Without it, only "TAG GESPERRT" (day locked) stands there and the trader guesses — in doubt he
+   //   recomputes his daily loss, finds 0.28 % of 2.00 % and takes the tool for broken, while in
+   //   truth the losing streak did the locking.
    if(lockWhy!="") Lbl(PFX+"why",26,86,Clip(lockWhy,46),C'150,162,180',8,"Tahoma");
    else if(ObjectFind(0,PFX+"why")>=0) ObjectDelete(0,PFX+"why");
    LblR (PFX+"eql",298,61,T("header.equity"),CAP,8,"Tahoma");
@@ -3642,18 +3642,18 @@ void DrawPanel(double dd,double tdd,bool disabled)
    Rect(PFX+"mv3",224,162,1,26,HAIR);
    Rect(PFX+"mdiv2",26,194,272,1,HAIR);
 
-   // v0.36: Risiko-Waehler-Zeile (Buttons kommen aus CreateControls; hier nur Label + Wert)
+   // v0.36: risk selector row (buttons come from CreateControls; here only label + value)
    if(InpRiskChooser)
    {
-      // v0.50-fix: KEIN separates Wert-Label mehr — den Wert zeigt das Eingabefeld selbst.
-      //   Vorher lag die alte Beschriftung genau ueber dem Feld (doppelte Zahl im Bild).
+      // v0.50-fix: NO separate value label any more — the input field shows the value itself.
+      //   Before, the old caption lay exactly over the field (doubled number on screen).
       Lbl (PFX+"rkl", 26,200,T("risk.label"),CAP,8,"Tahoma");
       Lbl (PFX+"rksub",26,216,rkSub,(PendingWeekRisk()>0?C'244,183,64':C'126,138,158'),8,"Tahoma");
       Rect(PFX+"rkdiv",26,194+ro,272,1,HAIR);
    }
 
-   // "Nächster Trade"/Hinweis-Box (v0.37: hoch genug fuer bis zu 3 Zeilen Volltext statt Abschneiden)
-   bool   infoFlash = flashOn && g_flashInfo;   // v0.37: neutraler Hinweis (z.B. Cockpit) statt rotem "NICHT MOEGLICH"
+   // "Nächster Trade" (next trade)/hint box (v0.37: tall enough for up to 3 lines of full text instead of truncating)
+   bool   infoFlash = flashOn && g_flashInfo;   // v0.37: neutral hint (e.g. cockpit) instead of a red "NICHT MOEGLICH" (not possible)
    color  boxBg  = flashOn ? (infoFlash?C'20,30,45':C'34,20,24') : C'20,27,38';
    color  boxBrd = flashOn ? (infoFlash?C'40,70,110':C'90,34,40') : C'33,42,56';
    color  boxAcc = flashOn ? (infoFlash?C'80,150,240':C'240,73,90') : C'61,123,255';
@@ -3673,7 +3673,7 @@ void DrawPanel(double dd,double tdd,bool disabled)
       Lbl(PFX+"pl1", 37,232+ro,WL[1],C'234,240,249',10,InpPanelMono);
       Lbl(PFX+"pl2", 37,244+ro,WL[2],C'234,240,249',10,InpPanelMono);
    }
-   else           // Meldung / Vorschau umgebrochen ueber bis zu 3 Zeilen
+   else           // message / preview wrapped across up to 3 lines
    {
       Lbl(PFX+"prevdir",37,219+ro," ",C'20,27,38',8,"Arial");   // versteckt
       WrapText(prev,42,3,WL);

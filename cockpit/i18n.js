@@ -1,19 +1,19 @@
-// TradingGuard — Risiko- und Disziplin-Tool fuer MetaTrader 4
+// TradingGuard — risk and discipline tool for MetaTrader 4
 // Copyright (C) 2026 Mohammadreza Tavakoli — https://itavakoli.com/
 //
-// Dieses Programm ist freie Software: Sie koennen es weitergeben und/oder
-// veraendern unter den Bedingungen der GNU Affero General Public License,
-// Version 3 oder (nach Ihrer Wahl) jeder spaeteren Version.
+// This program is free software: you may redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License,
+// version 3 or (at your option) any later version.
 //
-// Die Veroeffentlichung erfolgt in der Hoffnung, dass es nuetzlich ist, aber
-// OHNE JEDE GEWAEHRLEISTUNG — sogar ohne die implizite Gewaehrleistung der
-// MARKTGAENGIGKEIT oder EIGNUNG FUER EINEN BESTIMMTEN ZWECK. Einzelheiten in
-// der GNU Affero General Public License: <https://www.gnu.org/licenses/>.
+// It is published in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY — not even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. Details in
+// the GNU Affero General Public License: <https://www.gnu.org/licenses/>.
 //
-// KEINE ANLAGEBERATUNG. Handel mit Hebelprodukten kann zum Totalverlust
-// fuehren. Dieses Werkzeug erzwingt Regeln, es trifft keine Marktentscheidung
-// und uebernimmt keine Verantwortung fuer Handelsergebnisse.
-// Automatisch erzeugt aus den Uebersetzungstabellen — nicht von Hand bearbeiten.
+// NOT INVESTMENT ADVICE. Trading leveraged products can lead to total
+// loss. This tool enforces rules, it makes no market decision
+// and takes no responsibility for trading results.
+// Automatically generated from the translation tables — do not edit by hand.
 // Sprachen: de (Original), en, fa (Persisch, RTL).
 window.MAMAL_I18N = {
  "de": {

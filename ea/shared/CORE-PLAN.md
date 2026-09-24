@@ -1,39 +1,39 @@
-# Geteilte Logik & Bauplan (Plan-Stand v0.14)
-> **Hinweis:** Die v0.15-Patchliste unten ist in v0.15–v0.18 **weitgehend erledigt** (inkl. #11 R17-Währungsvektor, #12 Journal-Audit). Aktueller Reifegrad: [`../../docs/STATUS.md`](../../docs/STATUS.md). MT5-Spiegel weiter offen.
+# Shared Logic & Blueprint (plan status v0.14)
+> **Note:** The v0.15 patch list below is **largely done** as of v0.15–v0.18 (including #11 R17 currency vector, #12 journal audit). Current maturity level: [`../../docs/STATUS.md`](../../docs/STATUS.md). The MT5 mirror is still open.
 
-Aktive Datei: **`ea/mt4/MamalTrading.mq4`** (MT4). Der MT5-Spiegel **`ea/mt5/MamalTrading.mq5`** ist noch nicht gebaut.
-*(Die alten `RiskGuard.mq4/.mq5` sind obsolete Vorgänger und können gelöscht werden.)*
+Active file: **`ea/mt4/MamalTrading.mq4`** (MT4). The MT5 mirror **`ea/mt5/MamalTrading.mq5`** has not been built yet.
+*(The old `RiskGuard.mq4/.mq5` are obsolete predecessors and can be deleted.)*
 
-Die komplette technische Umsetzung steht in [../../docs/TECHNISCHE-DOKU.md](../../docs/TECHNISCHE-DOKU.md); der Regel-Vertrag in [../../RULES.md](../../RULES.md).
+The complete technical implementation is documented in [../../docs/TECHNICAL.md](../../docs/TECHNICAL.md); the rule contract in [../../RULES.md](../../RULES.md).
 
-## Implementiert (R1–R19 + R25, R9 aus)
-Risiko/Trade (Auto-Lot), Idee-Cap, Tagesbudget, Tages-/Max-/Wochen-Verlust-Sperre, Cooldown/Verlustserie, SL+TP-Pflicht, Min-CRV, No-Override, Journal, Gesamtrisiko-Deckel, Tagesziel+Giveback, Mindestpause, Min-SL/Max-Lot, Session/News, Korrelation (Netto-USD), De-Risk, Revenge-Fenster. Auto-Scale-Caps. Crash-Härtung (Trades nur OnTick, Drossel, gedrosseltes Panel).
+## Implemented (R1–R19 + R25, R9 off)
+Risk per trade (auto lot), idea cap, daily budget, daily/max/weekly loss lock, cooldown/losing streak, mandatory SL+TP, minimum risk-reward ratio, no-override, journal, total risk cap, daily target + giveback, minimum break, min SL/max lot, session/news, correlation (net USD), de-risk, revenge window. Auto-scale caps. Crash hardening (trades only in `OnTick`, throttling, throttled panel).
 
-## MT4 ↔ MT5 Unterschiede (für den Spiegel)
-| Thema | MT4 (aktiv) | MT5 (offen) |
+## MT4 ↔ MT5 differences (for the mirror)
+| Topic | MT4 (active) | MT5 (open) |
 |------|-------------|-------------|
-| Manuellen Fill fangen | Polling (`OnTimer`/`OnTick`) | `OnTradeTransaction` |
-| Schließen | `OrderClose` + Preis je Symbol via `MarketInfo` | `CTrade.PositionClose(ticket)` |
-| Positionen vs. Pendings | gemeinsam (`OrdersTotal`+`OrderType`) | getrennt |
-| Equity/Balance | `AccountEquity()` / `AccountBalance()` | `AccountInfoDouble(...)` |
-| Serverzeit | `SrvTime()` = PC-Uhr + Server-Offset (ab v0.16; MQL4 hat kein `TimeTradeServer`) | `TimeTradeServer()` (MQL5 hat es) |
+| Catching a manual fill | polling (`OnTimer`/`OnTick`) | `OnTradeTransaction` |
+| Closing | `OrderClose` + price per symbol via `MarketInfo` | `CTrade.PositionClose(ticket)` |
+| Positions vs. pendings | combined (`OrdersTotal`+`OrderType`) | separate |
+| Equity/balance | `AccountEquity()` / `AccountBalance()` | `AccountInfoDouble(...)` |
+| Server time | `SrvTime()` = PC clock + server offset (since v0.16; MQL4 has no `TimeTradeServer`) | `TimeTradeServer()` (MQL5 has it) |
 
-## Nächster Schritt: v0.15-Patch-Reihenfolge (aus der Review)
-Vor MT5-Spiegel zuerst die P0/P1-Patches auf MT4 (Details: [../../docs/REVIEW-v0.14.md](../../docs/REVIEW-v0.14.md) §6):
-1. `MathMax(Balance,Equity)` als Tagesbasis (P0-5)
-2. Enforce vom Tick entkoppeln, `OnTimer→Cycle(false,true)` (P0-1)
-3. `g_eaClosed[]`-Ausschluss für eigene Closes (P0-3)
-4. History-basierte, idempotente Verlust-Auflösung statt `g_known` (P0-2/P0-4)
-5. Magic-Filter in allen Enforce-/Streak-Funktionen (P1-11)
-6. Max-Loss 8→6 % + Warn-Entry-Gate (P0-6)
-7. Lockstate-Datei (Checksum, fail-closed) (P0-7)
-8. `GV_DAY_RISK`-Reconciliation + Flush (P1-5)
-9. Zeitquelle = tickunabhängige Server-Zeit `SrvTime()` (PC-Uhr + Offset; MQL4 hat kein `TimeTradeServer`) (P1-4)
-10. R7-Frist: Anker `OrderOpenTime`, `GetTickCount`, Grace 3–5 s, News-Grace 0 (P1-7)
-11. R17 echtes Währungs-Vektor-Exposure (Cross-Pairs) (P1-8)
-12. Journal-Felder erweitern (P1-10)
-13. `#define EA_VERSION`, Doku-Hygiene (P3-6/P3-7)
-14. Windows-VPS + Heartbeat + Prop-Firm-Regel-Compliance (Multi-Prop-Firm; FTMO = Default-Profil) (P1-12/P1-13)
-15. P2-Rest (Feinschliff)
+## Next step: v0.15 patch order (from the review)
+Before the MT5 mirror, first apply the P0/P1 patches to MT4 (details: [../../docs/REVIEW-v0.14.md](../../docs/REVIEW-v0.14.md) §6):
+1. `MathMax(Balance,Equity)` as the daily baseline (P0-5)
+2. Decouple enforcement from the tick, `OnTimer→Cycle(false,true)` (P0-1)
+3. `g_eaClosed[]` exclusion for the EA's own closes (P0-3)
+4. History-based, idempotent loss resolution instead of `g_known` (P0-2/P0-4)
+5. Magic filter in all enforce/streak functions (P1-11)
+6. Max loss 8→6 % + warning entry gate (P0-6)
+7. Lockstate file (checksum, fail-closed) (P0-7)
+8. `GV_DAY_RISK` reconciliation + flush (P1-5)
+9. Time source = tick-independent server time `SrvTime()` (PC clock + offset; MQL4 has no `TimeTradeServer`) (P1-4)
+10. R7 deadline: anchor `OrderOpenTime`, `GetTickCount`, grace 3–5 s, news grace 0 (P1-7)
+11. R17 real currency vector exposure (cross pairs) (P1-8)
+12. Extend journal fields (P1-10)
+13. `#define EA_VERSION`, documentation hygiene (P3-6/P3-7)
+14. Windows VPS + heartbeat + prop firm rule compliance (multi prop firm; FTMO = default profile) (P1-12/P1-13)
+15. Remaining P2 items (polish)
 
-Erst nach grünem **Rule-Test-Harness/Visual-Test** der Regelmatrix (Regelverhalten, kein Profit-Backtest) → MT5-Spiegel.
+Only after a green **rule test harness / visual test** of the rule matrix (rule behavior, not a profit backtest) → MT5 mirror.
