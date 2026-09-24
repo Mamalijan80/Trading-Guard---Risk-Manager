@@ -1,0 +1,34 @@
+# --- Echte Kontodaten. Gehoeren niemals in ein oeffentliches Repository. -------
+# Equity-Verlaeufe echter Konten (Kontonummer steckt im Dateinamen, Kontostand im Inhalt).
+cockpit/data/
+*.csv
+
+# Laufzeit-Dateien, die der EA im MQL4/Files-Ordner erzeugt (Journal, Zustand, Screenshots).
+mamal_cockpit.json
+mamal_cmd.txt
+mamal_files*.txt
+MamalTrading_Journal.csv
+MamalTrading_Lockstate.dat
+Mamal_*.png
+
+# Konto-spezifische Presets (enthalten die Challenge-Startbalance).
+*.set
+
+# --- Build-Artefakte -----------------------------------------------------------
+# Kompilierter EA. Wird aus der .mq4 erzeugt; gehoert nicht in die Versionierung.
+*.ex4
+*.ex5
+
+# --- Arbeitsreste --------------------------------------------------------------
+*.bak
+*.bak2
+*.broken
+*.mojibake
+*.dblnl
+*.orig
+*.tmp
+
+node_modules/
+
+# Interner Strategie-Brief, nicht Teil der Veroeffentlichung.
+docs/SAAS-BUSINESS-PLAN.md

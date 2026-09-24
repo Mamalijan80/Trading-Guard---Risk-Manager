@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mamal-Trading · Wochen-Report</title>
+<style>
+  :root{ --txt:#161c28; --txt2:#5a6373; --txt3:#9aa3b2; --line:#e5e8ee;
+    --green:#16a34a; --red:#dc2626; --amber:#d97706; --accent:#2563eb;
+    --mono:'SF Mono','Roboto Mono','Consolas','Menlo',monospace; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:var(--txt);font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5}
+  .wrap{max-width:800px;margin:0 auto;padding:34px 30px 60px}
+  h1{font-size:21px;margin:0}
+  h2{font-size:12px;letter-spacing:.12em;color:var(--txt3);text-transform:uppercase;margin:26px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .sub{color:var(--txt2);margin-top:4px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);border-radius:10px;margin-top:16px;overflow:hidden}
+  .kpi{padding:12px 14px;border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:0}
+  .kpi .l{font-size:10.5px;letter-spacing:.07em;color:var(--txt3);text-transform:uppercase}
+  .kpi .v{font:700 19px/1.4 var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--txt3);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:7px 10px;border-bottom:1px solid #f0f2f6;font-family:var(--mono);font-size:12.5px}
+  .pos{color:var(--green)}.neg{color:var(--red)}
+  .note{color:var(--txt2);font-size:13px;background:#f6f8fb;border-radius:9px;padding:12px 15px;margin-top:8px}
+  .printbtn{position:fixed;top:16px;right:16px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:9px;padding:9px 16px;font:600 13px/1 inherit}
+  @media print{ .printbtn{display:none} body{font-size:12.5px} .wrap{padding:0} }
+</style>
+</head>
+<body>
+<button class="printbtn" onclick="window.print()">🖨 Drucken / als PDF sichern</button>
+<div class="wrap">
+  <h1>Mamal-Trading · Wochen-Report</h1>
+  <div class="sub" id="head">lade…</div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <h2>Letzte 7 aktive Handelstage</h2>
+  <table><thead><tr><th>Tag</th><th>Netto</th><th>Trades</th><th>G / V</th><th>davon manuell</th><th>Regel-Blocks</th></tr></thead>
+    <tbody id="days"></tbody></table>
+
+  <h2>Regel-Eingriffe (gesamt)</h2>
+  <table><thead><tr><th>Regel</th><th>Eingriffe</th><th>am Einstieg blockiert</th><th>Trades geschlossen</th></tr></thead>
+    <tbody id="rules"></tbody></table>
+
+  <h2>Fazit</h2>
+  <div class="note" id="fazit"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
+const eur=v=>(v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
+const RN={R1:'Risiko/Trade',R2:'Idee-Cap',R3:'Tagesbudget',R4:'Tagesverlust',R4b:'Max-Verlust',R5:'Cooldown',R6:'Verlustserie',R7:'SL/TP-Pflicht',R8:'Mindest-CRV',R9:'Anti-FOMO',R12:'Gesamtrisiko',R13:'Tagesziel',R14:'Mindestpause',R15:'Min-SL-Abstand',R16:'Session/News',R17:'Korrelation',R18:'Wochenlimit',R19:'De-Risk',R22:'Nur Panel-Trades',R25:'Revenge'};
+const ACCT=new URLSearchParams(location.search).get('acct')||'';
+const AQ=ACCT?('?acct='+encodeURIComponent(ACCT)):'';
+async function load(){
+  let a,s;
+  try{ a=await (await fetch('/analytics'+AQ)).json(); s=(await (await fetch('/state'+AQ)).json()).state||{}; }
+  catch(e){ $('head').textContent='Server nicht erreichbar.'; return; }
+  const cal=a.calendar||{}; const dates=Object.keys(cal).sort();
+  // v0.39-fix (Verify): erst AKTIVE Tage filtern, DANN die letzten 7 nehmen — sonst fressen
+  // reine Info-/Sperr-Tage die Slots und der Report zeigt weniger als 7 Handelstage.
+  const last7=dates.filter(d=>(cal[d].fills||0)+(cal[d].blocks||0)+(cal[d].closes||0)>0).slice(-7);
+  const acct=s.account?('Konto '+s.account+' · '):'';
+  $('head').textContent=acct+(last7.length?('Zeitraum '+last7[0]+' – '+last7[last7.length-1]):'noch keine aktiven Tage')+' · erstellt '+new Date().toLocaleString('de-DE');
+  let net=0,tr=0,bl=0,w=0,l=0,f=0,man=0;
+  for(const d of last7){ const c=cal[d]; net+=c.net||0; tr+=c.closes||0; bl+=c.blocks||0; w+=c.wins||0; l+=c.losses||0; f+=c.fills||0; man+=c.manual||0; }
+  // v0.45-fix (Verify): Disziplin = Panel-Trades/(Panel-Trades+Blocks) — identisch zum Dashboard.
+  //   Vorher floss `closes` ein, das seit v0.44 auch MANUELLE Trades enthaelt: Handeln am Panel vorbei
+  //   haette die Disziplin-Quote im Report ERHOEHT.
+  const disc=(f+bl)?Math.round(f/(f+bl)*100):0;
+  $('kpis').innerHTML=
+    `<div class="kpi"><div class="l">Netto (Zeitraum)</div><div class="v ${net>=0?'pos':'neg'}">${eur(net)}</div></div>
+     <div class="kpi"><div class="l">Trades</div><div class="v">${tr} <span style="font-size:12px;color:var(--txt3)">${w}G/${l}V${man?' · '+man+' manuell':''}</span></div></div>
+     <div class="kpi"><div class="l">Regel-Blocks</div><div class="v">${bl}</div></div>
+     <div class="kpi"><div class="l">Disziplin</div><div class="v">${disc}%</div></div>`;
+  $('days').innerHTML=last7.map(d=>{ const c=cal[d];
+    return `<tr><td>${esc(d)}</td><td class="${(c.net||0)>=0?'pos':'neg'}">${eur(c.net||0)}</td><td>${c.closes||0}</td><td>${c.wins||0} / ${c.losses||0}</td><td${c.manual?' style="color:var(--amber);font-weight:700"':''}>${c.manual||0}</td><td>${c.blocks||0}</td></tr>`; }).join('')
+    || '<tr><td colspan="6" style="color:var(--txt3)">keine aktiven Tage</td></tr>';
+  $('rules').innerHTML=(a.rules||[]).map(r=>
+    `<tr><td>${esc(r.id)} · ${esc(RN[r.id]||'')}</td><td>${r.count}×</td><td>${r.blocked||0}×</td><td>${r.closed||0}×</td></tr>`).join('')
+    || '<tr><td colspan="4" style="color:var(--txt3)">keine Eingriffe — sauber</td></tr>';
+  const top=(a.rules||[])[0];
+  // v0.45-fix (Verify): "sehr diszipliniert" darf NICHT stehen, wenn am Panel vorbei gehandelt wurde —
+  //   dort greift keine Regel, also kann es auch keine Blocks geben.
+  $('fazit').textContent=
+    (net>=0?'Positive Woche. ':'Negative Woche. ')
+    +(bl===0
+        ? (man===0 ? 'Kein einziger Regel-Block — sehr diszipliniert gehandelt.'
+                   : `Keine Regel-Blocks — aber ${man} Trade(s) liefen am Panel vorbei; dort greift KEINE Regel.`)
+        : `${bl}× hat dich eine Regel gestoppt${top?` — am häufigsten ${top.id} (${RN[top.id]||''})`:''}. Jeder Block war ein Moment, in dem dein Plan dich vor dir selbst geschützt hat.`)
+    +(man>0&&bl>0?` ${man} Trade(s) liefen zusätzlich am Panel vorbei (ungeschützt).`:'')
+    +(disc>0&&disc<40?' Nimm dir für nächste Woche WENIGER Versuche vor — Qualität statt Frequenz.':'');
+}
+load();
+</script>
+</body>
+</html>

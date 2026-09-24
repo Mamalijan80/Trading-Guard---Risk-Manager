@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mamal-Trading · Cockpit</title>
+<style>
+  /* ── Design-Tokens · institutionelles Terminal ─────────────────────────────
+     Farblogik (validiert): Gewinn/Verlust wird IMMER durch Vorzeichen + Zahl
+     getragen, nie durch Farbe allein — Gruen/Rot sind fuer Farbenblinde nicht
+     trennbar (ΔE 4,1). Flaechen-Encodings nutzen daher die blaue Sequenz. */
+  :root{
+    --bg:#eef1f6; --card:#ffffff; --card2:#f4f7fb; --line:#dbe2ec; --line2:#e8edf4;
+    --txt:#0d1420; --txt2:#4a5668; --txt3:#8492a6;
+    --accent:#1f6fd0; --accent-bg:#e9f1fc;
+    --green:#00662e; --green-bg:#e6f4ec; --red:#b8232f; --red-bg:#fbebec; --amber:#8a5a00; --amber-bg:#f8f0dd;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    /* sequenzielle Blau-Rampe (Magnitude, z.B. Ablehnungen je Stunde) */
+    --s1:#cde2fb; --s2:#9ec5f4; --s3:#6da7ec; --s4:#3987e5; --s5:#256abf; --s6:#184f95;
+    --shadow:0 1px 2px rgba(11,11,11,.04),0 1px 3px rgba(11,11,11,.03);
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.5}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px 24px 72px}
+  a{color:inherit;text-decoration:none}
+  /* Zahlenkolonnen (Tabellen, Achsen) buendig — grosse Einzelzahlen bleiben proportional */
+  table td, table th, .axis, .cell .n{font-variant-numeric:tabular-nums}
+
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:13px 18px;border-top:2px solid var(--accent)}
+  .logo{display:flex;align-items:flex-end;gap:3px;height:19px}
+  .logo i{width:4px;background:var(--accent);border-radius:1px;display:block}
+  .logo i:nth-child(1){height:8px}.logo i:nth-child(2){height:13px}.logo i:nth-child(3){height:19px}
+  .brand{display:flex;align-items:center;gap:10px;font-size:17px;letter-spacing:.1em}
+  .brand b{font-weight:700}.brand span{color:var(--txt3);font-weight:500}
+  .grow{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;
+    font-weight:700;letter-spacing:.06em;font-size:13px;border:1px solid}
+  .pill .dot{width:8px;height:8px;border-radius:50%}
+  .chip{font:600 12px/1 var(--mono);color:var(--txt2);background:var(--card2);
+    border:1px solid var(--line);border-radius:8px;padding:6px 10px;letter-spacing:.03em}
+  .eq{text-align:right}.eq .l{font-size:11px;letter-spacing:.1em;color:var(--txt3)}
+  .eq .v{font:600 20px/1.1 var(--mono)}
+
+  .banner{margin:14px 0 0;padding:13px 18px;border-radius:12px;font-weight:600;box-shadow:var(--shadow)}
+  .banner.red{background:var(--red-bg);border:1px solid #f6cccc;color:#b42121}
+  .banner.amber{background:var(--amber-bg);border:1px solid #f2ddba;color:#a95e08}
+  .banner.green{background:var(--green-bg);border:1px solid #c6ecd3;color:#127a37}
+
+  /* Abschnittstitel als Haarlinien-Regel — Terminal-Gliederung statt Ueberschrift-Bloecke */
+  h2{font-size:10.5px;letter-spacing:.14em;color:var(--txt3);font-weight:700;
+    margin:26px 2px 10px;text-transform:uppercase;display:flex;align-items:center;gap:12px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+
+  /* Schwächen */
+  .weak{padding:18px 20px}
+  .weak .lead{margin:0 0 16px;color:var(--txt2)}
+  .weak .lead b{color:var(--txt)}
+  .wrow{display:grid;grid-template-columns:210px 1fr 62px;align-items:center;gap:12px;margin:11px 0}
+  .wrow .nm{font-weight:600;font-size:14px}.wrow .nm small{color:var(--txt3);font-weight:500;display:block;font-size:12px}
+  .wtrack{height:22px;background:var(--line2);border-radius:7px;overflow:hidden}
+  .wtrack i{display:block;height:100%;border-radius:7px}
+  .wcnt{text-align:right;font:700 15px/1 var(--mono)}
+  .rankdot{display:inline-block;width:20px;height:20px;border-radius:6px;color:#fff;font:700 11px/20px var(--mono);text-align:center;margin-right:7px}
+
+  /* Kalender */
+  .months{display:flex;flex-wrap:wrap;gap:18px}
+  .month{flex:1;min-width:300px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+  .month h3{margin:0 0 10px;font-size:15px;font-weight:700}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  .dow{font-size:11px;color:var(--txt3);text-align:center;font-weight:600;padding-bottom:2px}
+  .cell{aspect-ratio:1/.86;border-radius:9px;border:1px solid var(--line2);padding:5px 6px;
+    display:flex;flex-direction:column;justify-content:space-between;background:var(--card2)}
+  .cell.empty{background:transparent;border:0}
+  .cell .d{font-size:11px;color:var(--txt3);font-weight:600}
+  .cell .n{font:700 12px/1.1 var(--mono)}
+  .cell .b{font-size:10px;color:var(--amber);font-weight:700}
+  /* Zahl-zuerst: der Betrag traegt die Aussage, die Tinte ist nur Verstaerkung
+     (Vorzeichen steht immer davor -> nie Farbe allein, CVD-sicher). */
+  .cell.pos{background:var(--card2);border-left:2px solid var(--green);cursor:pointer}
+  .cell.neg{background:var(--card2);border-left:2px solid var(--red);cursor:pointer}
+  .cell.flat{cursor:pointer}
+  .cell.pos .n{color:var(--green)}.cell.neg .n{color:var(--red)}
+  .cell.act:hover{outline:2px solid var(--accent);outline-offset:1px}
+  .cell.wknd{opacity:.72}
+
+  /* Live-Status */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+  .rc{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 17px}
+  .rc .top{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+  .rid{font:700 11px/1 var(--mono);color:var(--accent);background:var(--accent-bg);
+    border-radius:6px;padding:4px 6px;letter-spacing:.03em}
+  .rn{font-weight:600;font-size:15px}
+  .rs{margin-left:auto;font:700 12px/1 var(--mono)}
+  .ex{color:var(--txt2);font-size:13px;margin:6px 0 12px}
+  .val{font:600 14px/1 var(--mono);margin-bottom:8px}.val b{font-size:18px}.val .lim{color:var(--txt3);font-weight:500}
+  .bar{height:8px;border-radius:5px;background:var(--line2);overflow:hidden;position:relative}
+  .bar i{display:block;height:100%;border-radius:5px;transition:width .4s}
+  .bar .mark{position:absolute;top:-2px;width:2px;height:12px;background:var(--txt3);opacity:.6}
+  .g{color:var(--green)}.a{color:var(--amber)}.r{color:var(--red)}.b{color:var(--accent)}
+  .bg-g{background:var(--green)}.bg-a{background:var(--amber)}.bg-r{background:var(--red)}.bg-b{background:var(--accent)}
+
+  .off-list{display:flex;flex-wrap:wrap;gap:8px}
+  .off-chip{background:var(--card2);border:1px dashed var(--line);border-radius:9px;padding:8px 12px;color:var(--txt3);font-size:13px}
+  .off-chip b{color:var(--txt2);font-weight:600}
+
+  .jwrap{overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--txt3);font-weight:700;font-size:11px;letter-spacing:.06em;
+    padding:11px 15px;border-bottom:1px solid var(--line);text-transform:uppercase}
+  td{padding:10px 15px;border-bottom:1px solid var(--line2);font-family:var(--mono);font-size:12.5px;color:var(--txt2)}
+  tr:last-child td{border-bottom:0}
+  .badge{display:inline-block;padding:3px 8px;border-radius:6px;font-weight:700;font-size:11px}
+  .bd-open{background:var(--accent-bg);color:#1e50c8}.bd-close{background:var(--line2);color:#3a4658}
+  .bd-man{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber)}   /* v0.44: manueller Trade */
+  .bd-block{background:var(--amber-bg);color:#a95e08}.bd-lock{background:var(--red-bg);color:#b42121}
+  .bd-test{background:#eef1f6;color:#6b7688}.bd-prot{background:var(--red-bg);color:#b42121}
+  .net-pos{color:var(--green)}.net-neg{color:var(--red)}
+  .empty{padding:26px;text-align:center;color:var(--txt3)}
+  .foot{margin-top:26px;color:var(--txt3);font-size:12px;text-align:center}
+  .live{color:var(--green)}.stale{color:var(--amber)}.off{color:var(--red)}
+  .totrow{display:flex;gap:22px;flex-wrap:wrap;margin:2px 4px 0;color:var(--txt2);font-size:13px}
+  .totrow b{color:var(--txt);font-family:var(--mono)}
+
+  /* Coach: Disziplin-Hero */
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+    border-top:3px solid var(--accent);padding:18px 22px;margin-bottom:4px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .hero .big{font:700 40px/1 var(--mono)}
+  .hero .lab{font-size:12px;letter-spacing:.1em;color:var(--txt3);text-transform:uppercase}
+  .hero .sub{color:var(--txt2);font-size:14px;max-width:520px}
+  .hero .sub b{color:var(--txt)}
+  .hero .net{margin-left:auto;text-align:right}
+  .hero .net .v{font:700 24px/1 var(--mono)}
+  .dg{height:10px;border-radius:6px;background:var(--red-bg);overflow:hidden;margin-top:8px;max-width:280px}
+  .dg i{display:block;height:100%;background:var(--accent);border-radius:6px}
+  /* Edge-Karte */
+  .edgecard{padding:16px 18px}
+  .verdict{font-size:15px;margin-bottom:14px;color:var(--txt2)}
+  .verdict b{color:var(--txt)}
+  .egrid{display:grid;gap:6px}
+  .erow{display:grid;grid-template-columns:130px repeat(3,1fr) 92px;gap:6px;align-items:center}
+  .ehead{font-size:11px;letter-spacing:.06em;color:var(--txt3);text-transform:uppercase;font-weight:700}
+  .esym{font-weight:600;font-size:14px}
+  .ecell{border-radius:8px;padding:9px 8px;text-align:center;background:var(--card2);border:1px solid var(--line2)}
+  .ecell .n{font:700 13px/1.1 var(--mono)}.ecell .c{font-size:10px;color:var(--txt3);margin-top:2px}
+  .ecell.pos{background:var(--green-bg);border-color:#cdeed8}.ecell.pos .n{color:#127a37}
+  .ecell.neg{background:var(--red-bg);border-color:#f6d4d4}.ecell.neg .n{color:#c02020}
+  .ecell.empty{background:transparent;border:0}
+  .etot{text-align:right;font:700 14px/1 var(--mono)}
+  /* Stunden-Streifen */
+  .hourstrip{display:grid;grid-template-columns:repeat(24,1fr);gap:3px}
+  .hourstrip .hc{aspect-ratio:1/1.4;border-radius:5px;background:var(--line2);position:relative;display:flex;align-items:flex-end;justify-content:center}
+  .hourstrip .hc .hh{font-size:9px;color:var(--txt3);padding-bottom:2px}
+  .hourstrip .hc.hot{outline:2px solid var(--warn);outline-offset:1px}   /* Spitzenstunde: Ring + Text, nicht Farbe allein */
+  .hourcap{margin-top:12px;color:var(--txt2);font-size:14px}.hourcap b{color:var(--txt)}
+  /* ==== v0.39: Dark Mode ==== */
+  /* Dunkel = Blau-Schwarz (Terminal-Look), nicht neutral-warm */
+  html[data-theme="dark"]{
+    --bg:#0a0f1a; --card:#121a2b; --card2:#0e1524; --line:#22304a; --line2:#1a2436;
+    --txt:#e8eef9; --txt2:#a6b3c9; --txt3:#6b7a94;
+    --accent:#4d94ff; --accent-bg:#15243d;
+    --green:#2ecc71; --green-bg:#0f2a1c; --red:#ff5f6d; --red-bg:#2c151b; --amber:#f0ad3e; --amber-bg:#2b2212;
+    --good:#2ecc71; --warn:#f0ad3e; --crit:#ff5f6d;
+    --s1:#16365f; --s2:#1d4a80; --s3:#2a6bb0; --s4:#3987e5; --s5:#5ba3f0; --s6:#8fc3f8;
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
+  }
+  html[data-theme="dark"] .banner.green{background:var(--green-bg);color:#7fe0a5}
+  html[data-theme="dark"] .banner.amber{background:var(--amber-bg);color:#f0c078}
+  html[data-theme="dark"] .banner.red{background:var(--red-bg);color:#f59aa5}
+  /* ==== v0.39: Header-Buttons ==== */
+  .hbtn{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt2);border-radius:8px;
+    padding:4px 9px;font:inherit;font-size:13px;line-height:1.4}
+  .hbtn:hover{color:var(--txt);border-color:var(--txt3)}
+  .hbtn.on{color:var(--accent);border-color:var(--accent)}
+  /* ==== v0.53: Rechts-nach-links (Persisch) ==== */
+  html[dir="rtl"] body{direction:rtl}
+  html[dir="rtl"] .lm-clock,html[dir="rtl"] .hero .net,html[dir="rtl"] .eq{text-align:left}
+  html[dir="rtl"] h2::after{order:-1}
+  html[dir="rtl"] .cell.pos,html[dir="rtl"] .cell.neg{border-left:0;border-right:2px solid}
+  html[dir="rtl"] .cell.pos{border-right-color:var(--green)}
+  html[dir="rtl"] .cell.neg{border-right-color:var(--red)}
+  html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
+  html[dir="rtl"] .mono,html[dir="rtl"] .v,html[dir="rtl"] .lm-val{direction:ltr;unicode-bidi:embed}
+
+  /* ==== v0.46: Sperr-Monitor (Cooldown / Tages- / Wochensperre) ==== */
+  .lockmon{position:relative;overflow:hidden;margin:14px 0 0;display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 20px 18px}
+  .lockmon.crit{border-left-color:var(--crit)}
+  .lm-left{min-width:220px;flex:1}
+  .lm-kind{font:700 15px/1.3 inherit;letter-spacing:.01em}
+  .lm-why{font-size:12.5px;color:var(--txt2);margin-top:3px}
+  .lm-clock{text-align:right;min-width:150px}
+  .lm-lab{font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--txt3)}
+  .lm-val{font:700 34px/1.1 var(--mono);margin-top:4px;font-variant-numeric:tabular-nums}
+  .lm-until{font-size:11.5px;color:var(--txt3);margin-top:2px}
+  .lm-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--line2)}
+  .lm-bar i{display:block;height:100%;background:var(--warn);transition:width .9s linear}
+  .lockmon.crit .lm-bar i{background:var(--crit)}
+
+  /* ==== v0.39: Puffer-Tacho ==== */
+  .gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .gg .glab{font-size:11px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase}
+  .gg .gval{font:700 26px/1.2 var(--mono);margin:4px 0 2px}
+  .gg .gsub{font-size:12.5px;color:var(--txt2)}
+  .gg .gbar{height:10px;border-radius:6px;background:var(--line2);overflow:hidden;margin-top:8px;position:relative}
+  .gg .gbar i{display:block;height:100%;border-radius:6px}
+  .gact{display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line2)}
+  .endday{cursor:pointer;border:1px solid var(--red);background:transparent;color:var(--red);border-radius:9px;
+    padding:8px 14px;font:600 13px/1 inherit}
+  .endday:hover{background:var(--red);color:#fff}
+  .gnote{font-size:12.5px;color:var(--txt3)}
+  /* ==== v0.39: Multi-Konto-Grid ==== */
+  .agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:12px}
+  .acard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:13px 15px;cursor:pointer;border-top:3px solid var(--line)}
+  .acard:hover{border-color:var(--accent)}
+  .acard.sel{border-top-color:var(--accent)}
+  .acard .an{font-weight:700}.acard .ae{font:700 19px/1.3 var(--mono)}
+  .acard .as{font-size:11.5px;color:var(--txt3)}
+  /* ==== v0.39: Tilt-Radar ==== */
+  .tilt{margin:14px 0 0;padding:13px 18px;border-radius:12px;font-weight:700;background:var(--red-bg);color:var(--red);
+    box-shadow:var(--shadow);animation:tiltpulse 1.2s ease-in-out infinite}
+  @keyframes tiltpulse{50%{opacity:.65}}
+  /* ==== v0.39: Statistik + Trend ==== */
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;padding:6px 0}
+  .stat{padding:12px 18px;border-right:1px solid var(--line2)}
+  .stat:last-child{border-right:0}
+  .stat .l{font-size:11px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase}
+  .stat .v{font:700 20px/1.4 var(--mono)}
+  .trendwrap{display:flex;gap:22px;align-items:center;flex-wrap:wrap;padding:14px 18px}
+  .streakbox .big{font:700 26px/1.1 var(--mono)}
+  .tbars{display:flex;align-items:flex-end;gap:3px;height:56px;flex:1;min-width:220px}
+  .tb{flex:1;min-width:5px;max-width:22px;border-radius:3px 3px 0 0;background:var(--accent)}
+  .eqsvg{width:100%;height:190px;display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo"><i></i><i></i><i></i></span>
+    <span class="brand"><b>MAMAL</b><span>·TRADING</span></span>
+    <span id="pill" class="pill" style="border-color:var(--line)"><span class="dot"></span><span id="pillTx">…</span></span>
+    <span class="grow"></span>
+    <select id="langSel" class="hbtn" title="Sprache / Language / زبان" style="cursor:pointer">
+      <option value="de">DE</option><option value="en">EN</option><option value="fa">فا</option>
+    </select>
+    <button id="themeBtn" class="hbtn" title="Hell/Dunkel umschalten">🌙</button>
+    <button id="notifBtn" class="hbtn" title="Benachrichtigungen (Cooldown vorbei, Sperre, Ziel erreicht)">🔔</button>
+    <button id="tradesBtn" class="hbtn" title="Trade-Akte: Einzelheiten, SL/TP-Chronik und Screenshots je Trade">📁</button>
+    <button id="reportBtn" class="hbtn" title="Wochen-Report öffnen (druckbar)">📄</button>
+    <select id="acctSel" class="chip" style="display:none;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:4px 8px;font:inherit"></select>
+    <span id="chip" class="chip">—</span>
+    <div class="eq"><div class="l">KAPITAL</div><div class="v" id="equity">—</div></div>
+  </header>
+
+  <div id="banner" style="display:none" class="banner"></div>
+  <div id="tilt" style="display:none" class="tilt"></div>
+
+  <!-- v0.46: Sperr-Monitor — laufender Countdown, solange eine Sperre aktiv ist -->
+  <div id="lockmon" class="lockmon" style="display:none">
+    <div class="lm-left">
+      <div class="lm-kind" id="lmKind">—</div>
+      <div class="lm-why" id="lmWhy"></div>
+    </div>
+    <div class="lm-clock">
+      <div class="lm-lab">verbleibend</div>
+      <div class="lm-val" id="lmVal">--:--</div>
+      <div class="lm-until" id="lmUntil"></div>
+    </div>
+    <div class="lm-bar"><i id="lmBar"></i></div>
+  </div>
+
+  <div id="acctGridWrap" style="display:none">
+    <h2 data-i18n="h2.accounts">Deine Konten</h2>
+    <div class="agrid" id="acctGrid"></div>
+  </div>
+
+  <div id="content" style="display:none">
+
+    <h2 data-i18n="h2.buffer">Sicherheits-Puffer · live</h2>
+    <div class="card" style="padding:18px">
+      <div class="gauges" id="gauges"></div>
+      <div class="gact">
+        <button id="enddayBtn" class="endday">🛑 Tag beenden</button>
+        <span class="gnote">Freiwillige Selbstsperre bis Server-Mitternacht — kann <b>nicht</b> rückgängig gemacht werden (Tighten-Only).</span>
+      </div>
+    </div>
+
+    <h2 data-i18n="h2.challenge">Challenge-Fortschritt</h2>
+    <div class="card" style="padding:18px" id="challenge"></div>
+
+    <div class="hero" id="hero"></div>
+
+    <h2 data-i18n="h2.equity">Equity · Verlauf <span style="text-transform:none;font-weight:500;color:var(--txt3)" id="eqCap"></span></h2>
+    <div class="card" style="padding:14px 18px 8px"><svg id="eqChart" class="eqsvg" preserveAspectRatio="none"></svg></div>
+
+    <h2 data-i18n="h2.trend">Disziplin-Trend · wirst du besser?</h2>
+    <div class="card trendwrap">
+      <div class="streakbox"><div class="stat"><div class="l">Tage ohne Regel-Block</div><div class="big" id="streakNow">—</div><div class="gnote" id="streakBest"></div></div></div>
+      <div class="tbars" id="discTrend"></div>
+    </div>
+
+    <h2 data-i18n="h2.stats">Trade-Statistik</h2>
+    <div class="card statgrid" id="stats"></div>
+
+    <h2>Dein Edge · wo &amp; wann du wirklich Geld machst</h2>
+    <div class="card edgecard">
+      <div class="verdict" id="edgeVerdict">…</div>
+      <div class="egrid" id="edgeGrid"></div>
+    </div>
+
+    <h2 data-i18n="h2.hours">Wann du klickst · abgelehnte Versuche nach Uhrzeit</h2>
+    <div class="card" style="padding:16px 18px">
+      <div class="hourstrip" id="hourStrip"></div>
+      <div class="hourcap" id="hourCap"></div>
+    </div>
+
+    <h2 data-i18n="h2.weak">Deine Schwächen · wo die Regeln am häufigsten bremsen</h2>
+    <div class="card weak">
+      <p class="lead" id="weakLead">…</p>
+      <div id="weakBars"></div>
+      <div class="totrow" id="totrow"></div>
+    </div>
+
+    <h2>Kalender · Gewinn / Verlust pro Tag <span style="text-transform:none;font-weight:500;color:var(--txt3)">— Tag anklicken für Details</span></h2>
+    <div class="months" id="months"></div>
+
+    <h2 data-i18n="h2.rules">Wo stehe ich · aktive Regeln (live)</h2>
+    <div class="grid" id="rules"></div>
+
+    <h2 id="offHead" style="display:none" data-i18n="h2.off">Bewusst ausgeschaltet</h2>
+    <div class="off-list" id="off"></div>
+
+    <h2 data-i18n="h2.journal">Letzte Ereignisse</h2>
+    <div class="card jwrap"><table><thead><tr>
+      <th>Zeit</th><th>Ereignis</th><th>Symbol</th><th>Netto</th><th>Grund / Tag</th>
+    </tr></thead><tbody id="journal"><tr><td colspan="5" class="empty">lade…</td></tr></tbody></table></div>
+  </div>
+
+  <div id="offline" class="empty" style="padding:70px 20px">
+    <div style="font-size:17px;color:var(--txt2);margin-bottom:8px">Warte auf MetaTrader…</div>
+    <div>Noch keine Live-Daten. Bitte prüfen: MT4 läuft, EA <b>Mamal-Trading</b> auf einem Chart,
+      <b>InpCockpit = true</b>, AutoTrading an.</div>
+  </div>
+
+  <div class="foot" id="stand">—</div>
+</div>
+
+<script src="/i18n.js"></script>
+<script>
+// ==== v0.53: Mehrsprachigkeit (de / en / fa) ==============================
+// Die Tabelle liegt in /i18n.js. t(key, params) liefert den Text der aktiven Sprache;
+// fehlt ein Schluessel, faellt es auf Deutsch zurueck (nie leere Oberflaeche).
+let LANG = localStorage.getItem('mamalLang') || 'de';
+function t(key, params){
+  const T = (window.MAMAL_I18N||{});
+  let s = (T[LANG]&&T[LANG][key]) || (T.de&&T.de[key]) || '';
+  if(params) for(const k in params) s = s.split('{'+k+'}').join(params[k]);
+  return s;
+}
+function applyLang(){
+  const root=document.documentElement;
+  root.lang = LANG;
+  root.dir  = (LANG==='fa') ? 'rtl' : 'ltr';       // Persisch laeuft von rechts nach links
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const v=t(el.dataset.i18n); if(v) el.textContent=v;
+  });
+  const ls=$('langSel'); if(ls) ls.value=LANG;
+  // Alles neu zeichnen, damit auch die dynamischen Texte umschalten
+  prevS=null; g_forceRedraw=true; tick(); loadAnalytics(); loadEquity();
+}
+let g_forceRedraw=false;
+
+const $ = id => document.getElementById(id);
+const de = (n,d=2)=> (n==null||isNaN(n)) ? '—' : Number(n).toFixed(d).replace('.',',');
+const clamp = x => Math.max(0, Math.min(1, x));
+const money = (v,ccy)=>{ if(!/^[A-Z]{3}$/.test(ccy||'')) ccy='';   // v0.39-fix: Fremdtext aus der JSON nie ungefiltert in innerHTML
+  const s=ccy==='EUR'?'€':ccy==='USD'?'$':ccy==='GBP'?'£':(ccy?ccy+' ':''); return s+Math.round(v).toLocaleString('de-DE'); };
+const eur = v => (v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+// Fremdtext (Broker-Symbole, EA-Strings, freie Journal-Tags) vor innerHTML entschaerfen.
+const ESCMAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ESCMAP[c]);
+
+const RULES = {
+  R1:['Risiko / Trade','fester %-Satz pro Trade'], R2:['Idee-Cap','eine Idee = ein Budget, kein Nachladen'],
+  R3:['Tagesbudget','max. Risiko, das du pro Tag eröffnen darfst'], R4:['Tagesverlust','Tages-Verlust-Sperre'],
+  R4b:['Max-Verlust','harte Gesamt-Verlust-Grenze'], R5:['Cooldown','Zwangspause nach Verlusten'],
+  R6:['Verlustserie','Sperre nach N Verlusten in Folge'], R7:['SL/TP-Pflicht','Trade ohne SL/TP wird geschlossen'],
+  R8:['Mindest-CRV','zu wenig Chance/Risiko'], R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],
+  R12:['Gesamtrisiko','zu viel gleichzeitiges Risiko offen'],
+  R13:['Tagesziel','Gewinn sichern bei Ziel'], R14:['Mindestpause','zu schnelle Folge-Trades'],
+  R15:['Min-SL-Abstand','Stop zu eng am Preis'], R16:['Session/News','außerhalb Handelszeit'],
+  R17:['Korrelation','zu viel gleiche Währung'], R18:['Wochenlimit','Wochen-Verlust-Deckel'],
+  R19:['De-Risk','Risiko runter nach Verlusten'], R25:['Revenge','Gegen-Trade direkt nach Verlust'],
+  R22:['Nur Panel-Trades','manuell/Handy geöffnet — wird zurückgenommen']
+};
+const INSIGHT = {
+  R3:'Du willst öfter handeln, als dein Tagesbudget erlaubt — nach dem Limit ist Feierabend.',
+  R15:'Du setzt den Stop-Loss oft zu eng. (Diese Regel ist inzwischen ausgeschaltet.)',
+  R12:'Du hast oft zu viel Risiko gleichzeitig offen — weniger parallele Trades.',
+  R2:'Du lädst dieselbe Idee nach, statt eine Position zu belassen.',
+  R6:'Verlustserien — halte die Pausen ein, statt weiterzumachen.',
+  R5:'Nach Verlusten drängst du gleich weiter — die Cooldown-Pause ist zum Abkühlen da.',
+  R22:'Du handelst am Panel vorbei (manuell/Handy). Diese Trades umgehen alle Regeln und werden zurückgenommen — der Trade füllt aber vorher real, Spread und Slippage bleiben dein Verlust.',
+  R25:'Rache-Trades direkt nach einem Verlust.', R14:'Du feuerst Trades zu schnell hintereinander ab.',
+  R8:'Du nimmst Trades mit zu wenig Chance im Verhältnis zum Risiko.',
+  R17:'Du häufst zu viel derselben Währung an.', R4:'Tagesverlust-Grenze erreicht.', R18:'Wochen-Verlust-Grenze.'
+};
+const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const DOW = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+function lossCls(f){ return f>=1?'r':f>=0.8?'a':f>=0.5?'a':'g'; }
+function lossBg(f){ return f>=1?'bg-r':f>=0.8?'bg-a':f>=0.5?'bg-a':'bg-g'; }
+function meter(id,name,ex,cur,lim,unit,opts){
+  opts=opts||{}; const f=lim>0?cur/lim:0; let col=lossCls(f),bg=lossBg(f),status;
+  if(opts.locked){col='r';bg='bg-r';status='GESPERRT';}
+  else if(f>=1)status='Grenze erreicht'; else if(f>=0.8)status='fast am Limit';
+  else if(f>=0.5)status='im Blick'; else status='viel Luft';
+  const mk=opts.warnAt&&lim>0?clamp(opts.warnAt/lim)*100:null;
+  const v=opts.count?`<b>${cur}</b><span class="lim"> / ${lim}</span>`
+    :`<b>${de(cur)}${unit}</b><span class="lim"> / ${de(lim)}${unit}</span>`;
+  return `<div class="rc"><div class="top"><span class="rid">${id}</span><span class="rn">${name}</span>
+    <span class="rs ${col}">${status}</span></div><div class="ex">${ex}</div>
+    <div class="val ${col}">${v}${opts.extra?`<span class="lim">  ${opts.extra}</span>`:''}</div>
+    <div class="bar">${mk!=null?`<span class="mark" style="left:${mk}%"></span>`:''}<i class="${bg}" style="width:${clamp(f)*100}%"></i></div></div>`;
+}
+function progress(id,name,ex,cur,lim,unit,done){
+  const f=lim>0?clamp(cur/lim):0; const status=done?'erreicht ✓':cur<0?'im Minus':'unterwegs';
+  return `<div class="rc"><div class="top"><span class="rid">${id}</span><span class="rn">${name}</span>
+    <span class="rs ${done?'g':'b'}">${status}</span></div><div class="ex">${ex}</div>
+    <div class="val ${done?'g':'b'}"><b>${cur>=0?'+':''}${de(cur)}${unit}</b><span class="lim"> / +${de(lim)}${unit}</span></div>
+    <div class="bar"><i class="${done?'bg-g':'bg-b'}" style="width:${cur<0?0:f*100}%"></i></div></div>`;
+}
+function info(id,name,ex,val){
+  return `<div class="rc"><div class="top"><span class="rid">${id}</span><span class="rn">${name}</span>
+    <span class="rs g">aktiv</span></div><div class="ex">${ex}</div><div class="val"><b>${val}</b></div></div>`;
+}
+function cooldownCard(s){
+  const a=s.cooldownSec>0, mm=String(Math.floor(s.cooldownSec/60)).padStart(2,'0'), ss=String(s.cooldownSec%60).padStart(2,'0');
+  return `<div class="rc"><div class="top"><span class="rid">R5</span><span class="rn">Cooldown</span>
+    <span class="rs ${a?'a':'g'}">${a?'Pause läuft':'bereit'}</span></div>
+    <div class="ex">Nach ${esc(s.cooldownAfter)} Verlusten in Folge eine Zwangspause von ${esc(s.cooldownMin)} Min.</div>
+    <div class="val ${a?'a':'g'}"><b>${a?mm+':'+ss:'—'}</b><span class="lim">${a?' bis wieder frei':' keine Pause aktiv'}</span></div>
+    <div class="bar"><i class="${a?'bg-a':'bg-g'}" style="width:${a?clamp(s.cooldownSec/(s.cooldownMin*60))*100:0}%"></i></div></div>`;
+}
+function pillStyle(c){
+  if(c==='green')return ['var(--green-bg)','#c6ecd3','#127a37'];
+  if(c==='red')  return ['var(--red-bg)','#f6cccc','#b42121'];
+  if(c==='amber')return ['var(--amber-bg)','#f2ddba','#a95e08'];
+  if(c==='blue') return ['var(--accent-bg)','#bcd6f7','#1a5fb4'];   // v0.62: R23 — Entscheidung faellig, kein Fehler
+  return ['#eef1f6','#dfe4ec','#5a6373'];
+}
+// Reihenfolge identisch zur Status-Leiter im EA (WriteCockpit/DrawPanel) — sonst nennt das Banner
+// einen anderen Grund als die Status-Pille daneben.
+function blockReason(s){
+  if(s.protectOff)return t('block.protectOff');
+  if(s.hardLock)return t('block.hardLock');   // Grund steckt schon im Text
+  // v0.65: Sieben Ursachen setzen dieselbe Tagessperre. Vorher stand hier pauschal „Tagesverlust-Sperre" —
+  //   auch wenn die Verlustserie oder der Historie-Wachhund gesperrt hatte. Das war schlicht falsch.
+  if(s.dayLock){
+    var why = ['','why.r4','why.r6','why.r13','why.self','why.history','why.tamper','why.test','why.maxloss','why.week'][s.lockWhy||0];
+    return t('block.dayLock') + (why ? ' — ' + t(why) : '');
+  }
+  if(s.weekLock)return t('block.weekLock');
+  if(s.baseWarn)return t('block.baseWarn');
+  if(s.weekRiskPending)return t('block.weekRisk');   // v0.62: R23 — Wochenentscheidung steht aus
+  // R4b-Warn-Gate: EA blockt jeden neuen Trade. Fallback ueber s.status fuer aeltere EA-Versionen ohne maxWarn.
+  if(s.maxWarn || s.status==='MAX-LOSS WARNUNG')return t('block.maxWarn');
+  if(s.cooldown)return t('block.cooldown');
+  if(s.targetHit)return t('block.targetHit');
+  if(s.offSession)return t('block.offSession');
+  return '';
+}
+
+function renderState(s,ageMs){
+  const [bg,bd,fg]=pillStyle(s.statusColor);
+  const pill=$('pill'); pill.style.background=bg; pill.style.borderColor=bd; pill.style.color=fg;
+  pill.querySelector('.dot').style.background=fg; $('pillTx').textContent=s.status;
+  $('chip').textContent=(s.account?('Konto '+s.account+' · '):'')+s.symbol+' · '+s.tf; $('equity').textContent=money(s.equity,s.ccy);   // v0.37: Kontonummer zeigen (bei mehreren Terminals)
+  const r=blockReason(s), bn=$('banner'); bn.style.display='block';
+  const stale = ageMs!=null && ageMs>20000;   // MT4/EA schreibt nicht mehr -> Zustand nicht mehr vertrauenswuerdig
+  if(r){ bn.className='banner '+(s.statusColor==='red'?'red':'amber'); bn.textContent='Aktuell keine neuen Trades: '+r; }
+  else if(stale){ bn.className='banner amber'; bn.textContent='Daten veraltet — MT4/EA prüfen.'; }
+  else { bn.className='banner green'; bn.textContent='Alles frei — du kannst nach Plan handeln.'; }
+
+  const c=[];
+  c.push(meter('R4','Tagesverlust','Mehr Verlust am Tag als das Limit → gesperrt bis morgen.',s.dailyDD,s.dailyLimit,'%',{locked:s.dayLock}));
+  c.push(meter('R4b','Max-Verlust','Gesamtverlust seit Kontostart. Markierung = Warnpuffer.',s.totalDD,s.maxLoss,'%',{locked:s.hardLock,warnAt:s.maxLossWarn}));
+  c.push(meter('R3','Tagesbudget','So viel Risiko darfst du pro Tag eröffnen.',s.dayRisk,s.dayBudget,'%',{extra:'noch '+de(Math.max(0,s.dayBudget-s.dayRisk))+'% frei'}));
+  c.push(meter('R12','Gesamtrisiko','Risiko aller offenen Trades zusammen.',s.heat,s.heatCap,'%',{}));
+  c.push(meter('R6','Verlustserie','Nach so vielen Verlusten in Folge sperrt der Tag.',s.consec,s.lockAfter,'',{count:true,locked:s.consec>=s.lockAfter}));
+  c.push(cooldownCard(s));
+  c.push(progress('R13','Tagesziel','Bei diesem Gewinn ist Schluss — Gewinn sichern.',s.profitPct,s.targetPct,'%',s.targetHit));
+  c.push(meter('R18','Wochenlimit','Verlust-Deckel für die ganze Woche.',s.weekDD,s.weekLimit,'%',{locked:s.weekLock}));
+  c.push(info('R1','Risiko / Trade','Jeder Trade riskiert genau diesen festen Anteil.',de(s.riskPerTrade)+' %'));
+  c.push(info('R2','Idee-Cap','Eine Idee darf zusammen höchstens so viel riskieren.',de(s.ideaCap)+' %'));
+  c.push(info('R7','SL/TP-Pflicht','Jeder Trade braucht Stop-Loss und Take-Profit.','immer an'));
+  $('rules').innerHTML=c.join('');
+
+  const off=(s.disabled||[]).map(x=>{const k=String(x).replace('R15min','R15'); const nm=(RULES[k]||['',''])[0];
+    return `<span class="off-chip"><b>${esc(String(x).replace('R15min','R15·MinSL'))}</b> ${esc(nm)} — aus</span>`;});
+  $('off').innerHTML=off.join(''); $('offHead').style.display=off.length?'block':'none';
+  $('content').style.display='block'; $('offline').style.display='none';
+}
+
+// ---- Schwächen ----
+// ---- Coach: Disziplin-Hero + Edge + Stunden ----
+const SESS=['Nacht','Vormittag','Nachmittag'];
+function renderCoach(a){
+  const d=a.discipline||{fills:0,blocks:0,attempts:0,ratio:0}; const t=a.totals||{};
+  const pct=Math.round((d.ratio||0)*100);
+  $('hero').innerHTML=`<div><div class="lab">Disziplin</div><div class="big">${pct}%</div>
+      <div class="dg"><i style="width:${Math.max(2,pct)}%"></i></div></div>
+    <div class="sub"><b>${d.fills} Trades aus ${d.attempts} Versuchen.</b> ${d.blocks}× hat dich eine Regel gestoppt${pct>0&&pct<30?' — dein Konto lebt gerade von deiner Disziplin, nicht vom P/L.':'.'}
+      ${(t.manualN||0)?`<div style="color:var(--amber);margin-top:4px">✋ ${t.manualN} Trade(s) liefen am Panel vorbei (${eur(t.manualNet||0)}) — im Netto enthalten, aber ohne Regelschutz.</div>`:''}</div>
+    <div class="net"><div class="lab">Netto gesamt</div><div class="v ${(t.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(t.netTotal||0)}</div>
+      <div class="lab" style="margin-top:4px">${t.tradesTotal||0} Trades · ${t.days||0} Tage</div></div>`;
+
+  const edge=a.edge||[], v=a.verdict||{};
+  $('edgeVerdict').innerHTML= edge.length
+    ? `Dein <b>Edge</b>: ${v.best?`${esc(v.best.sym)} ${esc(v.best.s)} (${eur(v.best.net)})`:'—'}. Dein <b>Leck</b>: ${v.worst?`${esc(v.worst.sym)} ${esc(v.worst.s)} (${eur(v.worst.net)})`:'—'}. Handle bewusst dein Fenster — hör auf, dein Leck zu füttern.`
+    : 'Noch zu wenige geschlossene Trades für ein Muster (Zahlen werden schärfer, je mehr du handelst).';
+  let rows=`<div class="erow ehead"><div>Symbol</div>${SESS.map(s=>`<div style="text-align:center">${s}</div>`).join('')}<div style="text-align:right">Gesamt</div></div>`;
+  for(const e of edge){
+    let cells='';
+    for(const s of SESS){ const b=e.sess[s];
+      if(!b){ cells+='<div class="ecell empty"></div>'; continue; }
+      const cls=b.net>0.5?'pos':b.net<-0.5?'neg':'';
+      cells+=`<div class="ecell ${cls}"><div class="n">${eur(b.net)}</div><div class="c">${b.n}T · ${b.w}/${b.l}</div></div>`;
+    }
+    rows+=`<div class="erow"><div class="esym">${esc(e.symbol)}</div>${cells}<div class="etot ${e.total.net>=0?'net-pos':'net-neg'}">${eur(e.total.net)}</div></div>`;
+  }
+  $('edgeGrid').innerHTML=rows;
+
+  // Sequenzielle Blau-Rampe (eine Farbe, hell→dunkel) statt Rot-Transparenz:
+  // Ablehnungen sind Schutz, kein Fehler — und diskrete Stufen bleiben CVD-sicher.
+  const bh=a.blockByHour||[]; const mx=Math.max(1,...bh);
+  let hotH=-1,hotV=0; bh.forEach((c,h)=>{ if(c>hotV){hotV=c;hotH=h;} });
+  const RAMP=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)','var(--s6)'];
+  let strip='';
+  for(let h=0;h<24;h++){ const c=bh[h]||0;
+    const bg=c===0?'var(--line2)':RAMP[Math.min(RAMP.length-1,Math.ceil(c/mx*RAMP.length)-1)];
+    const dark=c>0 && c/mx>0.55;
+    strip+=`<div class="hc ${h===hotH&&hotV>0?'hot':''}" style="background:${bg}" title="${h}:00 Uhr — ${c} Ablehnungen"><span class="hh"${dark?' style="color:#fff"':''}>${h}</span></div>`; }
+  $('hourStrip').innerHTML=strip;
+  $('hourCap').innerHTML= hotH>=0&&hotV>0
+    ? `Deine meisten Ablehnungen: <b>${hotH}:00 Uhr (${hotV}×)</b> — dann klickst du am impulsivsten. Dieses Fenster bewusst meiden.`
+    : 'Noch keine auffälligen Ablehnungs-Zeiten.';
+}
+const rankColor = i => i===0?'#dc2626':i===1?'#ea7317':i===2?'#d99a06':'#2563eb';
+function renderWeak(a){
+  const rules=a.rules||[];
+  if(!rules.length){ $('weakLead').textContent='Noch keine Regel-Eingriffe aufgezeichnet — sauber.'; $('weakBars').innerHTML=''; return; }
+  const top=rules[0], topName=(RULES[top.id]||[top.id])[0];
+  $('weakLead').innerHTML=`Deine häufigste Bremse: <b>${esc(top.id)} · ${esc(topName)}</b> (${top.count}×). ${INSIGHT[top.id]||''}`;
+  const max=rules[0].count;
+  $('weakBars').innerHTML=rules.map((r,i)=>{
+    const meta=RULES[r.id]||[r.id,'']; const w=Math.max(4,Math.round(r.count/max*100));
+    const parts=[]; if(r.blocked)parts.push(r.blocked+'× am Einstieg blockiert'); if(r.closed)parts.push(r.closed+'× Trade geschlossen');
+    return `<div class="wrow"><div class="nm"><span class="rankdot" style="background:${rankColor(i)}">${i+1}</span>${esc(r.id)} · ${esc(meta[0])}
+      <small>${esc(parts.join(' · ')||meta[1])}</small></div>
+      <div class="wtrack"><i style="width:${w}%;background:${rankColor(i)}"></i></div>
+      <div class="wcnt">${r.count}×</div></div>`;
+  }).join('');
+  const t=a.totals||{};
+  $('totrow').innerHTML=`<span>Zeitraum: <b>${esc((a.range&&a.range.first)||'—')} – ${esc((a.range&&a.range.last)||'—')}</b></span>
+    <span>Handelstage: <b>${t.days||0}</b></span><span>Trades: <b>${t.tradesTotal||0}</b></span>
+    <span>Regel-Blocks: <b>${t.blocksTotal||0}</b></span>
+    <span>Netto gesamt: <b class="${(t.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(t.netTotal||0)}</b></span>`;
+}
+
+// ---- Kalender ----
+function renderCalendar(a){
+  const cal=a.calendar||{}; const dates=Object.keys(cal).sort(); if(!dates.length){ $('months').innerHTML='<div class="empty">noch keine Tage</div>'; return; }
+  // Monate von first..last
+  const [fy,fm]=dates[0].split('.').map(Number); const [ly,lm]=dates[dates.length-1].split('.').map(Number);
+  const blocks=[];
+  let y=fy,m=fm;
+  const guard=[]; // sammeln, dann neueste zuerst
+  while(y<ly || (y===ly && m<=lm)){ guard.push([y,m]); m++; if(m>12){m=1;y++;} }
+  for(const [yy,mm] of guard.reverse()){
+    const first=new Date(yy,mm-1,1); let startDow=(first.getDay()+6)%7; // Mo=0
+    const days=new Date(yy,mm,0).getDate();
+    let cells='';
+    for(let i=0;i<startDow;i++) cells+='<div class="cell empty"></div>';
+    for(let d=1;d<=days;d++){
+      const key=`${yy}.${String(mm).padStart(2,'0')}.${String(d).padStart(2,'0')}`;
+      const info=cal[key]; const dow=(new Date(yy,mm-1,d).getDay()+6)%7; const wknd=dow>=5?' wknd':'';
+      if(!info){ cells+=`<div class="cell flat${wknd}" onclick="openDay('${key}')"><div class="d">${d}</div></div>`; continue; }
+      const cls=info.net>0.005?'pos':info.net<-0.005?'neg':'flat';
+      const nt=info.closes? (info.net>=0?'+':'−')+de(Math.abs(info.net),0)+'€' : '';
+      const bb=info.blocks? `<div class="b">⚠ ${info.blocks}</div>`:'';
+      const mm2=info.manual? `<div class="b" style="color:var(--amber)" title="${info.manual} manuelle Trades (am Panel vorbei)">✋ ${info.manual}</div>`:'';   // v0.44
+      cells+=`<div class="cell act ${cls}${wknd}" onclick="openDay('${key}')"><div class="d">${d}</div>
+        <div class="n">${nt}</div>${bb}${mm2}</div>`;
+    }
+    blocks.push(`<div class="month"><h3>${MONTHS[mm-1]} ${yy}</h3>
+      <div class="cal">${DOW.map(x=>`<div class="dow">${x}</div>`).join('')}${cells}</div></div>`);
+  }
+  $('months').innerHTML=blocks.join('');
+}
+function openDay(d){ window.open('/day.html?d='+encodeURIComponent(d)+(ACCT?'&acct='+encodeURIComponent(ACCT):''),'_blank'); }
+
+// ---- Journal ----
+function badgeFor(ev){ const e=(ev||'').toUpperCase();
+  if(e==='CLOSE_MAN')return 'bd-man';   // v0.44: manueller/fremder Trade
+  if(e==='OPEN')return 'bd-open'; if(e==='CLOSE')return 'bd-close'; if(e==='BLOCKED')return 'bd-block';
+  if(e.indexOf('PROTECT')>=0)return 'bd-prot'; if(['TEST','INFO','PROFILE'].includes(e))return 'bd-test'; return 'bd-lock'; }
+function renderJournal(rows){
+  const tb=$('journal');
+  const keep=(rows||[]).filter(r=>['OPEN','CLOSE','CLOSE_MAN','BLOCKED'].includes((r.event||'').toUpperCase())
+    || (r.event||'').toUpperCase().indexOf('PROTECT')>=0 || (r.tag||'').match(/SPERRE|Cooldown|Ziel|GESPERRT/i));
+  if(!keep.length){ tb.innerHTML='<tr><td colspan="5" class="empty">noch keine Ereignisse</td></tr>'; return; }
+  tb.innerHTML=keep.slice(0,60).map(r=>{
+    const net=Number(r.net)||0;
+    const nt=net!==0?`<span class="${net>0?'net-pos':'net-neg'}">${net>0?'+':''}${de(net)}</span>`:'<span style="color:var(--txt3)">—</span>';
+    const time=(r.time||'').replace(/^\d{4}\.\d{2}\.\d{2}\s*/,'');
+    const sym=r.symbol&&r.symbol!=='-'?r.symbol+(r.dir&&r.dir!=='-'?' '+r.dir:''):'';
+    const isMan=(r.event||'').toUpperCase()==='CLOSE_MAN';   // v0.44: klar als manuell kennzeichnen
+    const lbl=isMan?'MANUELL':esc(r.event||'');
+    const tk=(r.ticket||'').replace(/\D/g,'');   // v0.62: Zeile mit Ticket -> direkt zur Trade-Akte
+    const clk=tk?` style="cursor:pointer" title="Trade-Akte oeffnen" onclick="window.open('/trade.html'+AQ('ticket=${tk}'),'_blank')"`:'';
+    return `<tr${isMan?' style="background:var(--amber-bg)"':''}${clk}><td>${esc(time)}</td><td><span class="badge ${badgeFor(r.event)}">${lbl}</span></td>
+      <td>${esc(sym)}</td><td>${nt}</td><td style="white-space:normal;color:var(--txt2)">${esc((r.tag||'').slice(0,70))}</td></tr>`;
+  }).join('');
+}
+
+let anaTimer=0;
+// Fetch-Fehler zaehlen: erst nach mehreren Fehlversuchen (~5 s) auf Offline schalten, nicht bei jedem Aussetzer.
+let failStreak=0; const FAIL_LIMIT=3;
+function showOffline(){
+  const bn=$('banner'); bn.style.display='block'; bn.className='banner red';
+  bn.textContent='Verbindung zum Cockpit-Server verloren — Anzeige veraltet.';
+  $('stand').innerHTML='<span class="off">●</span> Server offline? · keine Antwort vom Cockpit-Server';
+}
+function fetchFail(){ if(++failStreak>=FAIL_LIMIT) showOffline(); }
+// v0.38: Multi-Konto — Auswahl bleibt im Browser gespeichert; alle Abfragen laufen mit ?acct=
+let ACCT = localStorage.getItem('mamalAcct') || '';
+// v0.62: nimmt zusaetzlich einen Parameter auf (z.B. ticket=...), damit Links zur Trade-Akte
+// das gewaehlte Konto mitnehmen: AQ('ticket=123') -> "?acct=…&ticket=123"
+const AQ = (x) => { const p=[]; if(ACCT) p.push('acct='+encodeURIComponent(ACCT)); if(x) p.push(x);
+                    return p.length ? '?'+p.join('&') : ''; };
+let acctMiss=0;   // v0.38-fix (Verify): gewaehltes Konto erst nach mehreren Ticks aufgeben (transienter Lesefehler != Konto weg)
+function renderAccounts(list){
+  const sel=$('acctSel'); list=list||[];
+  // Stale-Auswahl pruefen BEVOR der Selector ggf. versteckt wird — sonst haengt eine alte
+  // localStorage-Wahl fuer immer auf "Warte auf MetaTrader", ohne sichtbaren Ausweg.
+  if(ACCT && list.length){
+    if(!list.some(a=>String(a.account)===ACCT)){ if(++acctMiss>=5){ ACCT=''; localStorage.removeItem('mamalAcct'); acctMiss=0; } }
+    else acctMiss=0;
+  }
+  if(list.length<2){ sel.style.display='none'; return; }
+  // Auswahl festnageln: ohne explizite Wahl springt die Anzeige sonst zwischen zwei live schreibenden Konten.
+  if(!ACCT){ ACCT=String(list[0].account); localStorage.setItem('mamalAcct',ACCT); }
+  const cur=ACCT;
+  // Stabil nach Kontonummer sortieren — sonst baut die Frische-Sortierung das Dropdown alle 1,5s um.
+  const opts=[...list].sort((a,b)=>String(a.account).localeCompare(String(b.account),undefined,{numeric:true}));
+  const html=opts.map(a=>`<option value="${esc(a.account)}"${String(a.account)===cur?' selected':''}>Konto ${esc(a.account)}${a.historic?' · nur Historie':(a.profile?' · '+esc(a.profile):'')}</option>`).join('');
+  if(sel.dataset.h!==html){ sel.innerHTML=html; sel.dataset.h=html; }
+  sel.style.display='';
+}
+$('acctSel').addEventListener('change',function(){ ACCT=this.value; localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); });   // v0.39-fix: prevS zuruecksetzen — sonst falsche Benachrichtigungen beim Kontowechsel
+
+// ==== v0.39: Dark Mode ====
+(function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.theme=t; })();
+$('themeBtn').addEventListener('click',()=>{ const h=document.documentElement;
+  h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'; localStorage.setItem('mamalTheme',h.dataset.theme); });
+
+// ==== v0.39: Benachrichtigungen (Cooldown vorbei, Sperren, Ziel) ====
+let NOTIF=localStorage.getItem('mamalNotif')==='1';
+function syncNotifBtn(){ $('notifBtn').classList.toggle('on',NOTIF); }
+syncNotifBtn();
+$('notifBtn').addEventListener('click',async()=>{
+  NOTIF=!NOTIF; localStorage.setItem('mamalNotif',NOTIF?'1':'0'); syncNotifBtn();
+  if(NOTIF && 'Notification' in window && Notification.permission==='default'){ try{ await Notification.requestPermission(); }catch(e){} }
+  if(NOTIF) beep();
+});
+function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state==='suspended') ctx.resume();   // v0.39-fix: Autoplay-Policy — sonst bleibt der Ton nach Reload stumm
+  const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination);
+  o.frequency.value=880; g.gain.value=.06; o.start(); setTimeout(()=>{ o.stop(); ctx.close(); },300); }catch(e){} }
+function notifyMsg(m){ if(!NOTIF) return; beep();
+  if('Notification' in window && Notification.permission==='granted'){ try{ new Notification('Mamal-Trading',{body:m}); }catch(e){} } }
+let prevS=null;
+function checkTransitions(s){
+  if(prevS){
+    // v0.39-fix (Verify): "wieder handeln" nur, wenn WIRKLICH nichts mehr blockt (gleiche Logik wie das Banner) —
+    // sonst meldete der Toast "frei", waehrend z.B. das Wochenlimit noch sperrt.
+    if(prevS.cooldown && !s.cooldown && blockReason(s)==='') notifyMsg('Cooldown vorbei — du darfst wieder handeln.');
+    if(!prevS.dayLock && s.dayLock)   notifyMsg('Tagesverlust-Sperre aktiv — Feierabend für heute.');
+    if(!prevS.hardLock && s.hardLock) notifyMsg('MAX-VERLUST-Sperre aktiv.');
+    if(!prevS.weekLock && s.weekLock) notifyMsg('Wochenlimit erreicht — diese Woche ist beendet.');
+    if(!prevS.targetHit && s.targetHit) notifyMsg('Tagesziel erreicht — Gewinn gesichert.');
+  }
+  prevS=s;
+}
+
+// ==== v0.46: Sperr-Monitor ====
+// Der EA liefert cooldownSec alle 2s; dazwischen zaehlt der Browser selbst herunter,
+// damit die Uhr fluessig laeuft. Sekundenwert wird bei jedem /state neu synchronisiert.
+let LOCK=null;   // {kind, why, endMs, totalSec, crit}
+function srvNow(s){ // Server-Zeit als ms (aus "YYYY.MM.DD HH:MM:SS")
+  const m=String(s&&s.srvtime||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+  return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]):0;
+}
+function buildLock(s){
+  const now=Date.now();
+  if(s.cooldown && s.cooldownSec>0){
+    const tot=Math.max(s.cooldownSec,(s.cooldownMin||45)*60);
+    return {kind:'COOLDOWN — Zwangspause nach Verlusten',
+            why:`Nach ${s.cooldownAfter} Verlusten in Folge pausiert das Tool ${s.cooldownMin} Minuten. Neue Einstiege sind gesperrt.`,
+            endMs:now+s.cooldownSec*1000, totalSec:tot, crit:false};
+  }
+  const sn=srvNow(s);
+  if(s.hardLock) return {kind:'MAX-VERLUST-SPERRE', why:'Die harte Gesamt-Verlustgrenze ist erreicht. Keine neuen Trades.', endMs:0, totalSec:0, crit:true};
+  if(s.weekLock){
+    // bis Sonntag 24:00 Serverzeit
+    const d=new Date(sn||now); const dow=(d.getUTCDay()+6)%7; const end=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+(7-dow),0,0,0);
+    return {kind:'WOCHENSPERRE', why:'Das Wochen-Verlustlimit ist erreicht — diese Woche keine neuen Trades.',
+            endMs:now+Math.max(0,end-sn), totalSec:7*86400, crit:true};
+  }
+  if(s.dayLock || s.targetHit){
+    const d=new Date(sn||now); const end=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1,0,0,0);
+    return {kind:s.targetHit?'TAGESZIEL ERREICHT — Feierabend':'TAGESSPERRE',
+            why:s.targetHit?'Dein Tagesziel ist erreicht. Gewinn sichern — morgen weiter.':'Das Tages-Verlustlimit ist erreicht. Bis zum nächsten Handelstag gesperrt.',
+            endMs:now+Math.max(0,end-sn), totalSec:86400, crit:!s.targetHit};
+  }
+  return null;
+}
+function hhmmss(ms){
+  const t=Math.max(0,Math.round(ms/1000));
+  const h=Math.floor(t/3600), m=Math.floor(t%3600/60), sec=t%60;
+  return (h>0?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+function paintLock(){
+  const box=$('lockmon');
+  if(!LOCK){ box.style.display='none'; return; }
+  box.style.display='flex'; box.classList.toggle('crit',!!LOCK.crit);
+  $('lmKind').textContent=LOCK.kind; $('lmWhy').textContent=LOCK.why;
+  if(!LOCK.endMs){ $('lmVal').textContent='—'; $('lmUntil').textContent='bis manuell aufgehoben'; $('lmBar').style.width='100%'; return; }
+  const rest=LOCK.endMs-Date.now();
+  if(rest<=0){ $('lmVal').textContent='00:00'; $('lmUntil').textContent='läuft aus…'; $('lmBar').style.width='0%'; return; }
+  $('lmVal').textContent=hhmmss(rest);
+  $('lmUntil').textContent='frei um '+new Date(LOCK.endMs).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' (lokal)';
+  $('lmBar').style.width=(LOCK.totalSec>0?clamp(rest/1000/LOCK.totalSec)*100:100).toFixed(1)+'%';
+}
+setInterval(paintLock,1000);   // fluessige Uhr zwischen den Polls
+
+// ==== v0.39: Puffer-Tacho ====
+let LASTSTATE=null, LASTA=null, CCY='EUR';
+function gauge(lab,remainEur,usedPct,limPct,sub){
+  const f=(limPct>0&&isFinite(usedPct))?clamp(usedPct/limPct):0;   // v0.39-fix: fehlendes DD-Feld -> 0% statt NaN-CSS
+  const col=f>=1?'var(--red)':f>=0.75?'var(--amber)':'var(--green)';
+  return `<div class="gg"><div class="glab">${lab}</div>
+    <div class="gval" style="color:${col}">${remainEur==null?'—':money(Math.max(0,remainEur),CCY)}</div>
+    <div class="gsub">${sub}</div>
+    <div class="gbar"><i style="width:${(f*100).toFixed(1)}%;background:${col}"></i></div></div>`;
+}
+function renderGauges(s){
+  CCY=s.ccy||'EUR';
+  const dayFloor =(s.dayBase>0 && s.dailyLimit>0)? s.dayBase*(1-s.dailyLimit/100):null;
+  const maxFloor =(s.initBal>0 && s.maxLoss>0)?   s.initBal*(1-s.maxLoss/100):null;
+  const weekFloor=(s.weekBase>0 && s.weekLimit>0)?s.weekBase*(1-s.weekLimit/100):null;
+  $('gauges').innerHTML=
+    gauge('Heute noch verlierbar', dayFloor!=null?s.equity-dayFloor:null, s.dailyDD, s.dailyLimit,
+      `Tageslimit ${de(s.dailyLimit)}% · verbraucht ${de(s.dailyDD)}%`)
+   +gauge('Bis Max-Verlust', maxFloor!=null?s.equity-maxFloor:null, s.totalDD, s.maxLoss,
+      `Max ${de(s.maxLoss)}% · verbraucht ${de(s.totalDD)}%`)
+   +gauge('Diese Woche noch verlierbar', weekFloor!=null?s.equity-weekFloor:null, s.weekDD, s.weekLimit,
+      `Wochenlimit ${de(s.weekLimit)}% · verbraucht ${de(s.weekDD)}%`);
+}
+$('enddayBtn').addEventListener('click',async()=>{
+  const acct=ACCT||(LASTSTATE&&LASTSTATE.account)||'';
+  if(!confirm('Tag wirklich beenden?\n\nDer EA sperrt neue Trades bis Server-Mitternacht. Das kann NICHT rückgängig gemacht werden.')) return;
+  try{ const r=await fetch('/cmd/endday?acct='+encodeURIComponent(acct),{method:'POST'});
+    if(r.ok){ alert('Selbstsperre gesetzt — der EA übernimmt sie in wenigen Sekunden.'); }
+    else alert('Fehler: '+await r.text());
+  }catch(e){ alert('Server nicht erreichbar.'); }
+});
+$('reportBtn').addEventListener('click',()=>window.open('/report.html'+AQ(),'_blank'));
+$('tradesBtn').addEventListener('click',()=>window.open('/trade.html'+AQ(),'_blank'));   // v0.62: Trade-Akte
+
+// ==== v0.39: Challenge-Tracker (Ziel frei wählbar, Standard FTMO Phase 1 = 10%) ====
+let CH_T=parseFloat(localStorage.getItem('mamalChTarget'))||10;
+function renderChallenge(s){
+  const base=s.initBal>0?s.initBal:0;
+  if(!base){ $('challenge').innerHTML='<span class="gnote">Noch keine Kontobasis bekannt.</span>'; return; }
+  const profEur=s.equity-base, profPct=profEur/base*100;
+  const tgtEur=base*CH_T/100, remEur=tgtEur-profEur, f=clamp(profPct/CH_T);
+  const days=LASTA?Object.values(LASTA.calendar||{}).filter(d=>(d.fills||0)>0||(d.closes||0)>0).length:0;
+  const avg=days>0?profEur/days:0;
+  const proj=(avg>0&&remEur>0)?Math.ceil(remEur/avg):null;
+  const done=profPct>=CH_T;
+  const col=done?'var(--green)':profEur<0?'var(--red)':'var(--accent)';
+  $('challenge').innerHTML=`
+    <div style="display:flex;gap:20px;align-items:baseline;flex-wrap:wrap">
+      <div><span class="glab" style="font-size:11px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase">Fortschritt zum Ziel</span>
+        <div style="font:700 26px/1.2 var(--mono);color:${col}">${profPct>=0?'+':''}${de(profPct)}% <span style="font-size:15px;color:var(--txt3)">/ ${de(CH_T,0)}%</span></div></div>
+      <div class="gnote">${done?'🎉 Ziel erreicht!':`noch ${money(Math.max(0,remEur),CCY)} bis zum Ziel`}
+        · Handelstage: <b>${days}</b>${days<4?' (FTMO verlangt min. 4)':''}
+        ${proj?` · bei deinem Schnitt (~${money(avg,CCY)}/Tag) noch ~<b>${proj}</b> Handelstage`:''}</div>
+      <span style="margin-left:auto">Ziel:
+        <button class="hbtn ${CH_T===10?'on':''}" onclick="setChT(10)">10%</button>
+        <button class="hbtn ${CH_T===5?'on':''}" onclick="setChT(5)">5%</button>
+        <button class="hbtn ${CH_T!==10&&CH_T!==5?'on':''}" onclick="setChTCustom()">…</button></span>
+    </div>
+    <div class="gbar" style="height:12px;border-radius:7px;background:var(--line2);overflow:hidden;margin-top:12px">
+      <i style="display:block;height:100%;width:${(f*100).toFixed(1)}%;background:${col};border-radius:7px"></i></div>`;
+}
+function setChT(v){ CH_T=v; localStorage.setItem('mamalChTarget',String(v)); if(LASTSTATE) renderChallenge(LASTSTATE); }
+function setChTCustom(){ const v=parseFloat(String(prompt('Challenge-Ziel in % (z.B. 8):','8')||'').replace(',','.'));
+  if(v>0&&v<=100) setChT(v); }
+
+// ==== v0.39: Multi-Konto-Grid ====
+function renderAcctGrid(list){
+  list=list||[];
+  const w=$('acctGridWrap'); if(list.length<2){ w.style.display='none'; return; }
+  const cur=ACCT||String(list[0].account);
+  const cards=[...list].sort((a,b)=>String(a.account).localeCompare(String(b.account),undefined,{numeric:true})).map(a=>{
+    const live=a.ageMs<15000;
+    const colr=a.statusColor==='red'?'var(--red)':a.statusColor==='amber'?'var(--amber)':a.statusColor==='blue'?'var(--accent)':'var(--green)';   // v0.62: blau = Entscheidung faellig (R23), sonst faelscht es grün
+    const dayRem=(a.dayBase>0&&a.dailyLimit>0)?a.equity-a.dayBase*(1-a.dailyLimit/100):null;
+    return `<div class="acard ${String(a.account)===cur?'sel':''}" onclick="pickAcct('${String(a.account).replace(/\D/g,'')}')">
+      <div style="display:flex;align-items:center;gap:8px"><span class="an">Konto ${esc(a.account)}</span>
+        <span style="margin-left:auto;font-size:11px;color:${live?colr:'var(--txt3)'}">● ${live?esc(a.status||''):'offline'}</span></div>
+      <div class="ae">${typeof a.equity==='number'?money(a.equity,a.ccy):'—'}</div>
+      <div class="as">${esc(a.profile||'')}${dayRem!=null?` · heute noch ${money(Math.max(0,dayRem),a.ccy)} Puffer`:''}</div></div>`;
+  }).join('');
+  $('acctGrid').innerHTML=cards; w.style.display='block';
+}
+function pickAcct(a){ ACCT=String(a); localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); }   // v0.39-fix: prevS-Reset gegen falsche Kontowechsel-Benachrichtigungen
+
+// ==== v0.39: Tilt-Radar (Ablehnungs-Häufung in 10 Minuten, Server-Zeitbasis) ====
+function parseSrv(t){ const m=String(t||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+  return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]):0; }
+function renderTilt(rows){
+  rows=rows||[]; let newest=0;
+  for(const r of rows){ const t=parseSrv(r.time); if(t>newest) newest=t; }
+  const n=rows.filter(r=>String(r.event||'').trim().toUpperCase()==='BLOCKED'&&newest-parseSrv(r.time)<=10*60*1000).length;   // v0.39-fix: gleiche Normalisierung wie im Journal
+  const el=$('tilt');
+  if(n>=4){ el.style.display='block'; el.textContent=`🚨 Tilt-Radar: ${n} Ablehnungen in 10 Minuten — steh auf, hol Wasser, komm in 15 Minuten wieder.`; }
+  else el.style.display='none';
+}
+
+// ==== v0.39: Equity-Kurve ====
+async function loadEquity(){
+  try{
+    const pts=await (await fetch('/equity'+AQ()+(AQ()?'&':'?')+'n=2000')).json();
+    const svg=$('eqChart'); const W=1000,H=190; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    if(!pts||pts.length<2){ svg.innerHTML=`<text x="20" y="30" fill="var(--txt3)" font-size="13">Noch keine Equity-Daten — entstehen automatisch, sobald der EA läuft.</text>`; $('eqCap').textContent=''; return; }
+    const eqs=pts.map(p=>p.eq);
+    const floor=(LASTSTATE&&LASTSTATE.dayBase>0&&LASTSTATE.dailyLimit>0)?LASTSTATE.dayBase*(1-LASTSTATE.dailyLimit/100):null;
+    let mn=Math.min(...eqs), mx=Math.max(...eqs);
+    if(floor!=null&&floor>mn-(mx-mn)&&floor<mx){ mn=Math.min(mn,floor); }
+    const pad=(mx-mn)*0.08||1; mn-=pad; mx+=pad;
+    const X=i=>i/(pts.length-1)*W, Y=v=>H-(v-mn)/(mx-mn)*H;
+    let path=''; pts.forEach((p,i)=>{ path+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.eq).toFixed(1)+' '; });
+    const last=pts[pts.length-1], up=last.eq>=pts[0].eq;
+    let svgIn=`<path d="${path}" fill="none" stroke="${up?'var(--green)':'var(--red)'}" stroke-width="2"/>`;
+    if(floor!=null&&floor>mn&&floor<mx)
+      svgIn+=`<line x1="0" y1="${Y(floor).toFixed(1)}" x2="${W}" y2="${Y(floor).toFixed(1)}" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="7 6" opacity=".8"/>
+        <text x="8" y="${(Y(floor)-6).toFixed(1)}" fill="var(--red)" font-size="11">Daily-Loss-Grenze ${money(floor,CCY)}</text>`;
+    svg.innerHTML=svgIn;
+    const span=(last.t-pts[0].t)/3600000;
+    $('eqCap').textContent=`— ${pts.length} Punkte · ${span<48?de(span,1)+' h':de(span/24,1)+' Tage'} · zuletzt ${money(last.eq,CCY)}`;
+  }catch(e){ /* Kurve ist Komfort */ }
+}
+
+// ==== v0.39: Disziplin-Trend + Streak ====
+function renderTrend(a){
+  const cal=a.calendar||{}; const dates=Object.keys(cal).sort();
+  // v0.45-fix (Verify): auch Tage zaehlen, an denen NUR manuell gehandelt wurde (kein OPEN, kein Block) —
+  //   sonst lief die Streak "ohne Regel-Block" weiter, obwohl der Trader den ganzen Tag am Tool vorbei handelte.
+  const act=dates.filter(d=>(cal[d].fills||0)+(cal[d].blocks||0)+(cal[d].closes||0)>0);
+  const clean=d=>((cal[d].blocks||0)===0 && (cal[d].manual||0)===0);   // sauberer Tag = kein Block UND nichts am Panel vorbei
+  let bars='';
+  for(const d of act.slice(-30)){
+    const c=cal[d], at=(c.fills||0)+(c.blocks||0), ratio=at?c.fills/at:0;
+    const col=(c.manual||0)>0?'var(--amber)':(c.blocks===0?'var(--green)':ratio>=0.5?'var(--amber)':'var(--red)');
+    bars+=`<div class="tb" style="height:${Math.max(8,ratio*100)}%;background:${col}" title="${esc(d)} — ${c.fills} Trades / ${c.blocks} Blocks${(c.manual||0)?' · '+c.manual+' manuell':''} (${Math.round(ratio*100)}%)"></div>`;
+  }
+  $('discTrend').innerHTML=bars||'<span class="gnote">Noch keine aktiven Tage.</span>';
+  let now=0; for(let i=act.length-1;i>=0;i--){ if(clean(act[i])) now++; else break; }
+  let best=0,run=0; for(const d of act){ if(clean(d)){ run++; if(run>best)best=run; } else run=0; }
+  $('streakNow').textContent=now+(now===1?' Tag':' Tage'); $('streakNow').style.color=now>0?'var(--green)':'var(--txt2)';
+  $('streakBest').textContent='Rekord: '+best+(best===1?' Tag':' Tage');
+}
+
+// ==== v0.39: Trade-Statistik ====
+function renderStats(a){
+  const st=a.stats||{}; const n=(st.winN||0)+(st.lossN||0);
+  if(!n){ $('stats').innerHTML='<div class="stat"><div class="l">Noch keine geschlossenen Trades</div><div class="v">—</div></div>'; return; }
+  const pf=st.profitFactor==null?'∞':de(st.profitFactor);
+  const bh=st.netByHour||[]; let bi=-1,bv=0,wi=-1,wv=0;
+  bh.forEach((v,h)=>{ if(v>bv){bv=v;bi=h;} if(v<wv){wv=v;wi=h;} });
+  $('stats').innerHTML=
+    `<div class="stat"><div class="l">Trefferquote</div><div class="v">${Math.round((st.winRate||0)*100)}%</div><div class="gnote">${st.winN}G / ${st.lossN}V</div></div>
+     <div class="stat"><div class="l">Ø Gewinn</div><div class="v net-pos">${eur(st.avgWin||0)}</div></div>
+     <div class="stat"><div class="l">Ø Verlust</div><div class="v net-neg">${eur(st.avgLoss||0)}</div></div>
+     <div class="stat"><div class="l">Profit-Factor</div><div class="v">${pf}</div></div>
+     <div class="stat"><div class="l">Expectancy / Trade</div><div class="v ${st.expectancy>=0?'net-pos':'net-neg'}">${eur(st.expectancy||0)}</div></div>
+     <div class="stat"><div class="l">Beste Stunde</div><div class="v">${bi>=0?bi+':00':'—'}</div><div class="gnote">${bi>=0?eur(bv):''}</div></div>
+     <div class="stat"><div class="l">Schwächste Stunde</div><div class="v">${wi>=0?wi+':00':'—'}</div><div class="gnote">${wi>=0?eur(wv):''}</div></div>
+     ${(function(){   // v0.52: Einstiegs-Timing innerhalb der Kerze — früh/mittig/spät
+        const th=(a.stats&&a.stats.thirds)||[0,0,0], tn=(a.stats&&a.stats.thirdNet)||[0,0,0];
+        const ges=th[0]+th[1]+th[2];
+        if(!ges) return '';
+        const lbl=['früh','mittig','spät'], col=['var(--good)','var(--warn)','var(--crit)'];
+        let best=0; for(let i=1;i<3;i++) if(tn[i]>tn[best]) best=i;
+        const bars=th.map((n,i)=>`<span style="color:${col[i]}" title="${lbl[i]}es Drittel: ${n} Einstiege, ${eur(tn[i])}">${n}</span>`).join('<span style="color:var(--txt3)"> · </span>');
+        return `<div class="stat"><div class="l">Einstieg in der Kerze</div><div class="v" style="font-size:17px">${bars}</div>
+          <div class="gnote">früh · mittig · spät — am besten läuft <b style="color:${col[best]}">${lbl[best]}</b> (${eur(tn[best])})</div></div>`;
+     })()}
+     <div class="stat"><div class="l">Davon manuell</div><div class="v" style="color:${(a.totals&&a.totals.manualN)?'var(--amber)':'var(--txt2)'}">${(a.totals&&a.totals.manualN)||0}</div>
+       <div class="gnote">${(a.totals&&a.totals.manualN)?eur(a.totals.manualNet||0)+' · am Panel vorbei':'keine erkannt (ab EA v0.44, laufender Tag)'}</div></div>`;
+}
+
+async function loadAnalytics(){ try{ const a=await (await fetch('/analytics'+AQ())).json(); LASTA=a; renderCoach(a); renderWeak(a); renderCalendar(a); renderTrend(a); renderStats(a); if(LASTSTATE) renderChallenge(LASTSTATE); }catch(e){ fetchFail(); } }
+async function tick(){
+  let ok=false;
+  try{
+    const j=await (await fetch('/state'+AQ())).json(); const st=$('stand'); ok=true;
+    // v0.48-fix: Ohne ausdrueckliche Wahl IMMER das live laufende Konto zeigen. Vorher lieferte der Server
+    // ohne ?acct die Summe ALLER Konten desselben Terminals — nach einem Kontowechsel klebten die alten
+    // Zahlen (Netto, Kalender, Bloecke) am neuen Konto.
+    if(!ACCT && j.state && j.state.account){ ACCT=String(j.state.account); localStorage.setItem('mamalAcct',ACCT); loadAnalytics(); loadEquity(); }
+    renderAccounts(j.accounts); renderAcctGrid(j.accounts);
+    if(!j.state){ $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML='<span class="off">● keine Verbindung zu MT4</span>'; failStreak=0; return; }
+    LASTSTATE=j.state;
+    renderState(j.state,j.ageMs);
+    renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
+    LOCK=buildLock(j.state); paintLock();   // v0.46: Sperr-Monitor mit jedem Poll neu synchronisieren
+    const age=j.ageMs==null?9e9:j.ageMs; const cls=age<6000?'live':age<20000?'stale':'off'; const txt=age<6000?'live':age<20000?'verzögert':'MT4 gestoppt?';
+    // Echten Server-Port zeigen (j.serverPort); state.port ist nur der EA-Input InpCockpitPort.
+    const srvPort=j.serverPort!=null?j.serverPort:j.state.port;
+    const mism=j.serverPort!=null&&j.state.port!=null&&Number(j.state.port)!==Number(j.serverPort);
+    const portTx='localhost:'+esc(srvPort)+(mism
+      ? ` <span class="stale" title="Der EA-Panel-Button öffnet localhost:${esc(j.state.port)} — dort läuft nichts. InpCockpitPort auf ${esc(srvPort)} setzen.">⚠ EA-Input ${esc(j.state.port)}</span>`
+      : '');
+    st.innerHTML=`<span class="${cls}">●</span> Stand ${esc(j.state.srvtime)} · ${txt} · EA v${esc(j.state.v||'?')} · Profil ${esc(j.state.profile)}${j.state.funded?' (FUNDED)':''} · ${portTx}`;
+  }catch(e){ fetchFail(); }
+  if(ok) failStreak=0;
+  try{ const jr=await (await fetch('/journal'+AQ())).json(); renderJournal(jr); renderTilt(jr); }catch(e){ fetchFail(); }
+}
+$('langSel').addEventListener('change',function(){ LANG=this.value; localStorage.setItem('mamalLang',LANG); applyLang(); });
+applyLang();   // v0.53: gespeicherte Sprache sofort anwenden
+tick(); loadAnalytics(); loadEquity();
+setInterval(tick,1500);
+setInterval(loadAnalytics,15000);
+setInterval(loadEquity,15000);
+</script>
+</body>
+</html>

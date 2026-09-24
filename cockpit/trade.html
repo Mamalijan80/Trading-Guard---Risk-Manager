@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mamal-Trading · Trade-Akte</title>
+<style>
+  :root{
+    --bg:#eef1f6; --card:#ffffff; --card2:#f4f7fb; --line:#dbe2ec; --line2:#e8edf4;
+    --txt:#0d1420; --txt2:#4a5668; --txt3:#8492a6;
+    --accent:#1f6fd0; --accent-bg:#e9f1fc;
+    --green:#00662e; --red:#b8232f; --amber:#8a5a00;
+    --shadow:0 1px 2px rgba(11,11,11,.04),0 1px 3px rgba(11,11,11,.03);
+    --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace; --radius:10px;
+  }
+  html[data-theme="dark"]{
+    --bg:#0a0f1a; --card:#121a2b; --card2:#0e1524; --line:#22304a; --line2:#1a2436;
+    --txt:#e8eef9; --txt2:#a6b3c9; --txt3:#6b7a94;
+    --accent:#4d94ff; --accent-bg:#15243d;
+    --green:#2ecc71; --red:#ff5f6d; --amber:#f0ad3e;
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5;
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 24px 70px}
+  a{color:var(--accent);text-decoration:none;font-weight:600}
+  .back{font-size:13px;color:var(--txt2);margin-bottom:12px}
+  h2{font-size:10.5px;letter-spacing:.14em;color:var(--txt3);font-weight:700;
+    margin:26px 2px 10px;text-transform:uppercase;display:flex;align-items:center;gap:12px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .hero{padding:18px 20px;border-top:2px solid var(--accent)}
+  .hero .t{font:700 20px/1.2 inherit}
+  .hero .s{color:var(--txt2);font-size:13px;margin-top:3px}
+  .hero .net{float:right;text-align:right}
+  .hero .net .v{font:700 26px/1 var(--mono)}
+  .pos{color:var(--green)}.neg{color:var(--red)}.warn{color:var(--amber)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;padding:4px 0}
+  .kpi{padding:12px 18px;border-right:1px solid var(--line2)}
+  .kpi:last-child{border-right:0}
+  .kpi .l{font-size:10.5px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase}
+  .kpi .v{font:700 19px/1.4 var(--mono);font-variant-numeric:tabular-nums}
+  .sum{padding:16px 20px}
+  .sum li{margin:6px 0;color:var(--txt2)}
+  .sum li b{color:var(--txt)}
+  .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+  .shot{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+  .shot img{width:100%;display:block;cursor:zoom-in;background:var(--card2)}
+  .shot .cap{padding:8px 12px;font-size:12px;color:var(--txt2);display:flex;gap:8px;align-items:center}
+  .badge{font:700 10px/1 var(--mono);padding:3px 7px;border-radius:5px;letter-spacing:.05em}
+  .b-open{background:var(--accent-bg);color:var(--accent)}
+  .b-close{background:var(--line2);color:var(--txt2)}
+  .b-move{background:rgba(240,173,62,.15);color:var(--amber)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--txt3);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+     padding:10px 14px;border-bottom:1px solid var(--line)}
+  td{padding:9px 14px;border-bottom:1px solid var(--line2);color:var(--txt2);
+     font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:0}
+  tr.click{cursor:pointer}tr.click:hover{background:var(--card2)}
+  .mono{font-family:var(--mono)}
+  .empty{padding:26px;text-align:center;color:var(--txt3)}
+  #lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
+  #lb img{max-width:96vw;max-height:94vh}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="back"><a href="/">← zurück zum Cockpit</a></div>
+  <div id="view"></div>
+</div>
+<div id="lb"><img id="lbimg" alt=""></div>
+<script>
+(function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.theme=t; })();
+const $=id=>document.getElementById(id);
+const ESC={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESC[c]);
+const eur=v=>(v>=0?'+':'−')+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const Q=new URLSearchParams(location.search);
+const ACCT=Q.get('acct')||localStorage.getItem('mamalAcct')||'';
+const AQ=(x)=>{const p=[];if(ACCT)p.push('acct='+encodeURIComponent(ACCT));if(x)p.push(x);return p.length?'?'+p.join('&'):'';};
+const KIND={open:['EINSTIEG','b-open'],close:['AUSSTIEG','b-close'],slmove:['SL VERSCHOBEN','b-move'],tpmove:['TP VERSCHOBEN','b-move']};
+
+// v0.65: „offen" nur behaupten, wenn es plausibel ist. Bis EA v0.64 fehlte in der Close-Zeile das Ticket,
+//   deshalb bleibt bei älteren Einträgen das Ergebnis unzuordenbar — das ist etwas anderes als „läuft noch".
+function netUnknown(t){
+  const ts = t ? Date.parse(String(t).replace(/\./g,'-').replace(' ','T')) : NaN;
+  return (Number.isFinite(ts) && Date.now()-ts > 6*3600*1000) ? 'unbekannt' : 'offen';
+}
+$('lb').onclick=()=>{$('lb').style.display='none'};
+function zoom(src){ $('lbimg').src=src; $('lb').style.display='flex'; }
+
+async function renderList(){
+  let rows; try{ rows=await (await fetch('/trades'+AQ())).json(); }catch(e){ $('view').innerHTML='<div class="empty">Server nicht erreichbar.</div>'; return; }
+  if(!rows.length){ $('view').innerHTML='<h2>Trades</h2><div class="card empty">Noch keine Trades mit Ticket-Bezug aufgezeichnet.<br><small>Die Akte entsteht ab EA v0.47 mit jedem Panel-Trade.</small></div>'; return; }
+  const T3=['','früh','mittig','spät'], C3=['','var(--green)','var(--amber)','var(--red)'];
+  $('view').innerHTML='<h2>Trades · Akte</h2><div class="card"><table><thead><tr>'
+    +'<th>Zeit</th><th>Symbol</th><th>Richtung</th><th>Kerze</th><th>SL/TP bewegt</th><th>Bilder</th><th>Netto</th></tr></thead><tbody>'
+    +rows.map(r=>`<tr class="click" onclick="location.href='/trade.html${AQ('ticket='+r.ticket)}'">
+        <td class="mono">${esc((r.time||'').slice(5,16))}</td><td>${esc(r.symbol||'')}</td><td>${esc(r.dir||'')}</td>
+        <td style="color:${C3[r.third||0]}">${T3[r.third||0]||'—'}</td>
+        <td${r.moves?' class="warn"':''}>${r.moves||'—'}</td><td>${r.shots||'—'}</td>
+        <td class="${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?'title="über Symbol und Reihenfolge zugeordnet — nicht ticketgenau"':(r.backfilled?'title="aus der MT4-Kontohistorie nachgetragen"':'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
+    +'</tbody></table></div>';
+}
+
+async function renderOne(ticket){
+  let d; try{ d=await (await fetch('/trade'+AQ('ticket='+ticket))).json(); }catch(e){ $('view').innerHTML='<div class="empty">Server nicht erreichbar.</div>'; return; }
+  if(!d.ok){ $('view').innerHTML=`<div class="card empty">${esc(d.error||'nicht gefunden')}</div>`; return; }
+  const o=d.open, s=d.stats;
+  const netTxt=s.net==null?netUnknown(o?o.time:null):(s.inferred?'≈ ':'')+eur(s.net);
+  const netCls=s.net==null?'':(s.net>=0?'pos':'neg');
+  const T3=['','erstes Drittel (früh)','mittleres Drittel','letztes Drittel (spät)'];
+  let h=`<div class="card hero">
+      <div class="net"><div style="font-size:10.5px;letter-spacing:.08em;color:var(--txt3)">ERGEBNIS</div>
+        <div class="v ${netCls}">${netTxt}</div></div>
+      <div class="t">${esc(o?o.dir:'')} ${esc(o?o.symbol:'')} · Ticket ${esc(d.ticket)}</div>
+      <div class="s">${esc(o?o.time:'')}${o?' · '+esc(o.raw[9])+' Lot · Einstieg '+esc(o.raw[10]):''}</div>
+    </div>
+    <h2>Kennzahlen</h2>
+    <div class="card kpis">
+      <div class="kpi"><div class="l">Geplantes Risiko</div><div class="v">${s.plannedRisk?s.plannedRisk.toFixed(2):'—'}</div></div>
+      <div class="kpi"><div class="l">SL/TP bewegt</div><div class="v ${s.moves?'warn':''}">${s.moves}</div></div>
+      <div class="kpi"><div class="l">davon riskanter</div><div class="v ${s.slWorse?'neg':''}">${s.slWorse}</div></div>
+      <div class="kpi"><div class="l">davon sicherer</div><div class="v ${s.slBetter?'pos':''}">${s.slBetter}</div></div>
+      <div class="kpi"><div class="l">Einstieg in Kerze</div><div class="v" style="font-size:14px">${T3[s.third||0]||'—'}</div></div>
+    </div>
+    <h2>Zusammenfassung</h2>
+    <div class="card sum"><ul>${d.summary.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+
+  if(d.shots.length){
+    h+='<h2>Screenshots · Vorher / Nachher</h2><div class="shots">'
+      +d.shots.map(sh=>{const k=KIND[sh.kind]||[sh.kind.toUpperCase(),'b-close'];
+        const src='/shot/'+encodeURIComponent(sh.file)+AQ();
+        return `<div class="shot"><img loading="lazy" src="${src}" onclick="zoom('${src}')" alt="${esc(k[0])}">
+          <div class="cap"><span class="badge ${k[1]}">${esc(k[0])}</span>
+          <span class="mono">${new Date(sh.ts*1000).toLocaleString('de-DE')}</span></div></div>`;}).join('')
+      +'</div>';
+  } else h+='<h2>Screenshots</h2><div class="card empty">Keine Bilder zu diesem Trade.<br><small>InpScreenshots muss im EA aktiv sein.</small></div>';
+
+  if(d.moves.length){
+    h+='<h2>Chronik der Verschiebungen</h2><div class="card"><table><thead><tr>'
+      +'<th>Zeit</th><th>SL</th><th>TP</th><th>Bewertung</th></tr></thead><tbody>'
+      +d.moves.map(m=>{const bad=/ERHOEHT|unbegrenzt|abgekuerzt|abgekürzt/i.test(m.tag||'');
+        return `<tr><td class="mono">${esc((m.time||'').slice(11))}</td><td class="mono">${esc(m.raw[11])}</td>
+          <td class="mono">${esc(m.raw[12])}</td><td class="${bad?'neg':'pos'}">${esc(m.tag||'')}</td></tr>`;}).join('')
+      +'</tbody></table></div>';
+  }
+  $('view').innerHTML=h;
+}
+
+const tk=Q.get('ticket');
+if(tk) renderOne(tk.replace(/\D/g,'')); else renderList();
+</script>
+</body>
+</html>
