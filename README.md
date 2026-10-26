@@ -47,10 +47,11 @@ the server is off.
 
 ## Chart indicators
 
-Besides the EA, the repository carries three standalone MT4 indicators that only draw price
+Besides the EA, the repository carries a standalone MT4 indicator that only draws price
 levels — round numbers, previous-day high/low/mid/open/close, and a weekly map built from the
-previous week's range including the weekend gap. They need no EA, touch no orders and are
-usable on their own: [`indicators/`](indicators/README.md).
+previous week's range including the weekend gap. Each group has its own on/off switch. It
+needs no EA, touches no orders and is usable on its own:
+[`indicators/`](indicators/README.md).
 
 ## Contributing
 
@@ -105,8 +106,8 @@ TradingGuard/
 │  ├─ trade.html                # trade file: screenshots, SL/TP history, evaluation
 │  ├─ day.html · report.html    # daily detail and weekly report
 │  └─ i18n.js                   # translations
-├─ indicators/                  # standalone chart indicators (no EA needed)
-│  └─ mt4/                      # round levels, previous-day levels, weekly map
+├─ indicators/                  # standalone chart indicator (no EA needed)
+│  └─ mt4/TG_Levels.mq4         # round levels + previous day + weekly map, one file
 └─ docs/                        # rules, technical details, maturity, compliance, roadmap
 ```
 *Note: `ea/mt5/RiskGuard.mq5` is an obsolete predecessor (replaced by MamalTrading) and can be deleted. The `ea/mt4/RiskGuard.mq4` previously listed here does not exist (any more) — only the MT5 file is still there.*
