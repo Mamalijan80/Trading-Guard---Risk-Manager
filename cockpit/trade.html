@@ -6,23 +6,26 @@
 <title>Mamal-Trading · Trade-Akte</title>
 <style>
   :root{
-    --bg:#eef1f6; --card:#ffffff; --card2:#f4f7fb; --line:#dbe2ec; --line2:#e8edf4;
-    --txt:#0d1420; --txt2:#4a5668; --txt3:#8492a6;
-    --accent:#1f6fd0; --accent-bg:#e9f1fc;
-    --green:#00662e; --red:#b8232f; --amber:#8a5a00;
-    --shadow:0 1px 2px rgba(11,11,11,.04),0 1px 3px rgba(11,11,11,.03);
-    --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace; --radius:10px;
+    --bg:#f5f5f7; --card:#ffffff; --card2:#fafafc;
+    --line:rgba(0,0,0,.09); --line2:rgba(0,0,0,.05);
+    --txt:#1d1d1f; --txt2:#6e6e73; --txt3:#86868b;
+    --accent:#0071e3; --accent-bg:#e9f2fd;
+    --green:#0a7d3c; --red:#d70015; --amber:#9a5b00;
+    --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.06);
+    --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,'Cascadia Mono',Consolas,monospace; --radius:14px;
   }
   html[data-theme="dark"]{
-    --bg:#0a0f1a; --card:#121a2b; --card2:#0e1524; --line:#22304a; --line2:#1a2436;
-    --txt:#e8eef9; --txt2:#a6b3c9; --txt3:#6b7a94;
-    --accent:#4d94ff; --accent-bg:#15243d;
-    --green:#2ecc71; --red:#ff5f6d; --amber:#f0ad3e;
-    --shadow:0 1px 2px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
+    --bg:#000000; --card:#1c1c1e; --card2:#2c2c2e;
+    --line:rgba(255,255,255,.12); --line2:rgba(255,255,255,.07);
+    --txt:#f5f5f7; --txt2:#aeaeb2; --txt3:#8e8e93;
+    --accent:#0a84ff; --accent-bg:#0a2642;
+    --green:#30d158; --red:#ff453a; --amber:#ff9f0a;
+    --shadow:0 1px 2px rgba(0,0,0,.6),0 8px 24px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5;
-    font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text',Inter,'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;letter-spacing:-.01em;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
   .wrap{max-width:1180px;margin:0 auto;padding:20px 24px 70px}
   a{color:var(--accent);text-decoration:none;font-weight:600}
   .back{font-size:13px;color:var(--txt2);margin-bottom:12px}

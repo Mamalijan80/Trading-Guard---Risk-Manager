@@ -4,27 +4,50 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mamal-Trading · Cockpit</title>
+<!-- Inter nur fuer Windows/Linux: dort gibt es kein SF Pro, und -apple-system faellt
+     sonst auf Segoe UI zurueck. Diese drei Zeilen loeschen = kein externer Request,
+     die Seite nimmt dann die Systemschrift. Auf macOS wird Inter nie geladen
+     angezeigt, weil SF Pro in der Stack davor steht. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
-  /* ── Design-Tokens · institutionelles Terminal ─────────────────────────────
+  /* ── Design-Tokens · Apple ─────────────────────────────────────────────────
      Farblogik (validiert): Gewinn/Verlust wird IMMER durch Vorzeichen + Zahl
      getragen, nie durch Farbe allein — Gruen/Rot sind fuer Farbenblinde nicht
-     trennbar (ΔE 4,1). Flaechen-Encodings nutzen daher die blaue Sequenz. */
+     trennbar (ΔE 4,1). Flaechen-Encodings nutzen daher die blaue Sequenz.
+     Das gilt unabhaengig vom Anstrich und ueberlebt den Apple-Umbau. */
   :root{
-    --bg:#eef1f6; --card:#ffffff; --card2:#f4f7fb; --line:#dbe2ec; --line2:#e8edf4;
-    --txt:#0d1420; --txt2:#4a5668; --txt3:#8492a6;
-    --accent:#1f6fd0; --accent-bg:#e9f1fc;
-    --green:#00662e; --green-bg:#e6f4ec; --red:#b8232f; --red-bg:#fbebec; --amber:#8a5a00; --amber-bg:#f8f0dd;
-    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    /* Apple-Flaechen: Seite in Apples Signaturgrau, Karten rein weiss darueber,
+       Trennlinien als Alpha-Haarlinie (traegt auf jedem Untergrund, anders als ein
+       fester Grauwert). */
+    --bg:#f5f5f7; --card:#ffffff; --card2:#fafafc;
+    --line:rgba(0,0,0,.09); --line2:rgba(0,0,0,.05);
+    --txt:#1d1d1f; --txt2:#6e6e73; --txt3:#86868b;
+    --accent:#0071e3; --accent-bg:#e9f2fd;
+    /* Semantikfarben bleiben kontraststark (Text!), nicht die hellen System-Tints */
+    --green:#0a7d3c; --green-bg:#e9f7ef; --red:#d70015; --red-bg:#fdecea; --amber:#9a5b00; --amber-bg:#fff4e0;
+    /* Punkte/Tachos duerfen die hellen iOS-Systemfarben tragen */
+    --good:#34c759; --warn:#ff9500; --crit:#ff3b30;
     /* sequenzielle Blau-Rampe (Magnitude, z.B. Ablehnungen je Stunde) */
-    --s1:#cde2fb; --s2:#9ec5f4; --s3:#6da7ec; --s4:#3987e5; --s5:#256abf; --s6:#184f95;
-    --shadow:0 1px 2px rgba(11,11,11,.04),0 1px 3px rgba(11,11,11,.03);
-    --mono:ui-monospace,'SF Mono','Cascadia Mono','Roboto Mono',Consolas,monospace;
-    --radius:10px;
+    --s1:#d5e8fb; --s2:#a8cef6; --s3:#73b0ef; --s4:#3a90e6; --s5:#0071e3; --s6:#0055b3;
+    /* zwei Lagen: enge Kontaktkante + weiter, sehr weicher Abwurf */
+    --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.06);
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text',Inter,
+           'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;
+    --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,'Cascadia Mono',Consolas,monospace;
+    --radius:14px;
   }
   *{box-sizing:border-box}
+  /* Auf macOS/iOS greift -apple-system = echtes SF Pro. Auf Windows gibt es das nicht,
+     deshalb Inter als naechster Verwandter (eine Zeile im <head> entfernen = kein
+     externer Request, dann uebernimmt Segoe UI Variable).
+     Tracking: SF wird bei groesseren Graden negativ getrackt — das macht den Apple-Satz
+     aus. -0.01em auf Fliesstext, enger auf grossen Zahlen weiter unten. */
   body{margin:0;background:var(--bg);color:var(--txt);
-    font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.5}
+    font-family:var(--font);letter-spacing:-.01em;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    font-size:14px;line-height:1.5}
   .wrap{max-width:1240px;margin:0 auto;padding:20px 24px 72px}
   a{color:inherit;text-decoration:none}
   /* Zahlenkolonnen (Tabellen, Achsen) buendig — grosse Einzelzahlen bleiben proportional */
@@ -32,7 +55,7 @@
 
   header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
     background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-    box-shadow:var(--shadow);padding:13px 18px;border-top:2px solid var(--accent)}
+    box-shadow:var(--shadow);padding:15px 20px}
   .logo{display:flex;align-items:flex-end;gap:3px;height:19px}
   .logo i{width:4px;background:var(--accent);border-radius:1px;display:block}
   .logo i:nth-child(1){height:8px}.logo i:nth-child(2){height:13px}.logo i:nth-child(3){height:19px}
@@ -48,9 +71,9 @@
   .eq .v{font:600 20px/1.1 var(--mono)}
 
   .banner{margin:14px 0 0;padding:13px 18px;border-radius:12px;font-weight:600;box-shadow:var(--shadow)}
-  .banner.red{background:var(--red-bg);border:1px solid #f6cccc;color:#b42121}
-  .banner.amber{background:var(--amber-bg);border:1px solid #f2ddba;color:#a95e08}
-  .banner.green{background:var(--green-bg);border:1px solid #c6ecd3;color:#127a37}
+  .banner.red{background:var(--red-bg);border:1px solid rgba(215,0,21,.18);color:var(--red)}
+  .banner.amber{background:var(--amber-bg);border:1px solid rgba(154,91,0,.18);color:var(--amber)}
+  .banner.green{background:var(--green-bg);border:1px solid rgba(10,125,60,.18);color:var(--green)}
 
   /* Abschnittstitel als Haarlinien-Regel — Terminal-Gliederung statt Ueberschrift-Bloecke */
   h2{font-size:10.5px;letter-spacing:.14em;color:var(--txt3);font-weight:700;
@@ -161,14 +184,18 @@
   .hourcap{margin-top:12px;color:var(--txt2);font-size:14px}.hourcap b{color:var(--txt)}
   /* ==== v0.39: Dark Mode ==== */
   /* Dunkel = Blau-Schwarz (Terminal-Look), nicht neutral-warm */
+  /* iOS-Dunkelmodus: echtes Schwarz als Seite, die Karten als gestufte Graue darueber
+     (#1c1c1e / #2c2c2e sind Apples systemGray6/5 dark). Das ist der Grund, warum
+     Apple-Dunkel nicht "dunkelblau" wirkt wie die meisten Terminals. */
   html[data-theme="dark"]{
-    --bg:#0a0f1a; --card:#121a2b; --card2:#0e1524; --line:#22304a; --line2:#1a2436;
-    --txt:#e8eef9; --txt2:#a6b3c9; --txt3:#6b7a94;
-    --accent:#4d94ff; --accent-bg:#15243d;
-    --green:#2ecc71; --green-bg:#0f2a1c; --red:#ff5f6d; --red-bg:#2c151b; --amber:#f0ad3e; --amber-bg:#2b2212;
-    --good:#2ecc71; --warn:#f0ad3e; --crit:#ff5f6d;
-    --s1:#16365f; --s2:#1d4a80; --s3:#2a6bb0; --s4:#3987e5; --s5:#5ba3f0; --s6:#8fc3f8;
-    --shadow:0 1px 2px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
+    --bg:#000000; --card:#1c1c1e; --card2:#2c2c2e;
+    --line:rgba(255,255,255,.12); --line2:rgba(255,255,255,.07);
+    --txt:#f5f5f7; --txt2:#aeaeb2; --txt3:#8e8e93;
+    --accent:#0a84ff; --accent-bg:#0a2642;
+    --green:#30d158; --green-bg:#0d2a17; --red:#ff453a; --red-bg:#2e1413; --amber:#ff9f0a; --amber-bg:#2e2008;
+    --good:#30d158; --warn:#ff9f0a; --crit:#ff453a;
+    --s1:#13325a; --s2:#19477d; --s3:#2567ad; --s4:#0a84ff; --s5:#4da2ff; --s6:#8cc2ff;
+    --shadow:0 1px 2px rgba(0,0,0,.6),0 8px 24px rgba(0,0,0,.45);
   }
   html[data-theme="dark"] .banner.green{background:var(--green-bg);color:#7fe0a5}
   html[data-theme="dark"] .banner.amber{background:var(--amber-bg);color:#f0c078}
@@ -348,6 +375,7 @@
     <div style="font-size:17px;color:var(--txt2);margin-bottom:8px">Warte auf MetaTrader…</div>
     <div>No live data yet. Please check: MT4 is running, the EA <b>Mamal-Trading</b> is on a chart,
       <b>InpCockpit = true</b>, AutoTrading an.</div>
+    <div id="offlineWhy" style="margin-top:12px;color:#e08a2c"></div>
   </div>
 
   <div class="foot" id="stand">—</div>
@@ -402,7 +430,7 @@ const RULES = {
   R22:['Nur Panel-Trades','opened manually/on phone — will be reverted']
 };
 const INSIGHT = {
-  R3:'You want to trade more often than your daily budget allows — once the limit is hit, you're done for the day.',
+  R3:'You want to trade more often than your daily budget allows — once the limit is hit, you are done for the day.',
   R15:'Du setzt den Stop-Loss oft zu eng. (Diese Regel ist inzwischen ausgeschaltet.)',
   R12:'Du hast oft zu viel Risiko gleichzeitig offen — weniger parallele Trades.',
   R2:'You keep adding to the same idea instead of leaving one position alone.',
@@ -648,6 +676,7 @@ let ACCT = localStorage.getItem('mamalAcct') || '';
 const AQ = (x) => { const p=[]; if(ACCT) p.push('acct='+encodeURIComponent(ACCT)); if(x) p.push(x);
                     return p.length ? '?'+p.join('&') : ''; };
 let acctMiss=0;   // v0.38-fix (Verify): give up the chosen account only after several ticks (transient read error != account gone)
+let deadSel=0;    // v0.68: same idea for a selection that is still LISTED but no longer delivers
 function renderAccounts(list){
   const sel=$('acctSel'); list=list||[];
   // Check the stale selection BEFORE the selector may get hidden — otherwise an old
@@ -933,7 +962,23 @@ async function tick(){
     // numbers (net, calendar, blocks) stuck to the new account.
     if(!ACCT && j.state && j.state.account){ ACCT=String(j.state.account); localStorage.setItem('mamalAcct',ACCT); loadAnalytics(); loadEquity(); }
     renderAccounts(j.accounts); renderAcctGrid(j.accounts);
-    if(!j.state){ $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML='<span class="off">● keine Verbindung zu MT4</span>'; failStreak=0; return; }
+    if(!j.state){
+      // v0.68: an account that is still LISTED but no longer delivers used to hang here for good.
+      //   renderAccounts() only drops a selection that VANISHED from the list, and a historic
+      //   account has not vanished — /state?acct=<old> answers ok:true with no state, so the
+      //   waiting screen stayed up with nothing naming the cause. Typical way in: opening
+      //   trade.html?acct=<old challenge> once, which pins that account in localStorage.
+      //   If another account IS live, name it and hand the selection over after a few ticks;
+      //   line ~934 then re-picks the live one. The dropdown still allows going back.
+      const live=(j.accounts||[]).find(a=>a&&a.ageMs!=null&&a.ageMs<20000);
+      if(ACCT&&live&&String(live.account)!==ACCT){
+        $('offlineWhy').textContent='Konto '+ACCT+' liefert keine Daten mehr — Konto '+live.account+' ist live. Wird umgeschaltet…';
+        if(++deadSel>=3){ deadSel=0; ACCT=''; localStorage.removeItem('mamalAcct'); prevS=null; loadAnalytics(); loadEquity(); }
+      } else {
+        deadSel=0;
+        $('offlineWhy').textContent=ACCT?('Gewähltes Konto: '+ACCT+' — kein anderes Konto liefert gerade Daten.'):'';
+      }
+      $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML='<span class="off">● keine Verbindung zu MT4</span>'; failStreak=0; return; }
     LASTSTATE=j.state;
     renderState(j.state,j.ageMs);
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
