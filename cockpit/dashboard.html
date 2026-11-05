@@ -94,15 +94,25 @@
 
   /* Kalender */
   .months{display:flex;flex-wrap:wrap;gap:18px}
-  .month{flex:1;min-width:300px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+  /* overflow:hidden ist hier Fangnetz, nicht Fix: laeuft je ein Inhalt doch einmal ueber,
+     wird er abgeschnitten statt sichtbar in den Nachbarmonat zu ragen. */
+  .month{flex:1;min-width:300px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;overflow:hidden}
   .month h3{margin:0 0 10px;font-size:15px;font-weight:700}
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  /* minmax(0,1fr) statt 1fr: 1fr bedeutet minmax(AUTO,1fr), und auto laesst eine Spalte
+     nicht unter die Breite ihres Inhalts schrumpfen. Eine Zelle mit Betrag + zwei Zaehlern
+     hat damit das Gitter auf 608px aufgeblasen, wo nur 554px Platz waren — der Ueberhang
+     lief sichtbar ueber die Sonntagsspalte in den naechsten Monat. */
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
   .dow{font-size:11px;color:var(--txt3);text-align:center;font-weight:600;padding-bottom:2px}
   .cell{aspect-ratio:1/.86;border-radius:9px;border:1px solid var(--line2);padding:5px 6px;
-    display:flex;flex-direction:column;justify-content:space-between;background:var(--card2)}
+    display:flex;flex-direction:column;justify-content:space-between;background:var(--card2);
+    min-width:0;overflow:hidden}
+  /* dieselbe Falle eine Ebene tiefer: ein Flex-Kind schrumpft per Default nicht unter seinen
+     Inhalt. Ohne min-width:0 schiebt ein langer Betrag die ganze Spalte auf. */
+  .cell>*{min-width:0}
   .cell.empty{background:transparent;border:0}
   .cell .d{font-size:11px;color:var(--txt3);font-weight:600}
-  .cell .n{font:700 12px/1.1 var(--mono)}
+  .cell .n{font:700 12px/1.1 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cell .b{font-size:10px;color:var(--amber);font-weight:700}
   /* Zahl-zuerst: der Betrag traegt die Aussage, die Tinte ist nur Verstaerkung
      (Vorzeichen steht immer davor -> nie Farbe allein, CVD-sicher). */
@@ -110,6 +120,19 @@
   .cell.neg{background:var(--card2);border-left:2px solid var(--red);cursor:pointer}
   .cell.flat{cursor:pointer}
   .cell.pos .n{color:var(--green)}.cell.neg .n{color:var(--red)}
+  /* Handy: bei sieben Spalten auf 390px bleiben rund 37px je Zelle, davon 25px fuer Text —
+     der Betrag passte nicht und wurde weggeschnitten, der Kalender zeigte nur noch Datums-
+     zahlen. Platz kommt aus drei Richtungen: weniger Polsterung, kleinere Schrift, und die
+     beiden Zaehler-Zeilen fliegen raus. Die Zaehler sind Beiwerk; der Betrag ist die Aussage,
+     und er steht vollstaendig in der Tagesansicht. */
+  @media (max-width:640px){
+    .cell{padding:3px;aspect-ratio:1/1}
+    .cell .d{font-size:10px}
+    .cell .n{font-size:9.5px;letter-spacing:-.03em}
+    .cell .b{display:none}
+    .cal{gap:3px}
+    .month{padding:12px 10px}
+  }
   .cell.act:hover{outline:2px solid var(--accent);outline-offset:1px}
   .cell.wknd{opacity:.72}
 
