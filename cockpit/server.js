@@ -27,6 +27,27 @@ const path  = require('path');
 const { exec } = require('child_process');
 const auth  = require('./auth');
 
+// v0.72: .env.local einlesen, falls vorhanden. Grund ist kein Komfort, sondern ein Fehler,
+// der sonst jedes Mal wiederkommt: die Startzeile mit vorangestellten Variablen
+// (VAR=wert node server.js) ist Bash-Syntax und scheitert in PowerShell, genau wie "&&"
+// in PowerShell 5.1. Mit dieser Datei lautet der Start ueberall nur noch `node server.js`.
+// Bereits gesetzte Variablen gewinnen — eine echte Umgebung sticht die Datei.
+// Nur MAMAL_*: in der Datei steht auch das Klartext-Passwort fuer den Menschen, und das
+// hat in der Prozessumgebung nichts verloren.
+(function loadEnvLocal() {
+  try {
+    for (const line of fs.readFileSync(path.join(__dirname, '.env.local'), 'utf8').split(/\r?\n/)) {
+      const s = line.trim();
+      if (!s || s.startsWith('#')) continue;
+      const i = s.indexOf('=');
+      if (i < 1) continue;
+      const k = s.slice(0, i).trim();
+      if (!k.startsWith('MAMAL_') || process.env[k] !== undefined) continue;
+      process.env[k] = s.slice(i + 1).trim().replace(/^["']|["']$/g, '');
+    }
+  } catch (e) { /* keine Datei -> nichts zu tun */ }
+})();
+
 // PORT ohne Praefix ist die Konvention der PaaS-Anbieter (Railway, Heroku, Fly) — sie geben
 // den Port vor. MAMAL_PORT hat Vorrang, damit lokal nichts kippt.
 const PORT = Number(process.env.MAMAL_PORT || process.env.PORT) || 8730;
