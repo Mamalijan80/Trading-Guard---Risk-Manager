@@ -799,7 +799,12 @@ function handleIngest(req, res) {
       }
       if (typeof d.journal === 'string') fs.writeFileSync(path.join(dir, 'MamalTrading_Journal.csv'), d.journal, 'latin1');
     } catch (e) { res.writeHead(500); return res.end('Schreibfehler'); }
-    sendJson(res, { ok: true, account: acct, journal: typeof d.journal === 'string' });
+    // hasJournal zurueckmelden. Der Container startet mit leerem Verzeichnis neu, und das
+    //   Journal wird nur bei Aenderung gesendet — ohne dieses Signal bliebe es nach einem
+    //   Neustart fehlen, bis der naechste Trade schliesst. Das kann Stunden dauern.
+    let hasJournal = false;
+    try { hasJournal = fs.statSync(path.join(dir, 'MamalTrading_Journal.csv')).size > 0; } catch (e) {}
+    sendJson(res, { ok: true, account: acct, hasJournal });
   });
 }
 function handleLogout(req, res) {
@@ -938,7 +943,15 @@ function postJson(urlStr, obj, cb) {
     headers: { 'Content-Type': 'application/json', 'Content-Length': body.length,
                'X-Mamal-Token': INGEST_TOKEN },
     timeout: 15000,
-  }, (rs) => { rs.resume(); rs.on('end', () => cb(null, rs.statusCode)); });
+  }, (rs) => {
+    let out = '';
+    rs.setEncoding('utf8');
+    rs.on('data', (c) => { if (out.length < 4096) out += c; });
+    rs.on('end', () => {
+      let j = null; try { j = JSON.parse(out); } catch (e) {}
+      cb(null, rs.statusCode, j);
+    });
+  });
   rq.on('timeout', () => rq.destroy(new Error('Zeitueberschreitung')));
   rq.on('error', cb);
   rq.end(body);
@@ -972,13 +985,18 @@ function startPushLoop() {
           lastJ.set(a.account, sig);
         }
       } catch (e) { /* kein Journal -> nur der Zustand */ }
-      postJson(PUSH_URL, payload, (err, code) => {
+      postJson(PUSH_URL, payload, (err, code, reply) => {
         if (err || code >= 400) {
           // Schlug ein Lauf MIT Journal fehl, muss es erneut mit — sonst fehlt es drueben
           //   bis zur naechsten Aenderung, und die kann Stunden entfernt sein.
           if (payload.journal) lastJ.delete(a.account);
           if (!quiet) { quiet = true; console.error('  Push fehlgeschlagen: ' + (err ? err.message : 'HTTP ' + code)); }
-        } else if (quiet) { quiet = false; console.log('  Push laeuft wieder.'); }
+          return;
+        }
+        // Das Relay sagt, ob es das Journal hat. Nach einem Container-Neustart ist das
+        //   Verzeichnis leer — dann Marker loeschen, damit der naechste Lauf es mitschickt.
+        if (reply && reply.hasJournal === false) lastJ.delete(a.account);
+        if (quiet) { quiet = false; console.log('  Push laeuft wieder.'); }
       });
     }
   };
