@@ -27,7 +27,9 @@ const path  = require('path');
 const { exec } = require('child_process');
 const auth  = require('./auth');
 
-const PORT = Number(process.env.MAMAL_PORT) || 8730;
+// PORT ohne Praefix ist die Konvention der PaaS-Anbieter (Railway, Heroku, Fly) — sie geben
+// den Port vor. MAMAL_PORT hat Vorrang, damit lokal nichts kippt.
+const PORT = Number(process.env.MAMAL_PORT || process.env.PORT) || 8730;
 
 // ── v0.70: Anmeldung und Erreichbarkeit ────────────────────────────────────────────────
 // Standard bleibt 127.0.0.1. Wer nichts konfiguriert, aendert nichts und bleibt dicht.
@@ -42,7 +44,13 @@ const EXTRA_HOSTS = (process.env.MAMAL_HOSTS || '').split(',')
 const TLS_CERT = process.env.MAMAL_TLS_CERT || '';
 const TLS_KEY  = process.env.MAMAL_TLS_KEY  || '';
 const USE_TLS  = !!(TLS_CERT && TLS_KEY);
-const SCHEME   = USE_TLS ? 'https' : 'http';
+// Hinter einem Anbieter, der TLS selbst beendet (Railway, Fly, ein Reverse Proxy), ist die
+// Strecke zum Browser verschluesselt, obwohl dieser Prozess nur HTTP spricht. Dann ist die
+// TLS-Forderung des Riegels erfuellt — und das Sitzungs-Cookie MUSS trotzdem Secure sein,
+// weil der Browser die Verbindung als HTTPS sieht.
+const TRUST_PROXY = /^(1|true|yes)$/i.test(process.env.MAMAL_TRUST_PROXY || '');
+const SECURE_COOKIE = USE_TLS || TRUST_PROXY;
+const SCHEME = (USE_TLS || TRUST_PROXY) ? 'https' : 'http';
 
 // Passwort setzen: `node server.js --set-password`. Bewusst keine Eingabe per Argument
 // oder Umgebungsvariable — beides landet in der Shell-Historie bzw. in der Prozessliste.
@@ -83,14 +91,26 @@ function askHidden(prompt) {
 }
 
 if (process.argv.includes('--set-password')) {
+  // --env gibt die Geheimnisse aus, statt sie in eine Datei zu schreiben: fuer Container,
+  //   deren Dateisystem beim naechsten Deploy wieder leer ist (Railway, Docker, Fly).
+  const asEnv = process.argv.includes('--env');
   (async () => {
     const pw = await askHidden('Neues Cockpit-Passwort (min. 10 Zeichen): ');
     const again = await askHidden('Wiederholen: ');
     if (pw !== again) { console.error('\n  Passwoerter stimmen nicht ueberein.\n'); process.exit(1); }
-    try { auth.setPassword(pw); }
-    catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
-    console.log('\n  Passwort gesetzt: ' + auth.CONFIG);
-    console.log('  Alle offenen Sitzungen sind damit abgemeldet.\n');
+    try {
+      if (asEnv) {
+        const lines = auth.envForPassword(pw);
+        console.log('\n  Diese vier Variablen beim Dienst hinterlegen:\n');
+        for (const l of lines) console.log('    ' + l);
+        console.log('\n  Sie enthalten KEIN Passwort im Klartext, nur Hash, Salt und Schluessel.');
+        console.log('  Trotzdem geheim halten: wer den Sitzungsschluessel hat, faelscht Sitzungen.\n');
+      } else {
+        auth.setPassword(pw);
+        console.log('\n  Passwort gesetzt: ' + auth.CONFIG);
+        console.log('  Alle offenen Sitzungen sind damit abgemeldet.\n');
+      }
+    } catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
     process.exit(0);
   })();
   return;   // CommonJS: Modul laeuft in einer Funktion, top-level return ist zulaessig
@@ -138,7 +158,17 @@ const accountBeacons = memo(() => {
   } catch (e) { /* Common fehlt -> leer */ }
   return out;
 }, 1500);
+// v0.71 Relay: im Container gibt es kein MT4 und keine Wegweiser im Common-Ordner. Statt
+// dessen fuellt /ingest ein Verzeichnis je Konto unter MAMAL_FILES_ROOT. Von da an laeuft
+// alles unveraendert weiter — fuer den Rest des Servers sieht es aus wie ein MQL4-Ordner.
 function allFilesDirs() {
+  const root = process.env.MAMAL_FILES_ROOT;
+  if (root) {
+    try {
+      return fs.readdirSync(root, { withFileTypes: true })
+               .filter(d => d.isDirectory()).map(d => path.join(root, d.name));
+    } catch (e) { return []; }
+  }
   if (process.env.MAMAL_FILES) return [process.env.MAMAL_FILES];
   if (process.platform === 'win32') {
     const dirs = winAllFilesDirs();
@@ -159,7 +189,9 @@ function allFilesDirs() {
 // the last writer used to win in turn and the display jumped back and forth between the accounts.
 // (Portable mode stays covered: the beacon folders sit in allFilesDirs.)
 function currentFiles() {
-  if (process.env.MAMAL_FILES) return process.env.MAMAL_FILES;
+  // MAMAL_FILES_ROOT absichtlich NICHT kurzschliessen: dort liegen mehrere Konten, und es
+  // soll dieselbe Frischeregel gelten wie lokal — der juengste Zustand gewinnt.
+  if (process.env.MAMAL_FILES && !process.env.MAMAL_FILES_ROOT) return process.env.MAMAL_FILES;
   const dirs = allFilesDirs();
   if (!dirs.length) return '';
   let best = dirs[0], bestM = -1;
@@ -717,12 +749,57 @@ function handleLogin(req, res) {
     }
     auth.noteSuccess(req);
     const flags = ['Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' + (auth.SESSION_HOURS * 3600)];
-    if (USE_TLS) flags.push('Secure');   // ohne TLS wuerde Secure das Cookie unbrauchbar machen
+    if (SECURE_COOKIE) flags.push('Secure');   // ohne TLS wuerde Secure das Cookie unbrauchbar machen
     res.writeHead(302, {
       Location: '/', 'Cache-Control': 'no-store',
       'Set-Cookie': 'mamal_sess=' + auth.makeSession() + '; ' + flags.join('; '),
     });
     res.end();
+  });
+}
+// ── v0.71 Relay-Aufnahme ────────────────────────────────────────────────────────────────
+// Maschine zu Maschine, deshalb Token statt Sitzung: der Push-Agent hat keinen Browser und
+// kein Cookie. Der Vergleich laeuft zeitkonstant, sonst verraet die Antwortzeit das Token
+// Zeichen fuer Zeichen.
+const RELAY_ROOT   = process.env.MAMAL_FILES_ROOT || '';
+const INGEST_TOKEN = process.env.MAMAL_INGEST_TOKEN || '';
+function tokenOk(got) {
+  if (!INGEST_TOKEN || !got) return false;
+  const a = Buffer.from(String(got)), b = Buffer.from(INGEST_TOKEN);
+  return a.length === b.length && require('crypto').timingSafeEqual(a, b);
+}
+function handleIngest(req, res) {
+  if (!RELAY_ROOT)  { res.writeHead(404); return res.end('kein Relay-Modus (MAMAL_FILES_ROOT fehlt)'); }
+  if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
+  if (!tokenOk(req.headers['x-mamal-token'])) { res.writeHead(401); return res.end('Token'); }
+  let body = '', tooBig = false;
+  req.on('data', (c) => { body += c; if (body.length > 12 * 1024 * 1024) { tooBig = true; req.destroy(); } });
+  req.on('end', () => {
+    if (tooBig) return;
+    let d; try { d = JSON.parse(body); } catch (e) { res.writeHead(400); return res.end('JSON kaputt'); }
+    const acct = String((d && d.account) || '').replace(/\D/g, '');   // nur Ziffern -> kein Pfad-Ausbruch
+    if (!acct) { res.writeHead(400); return res.end('account fehlt'); }
+    const dir = path.join(RELAY_ROOT, acct);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      // latin1 wie der Rest: readState() liest die Datei genauso, und der EA schreibt ANSI.
+      const sf = path.join(dir, 'mamal_cockpit.json');
+      if (d.state) {
+        fs.writeFileSync(sf, JSON.stringify(d.state), 'latin1');
+        // Die Quell-Aenderungszeit uebernehmen. Ohne das traegt JEDE eingehende Datei den
+        //   Zeitpunkt der Aufnahme, alle Konten sind gleich "frisch", und currentFiles()
+        //   waehlt zufaellig — im Test gewann ein zwei Tage altes Konto gegen das aktive.
+        //   In die Zukunft darf es dabei nicht gehen: die Uhr des Agenten kann vorgehen,
+        //   und ein negatives Alter wuerde als "gerade eben" durchgehen.
+        const src = Number(d.mtimeMs);
+        if (isFinite(src) && src > 0) {
+          const t = Math.min(src, Date.now()) / 1000;
+          try { fs.utimesSync(sf, t, t); } catch (e) { /* nicht kritisch */ }
+        }
+      }
+      if (typeof d.journal === 'string') fs.writeFileSync(path.join(dir, 'MamalTrading_Journal.csv'), d.journal, 'latin1');
+    } catch (e) { res.writeHead(500); return res.end('Schreibfehler'); }
+    sendJson(res, { ok: true, account: acct, journal: typeof d.journal === 'string' });
   });
 }
 function handleLogout(req, res) {
@@ -753,6 +830,8 @@ function handler(req, res) {
   // Ist ein Passwort gesetzt, gilt es fuer ALLES ausser der Anmeldeseite — auch auf
   // localhost. Ist keines gesetzt, laeuft alles wie bisher; der Start-Riegel unten sorgt
   // dafuer, dass der Server dann gar nicht erst nach aussen gebunden sein kann.
+  // Die Aufnahme laeuft VOR der Anmeldung: sie hat ihr eigenes Token und keinen Browser.
+  if (p === '/ingest') return handleIngest(req, res);
   if (auth.isConfigured()) {
     if (p === '/login')  return handleLogin(req, res);
     if (p === '/logout') return handleLogout(req, res);
@@ -842,6 +921,71 @@ function handler(req, res) {
   return res.end('404 — nicht gefunden');
 }
 
+// ── v0.71 Push-Agent ───────────────────────────────────────────────────────────────────
+// Laeuft dort, wo MT4 laeuft, und schiebt den Zustand zum Relay. Der EA bleibt dadurch
+// DLL-frei und ohne Netzwerkcode: den Weg nach draussen geht Node, nicht MQL4.
+// Derselbe MAMAL_INGEST_TOKEN steht auf beiden Seiten — hier zum Senden, dort zum Pruefen.
+const PUSH_URL = process.env.MAMAL_PUSH_URL || '';
+const PUSH_SEC = Math.max(2, Number(process.env.MAMAL_PUSH_SEC) || 5);
+
+function postJson(urlStr, obj, cb) {
+  let u; try { u = new URL(urlStr); } catch (e) { return cb(new Error('MAMAL_PUSH_URL ist keine URL')); }
+  const body = Buffer.from(JSON.stringify(obj));
+  const mod = u.protocol === 'https:' ? https : http;
+  const rq = mod.request({
+    hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+    path: u.pathname + u.search, method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': body.length,
+               'X-Mamal-Token': INGEST_TOKEN },
+    timeout: 15000,
+  }, (rs) => { rs.resume(); rs.on('end', () => cb(null, rs.statusCode)); });
+  rq.on('timeout', () => rq.destroy(new Error('Zeitueberschreitung')));
+  rq.on('error', cb);
+  rq.end(body);
+}
+
+function startPushLoop() {
+  if (!PUSH_URL) return;
+  if (!INGEST_TOKEN) {
+    console.error('  MAMAL_PUSH_URL gesetzt, aber MAMAL_INGEST_TOKEN fehlt — es wird nichts gesendet.');
+    return;
+  }
+  const lastJ = new Map();   // Konto -> Signatur des zuletzt uebertragenen Journals
+  let quiet = false;         // Fehler einmal melden, nicht alle paar Sekunden
+  const tick = () => {
+    for (const a of accountsList()) {
+      const dir = dirForAccount(a.account);
+      if (!dir) continue;
+      const state = readState(a.account);
+      if (!state) continue;
+      const payload = { account: a.account, state };
+      // Die Quellzeit mitschicken, damit das Relay das Alter der Daten kennt und nicht den
+      //   Zeitpunkt der Uebertragung. Sonst sieht drueben jedes Konto taufrisch aus.
+      try { payload.mtimeMs = fs.statSync(path.join(dir, 'mamal_cockpit.json')).mtimeMs; } catch (e) {}
+      // Das Journal ist gross und aendert sich selten — nur bei echter Aenderung mitschicken.
+      try {
+        const jf = path.join(dir, 'MamalTrading_Journal.csv');
+        const st = fs.statSync(jf);
+        const sig = st.size + ':' + st.mtimeMs;
+        if (lastJ.get(a.account) !== sig) {
+          payload.journal = fs.readFileSync(jf, 'latin1');
+          lastJ.set(a.account, sig);
+        }
+      } catch (e) { /* kein Journal -> nur der Zustand */ }
+      postJson(PUSH_URL, payload, (err, code) => {
+        if (err || code >= 400) {
+          // Schlug ein Lauf MIT Journal fehl, muss es erneut mit — sonst fehlt es drueben
+          //   bis zur naechsten Aenderung, und die kann Stunden entfernt sein.
+          if (payload.journal) lastJ.delete(a.account);
+          if (!quiet) { quiet = true; console.error('  Push fehlgeschlagen: ' + (err ? err.message : 'HTTP ' + code)); }
+        } else if (quiet) { quiet = false; console.log('  Push laeuft wieder.'); }
+      });
+    }
+  };
+  setInterval(tick, PUSH_SEC * 1000);
+  tick();
+}
+
 // ── v0.70: fail-closed. Nach aussen binden nur mit Passwort, zugelassenem Hostnamen und
 // TLS. Das Cockpit liefert Kontodaten und nimmt Befehle entgegen — lieber gar nicht
 // starten als ungeschuetzt erreichbar sein. Dieselbe Haltung wie im EA.
@@ -851,8 +995,9 @@ if (!IS_LOCAL_BIND) {
     problems.push('kein Passwort gesetzt   ->  node server.js --set-password');
   if (!EXTRA_HOSTS.length)
     problems.push('kein Hostname erlaubt   ->  MAMAL_HOSTS=cockpit.example.com  (DNS-Rebinding-Schutz)');
-  if (!USE_TLS && !/^(1|true|yes)$/i.test(process.env.MAMAL_ALLOW_PLAINTEXT || ''))
+  if (!USE_TLS && !TRUST_PROXY && !/^(1|true|yes)$/i.test(process.env.MAMAL_ALLOW_PLAINTEXT || ''))
     problems.push('kein TLS                ->  MAMAL_TLS_CERT und MAMAL_TLS_KEY setzen,\n'
+                + '                             hinter Railway/Proxy: MAMAL_TRUST_PROXY=1,\n'
                 + '                             oder bewusst MAMAL_ALLOW_PLAINTEXT=1');
   if (problems.length) {
     console.error('\n  MAMAL_BIND=' + BIND + ' macht das Cockpit ueber das Netz erreichbar.');
@@ -881,7 +1026,11 @@ server.listen(PORT, BIND, () => {
   console.log('  → ' + SCHEME + '://' + (IS_LOCAL_BIND ? 'localhost' : (EXTRA_HOSTS[0] || BIND)) + ':' + PORT);
   if (auth.isConfigured()) console.log('  Anmeldung: aktiv');
   else console.log('  Anmeldung: AUS (nur localhost moeglich) — setzen: node server.js --set-password');
-  if (!IS_LOCAL_BIND && !USE_TLS) console.log('  WARNUNG: ohne TLS — Passwort und Daten gehen im Klartext ueber das Netz.');
+  if (!IS_LOCAL_BIND && !USE_TLS && !TRUST_PROXY) console.log('  WARNUNG: ohne TLS — Passwort und Daten gehen im Klartext ueber das Netz.');
+  if (TRUST_PROXY) console.log('  TLS wird vom vorgelagerten Dienst beendet (MAMAL_TRUST_PROXY=1).');
+  if (RELAY_ROOT) console.log('  Relay-Modus: Daten kommen per POST /ingest nach ' + RELAY_ROOT);
+  if (PUSH_URL)   console.log('  Push an ' + PUSH_URL + ' alle ' + PUSH_SEC + ' s');
+  startPushLoop();
   const dirs = allFilesDirs();
   console.log('  Ordner (' + dirs.length + '): ' + (currentFiles() || '— keiner gefunden'));
   const accts = accountsList();

@@ -30,9 +30,23 @@ const CONFIG = path.join(__dirname, 'cockpit-config.json');
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 const SESSION_HOURS = 24 * 14;   // a phone should not have to log in every morning
 
+// Konfiguration kommt aus Umgebungsvariablen ODER aus der Datei — in dieser Reihenfolge.
+// Grund: in einem Container (Railway, Docker, Fly) ist das Dateisystem fluechtig. Eine
+// Datei waere nach jedem Deploy weg und das Passwort damit zurueckgesetzt. Lokal bleibt
+// die Datei der bequemere Weg, weil man sie mit --set-password einfach schreiben kann.
 function readConfig() {
+  const e = process.env;
+  if (e.MAMAL_PASS_HASH && e.MAMAL_PASS_SALT && e.MAMAL_SESSION_SECRET) {
+    return {
+      passHash: e.MAMAL_PASS_HASH,
+      passSalt: e.MAMAL_PASS_SALT,
+      sessionSecret: e.MAMAL_SESSION_SECRET,
+      sessionEpoch: Number(e.MAMAL_SESSION_EPOCH || 1) || 1,
+      fromEnv: true,
+    };
+  }
   try { return JSON.parse(fs.readFileSync(CONFIG, 'utf8')); }
-  catch (e) { return null; }
+  catch (err) { return null; }
 }
 
 function writeConfig(cfg) {
@@ -51,21 +65,38 @@ function isConfigured() {
   return !!(c && c.passHash && c.passSalt && c.sessionSecret);
 }
 
-function setPassword(password) {
+// Baut den Satz Geheimnisse. Changing the password invalidates every open session: the
+// secret is new, so no old cookie verifies any more — what you want when it leaked.
+function buildSecrets(password, oldEpoch) {
   if (typeof password !== 'string' || password.length < 10) {
     throw new Error('Passwort muss mindestens 10 Zeichen haben.');
   }
-  const old = readConfig() || {};
   const salt = crypto.randomBytes(16).toString('hex');
-  writeConfig({
+  return {
     passSalt: salt,
     passHash: hashPassword(password, salt),
-    // Changing the password invalidates every open session: the secret is new, so no old
-    //   cookie verifies any more. That is what you want when the password leaked.
     sessionSecret: crypto.randomBytes(32).toString('hex'),
-    sessionEpoch: (old.sessionEpoch || 0) + 1,
+    sessionEpoch: (oldEpoch || 0) + 1,
     createdAt: new Date().toISOString(),
-  });
+  };
+}
+
+function setPassword(password) {
+  const cfg = buildSecrets(password, (readConfig() || {}).sessionEpoch);
+  writeConfig(cfg);
+  return cfg;
+}
+
+// Fuer Container: dieselben Geheimnisse, aber als Umgebungsvariablen zum Einfuegen,
+// statt in eine Datei, die der naechste Deploy wegwirft.
+function envForPassword(password) {
+  const c = buildSecrets(password, 0);
+  return [
+    'MAMAL_PASS_HASH=' + c.passHash,
+    'MAMAL_PASS_SALT=' + c.passSalt,
+    'MAMAL_SESSION_SECRET=' + c.sessionSecret,
+    'MAMAL_SESSION_EPOCH=' + c.sessionEpoch,
+  ];
 }
 
 function verifyPassword(password) {
@@ -163,7 +194,7 @@ function noteSuccess(req) { fails.delete(clientKey(req)); }
 
 module.exports = {
   CONFIG, SESSION_HOURS,
-  isConfigured, setPassword, verifyPassword,
+  isConfigured, setPassword, envForPassword, verifyPassword,
   makeSession, validSession, logoutEverywhere,
   parseCookies, lockedFor, noteFailure, noteSuccess,
 };

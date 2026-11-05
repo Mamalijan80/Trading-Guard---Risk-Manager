@@ -1,0 +1,18 @@
+{
+  "name": "tradingguard-cockpit",
+  "version": "0.71.0",
+  "description": "TradingGuard cockpit — dashboard and relay for the MetaTrader 4 risk EA",
+  "license": "AGPL-3.0-or-later",
+  "author": "Mohammadreza Tavakoli (https://itavakoli.com/)",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "set-password": "node server.js --set-password",
+    "set-password-env": "node server.js --set-password --env"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
