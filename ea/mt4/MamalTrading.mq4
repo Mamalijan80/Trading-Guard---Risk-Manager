@@ -100,13 +100,17 @@ extern bool   InpFomoGate           = false; // R9
 extern int    InpFomoSeconds        = 7;     // R9
 extern bool   InpJournal            = true;  // R11
 extern bool   InpHistoryBackfill    = true;  // v0.66: ONE-TIME backfill of closed trades from the account history into the journal
-                                             //   (ticket + net), so the trade file can assign old positions. Runs exactly once per account.
+                                             //   (ticket + net), so the trade file can assign old positions.
+                                             //   Set the History tab to "Gesamte Historie" (all history) BEFORE attaching: the EA only ever
+                                             //   sees the filtered excerpt, and the pass is not repeated afterwards.
+                                             //   v0.68: ONE completed pass per account ends it, whether or not anything was found — see
+                                             //   BackfillHistory() for why a retry made the no-op case loop forever. To repeat the import:
+                                             //   widen the History tab, delete the global variable RG_BACKFILL2 (F3), re-attach the EA.
+                                             //   On a fresh account there is simply nothing to import, and that is reported once.
                                              //   DELIBERATELY RENAMED (formerly InpBackfillHistory): MT4 stores EA inputs per chart and takes
                                              //   the STORED value when you attach it, not the default from the source — the old switch
                                              //   therefore stayed "off" although the default here had long been "on". A new name has no
-                                             //   stored predecessor, so the default applies. Set "Gesamte Historie" (all history) in the terminal first.
-                                             //   (ticket + net). Set "Gesamte Historie" (all history) in the terminal first, otherwise
-                                             //   the EA only sees the filtered excerpt. Runs exactly once per account.
+                                             //   stored predecessor, so the default applies.
 extern bool   InpScreenshots        = true;  // R11 / v0.47: screenshot on every action (open/close/SL-TP move) — shown per trade in the cockpit
 extern int    InpShotWidth          = 1100;  // v0.47: width of the screenshots (pixels)
 extern int    InpShotHeight         = 620;   // v0.47: height of the screenshots (pixels)
@@ -195,8 +199,12 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
 #define GV_TEST_SET      "RG_TEST_SET"       // §05-fix (high): a lock was set via the TEST button -> only then may 'Reset' delete real locks
 #define GV_LOCK_WHY      "RG_LOCK_WHY"       // v0.65: WHY is the day locked? 1=R4 daily loss 2=R6 losing streak
                                              //   3=R13 Giveback 4=Selbstsperre 5=Historie unsichtbar 6=Lockstate manipuliert 7=Test
-#define GV_BACKFILL      "RG_BACKFILL2"      // v0.65: Nachtrag ERFOLGREICH gelaufen (Wert = Kontonummer).
-                                             //   Only set on hits — a failed attempt must not burn the one-time chance.
+#define GV_BACKFILL      "RG_BACKFILL2"      // v0.65: the one-time history import has run.
+                                             //   v0.68: PREFIX only — the live slot is BackfillGV() = this + "_" + login.
+                                             //   The bare name is the pre-v0.68 slot (value = account number) and is still
+                                             //   honoured once, for migration. v0.68 also sets it after EVERY completed pass,
+                                             //   not only on hits: treating a no-op as "unfinished" looped forever on a fresh
+                                             //   account. Do not restore the old cnt>0 condition — see BackfillHistory().
 #define GV_LS_SEEN       "RG_LS_SEEN"        // v0.63: the lockstate file has existed on this account before -> from then on its ABSENCE is tampering, not a first start
 // §06-fix (medium): extend tighten-only to ALL lock-relevant inputs (so far only Daily/MaxLoss).
 #define GV_TIGHT_LATCH   "RG_TIGHT_LATCH"    // self-lock was active today -> InpTightenOnly cannot be switched off intraday
@@ -215,7 +223,7 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
 #define GV_EFF_REQSL     "RG_EFF_REQSL"      // R7 SL mandatory (once on -> cannot be switched off intraday)
 #define GV_EFF_REQTP     "RG_EFF_REQTP"      // R7 TP-Pflicht
 #define GV_EFF_CORR      "RG_EFF_CORR"       // R17 correlation cap on/off
-#define EA_VER           "0.67"             // ONE version source (log print + cockpit JSON) — increment here
+#define EA_VER           "0.68"             // ONE version source (log print + cockpit JSON) — increment here
 #define PFX              "MMT_"
 #define SLLINE           "MMT_slline"
 #define TPLINE           "MMT_tpline"      // v0.46: optional, draggable TP line (InpTpLine); otherwise auto TP from InpRR
@@ -410,6 +418,11 @@ double DepositBase()
 }
 
 // P1-11: WatchScope — TOOL_ONLY/TOOL_PLUS_MANUAL do NOT touch foreign magics; ALL_POSITIONS does (demo/debug only)
+// v0.68: per-account slot for the one-time history import. The pre-v0.68 code used ONE
+//   terminal-wide variable holding the account number — but WipeAllState() deletes it on an
+//   account switch, so cycling demo -> challenge -> funded and back re-imported the history and
+//   wrote a second set of CLOSE_HIST rows. A slot per login matches what the input promises.
+string BackfillGV(){ return GV_BACKFILL+"_"+IntegerToString(AccountNumber()); }
 bool InScope(int magic)
 {
    if(InpWatchScope==ALL_POSITIONS) return true;
@@ -451,7 +464,14 @@ void   PruneGV(string prefix,datetime below)
 void WipeAllState()
 {
    for(int i=GlobalVariablesTotal()-1;i>=0;i--)
-   { string nm=GlobalVariableName(i); if(StringFind(nm,"RG")==0) GlobalVariableDel(nm); }   // gesamter Namespace: RG_*, RGP_*, RGEAC_*
+   { string nm=GlobalVariableName(i);
+     // v0.68: the history-import markers are EXEMPT. This wipe exists because GVs are
+     //   terminal-wide and carry no account number — RG_BACKFILL2_<login> does, so it can never
+     //   be read against a foreign account. Deleting it would re-import the whole history and
+     //   write a second set of CLOSE_HIST rows every time the user switches back to an account
+     //   that was already imported — the exact demo -> challenge -> funded cycle this block is for.
+     if(StringFind(nm,GV_BACKFILL)==0) continue;
+     if(StringFind(nm,"RG")==0) GlobalVariableDel(nm); }   // gesamter Namespace: RG_*, RGP_*, RGEAC_*
    if(FileIsExist(LOCKFILE)) FileDelete(LOCKFILE);   // do not restore the signed lockstate of the old account
    g_lockSig="";
    GlobalVariablesFlush();
@@ -596,7 +616,7 @@ int OnInit()
    // v0.42: Boot-Diagnose — Ground Truth ins Journal (jede Instanz; klaert Registry/Floor/History/Kontext)
    // v0.66: write the backfill state in as well. The backfill ran into the void once, and from the outside it was
    //   impossible to tell whether the switch was even on — diagnosis by guesswork instead of by evidence.
-   Journal("INFO",Symbol(),"-",0,0,0,0,0,StringFormat("BootDiag v%s: RGOPN=%d HistTotal=%d Floor=%s Ctx=%s Magic=%d Backfill=%s MasterSlot=%s",EA_VER,CountOpn(),OrdersHistoryTotal(),TimeToString((datetime)GlobalVariableGet(GV_LAST_CLOSE)),IsTradeContextBusy()?"BUSY":"frei",InpMagic,(InpHistoryBackfill?(GlobalVariableCheck(GV_BACKFILL)?"erledigt":"an"):"aus"),GlobalVariableCheck(GV_MASTER)?"da":"FEHLT"));
+   Journal("INFO",Symbol(),"-",0,0,0,0,0,StringFormat("BootDiag v%s: RGOPN=%d HistTotal=%d Floor=%s Ctx=%s Magic=%d Backfill=%s MasterSlot=%s",EA_VER,CountOpn(),OrdersHistoryTotal(),TimeToString((datetime)GlobalVariableGet(GV_LAST_CLOSE)),IsTradeContextBusy()?"BUSY":"frei",InpMagic,(!InpHistoryBackfill?"aus":(!InpJournal?"aus (InpJournal=false)":(GlobalVariableCheck(BackfillGV())?"erledigt":"an"))),GlobalVariableCheck(GV_MASTER)?"da":"FEHLT"));
    ReconcileDayRisk();     // R3: restore the daily budget from broker data after a crash/restart
    ChartSetInteger(0,CHART_FOREGROUND,false);
    g_fgTries=8;                              // v0.28: retry in the foreground for the first few cycles (in case init does not stick), then stay quiet
@@ -1590,9 +1610,30 @@ string LockWhyText()
 void BackfillHistory()
 {
    if(!InpHistoryBackfill) return;
-   if(GlobalVariableCheck(GV_BACKFILL) && (long)GlobalVariableGet(GV_BACKFILL)==(long)AccountNumber()) return;
+   // The import writes journal rows and nothing else. With the journal switched off there is
+   //   nothing for it to write — latching the guard would burn the one and only pass while the
+   //   success message claimed rows had been added. BootDiag reports this state.
+   if(!InpJournal) return;
+   long acct=(long)AccountNumber();
+   if(acct<=0) return;   // not logged in yet; a guard stored as 0 would let the pass run again later
+   static bool s_passDone=false;   // in-session belt in case the guard write below does not stick
+   if(s_passDone) return;
+   string gv=BackfillGV();
+   if(GlobalVariableCheck(gv)) return;
+   // Migration: before v0.68 the slot was the bare name holding the account number. Honour it, so
+   //   an account that has already been imported is not imported a second time.
+   if(GlobalVariableCheck(GV_BACKFILL) && (long)GlobalVariableGet(GV_BACKFILL)==acct)
+   { GlobalVariableSet(gv,1); GlobalVariablesFlush(); s_passDone=true; return; }
    int tot=OrdersHistoryTotal();
    if(tot<=0) return;   // History not loaded yet -> next cycle. Do NOT set the guard.
+   // The pass latches permanently, so it must not run on a half-loaded history: right after
+   //   attach MT4 may still be downloading, and tot>0 does not mean "complete". Importing then
+   //   would silently cap the import with nothing to notice it by. Wait until the count has
+   //   stood still for 5s.
+   static int  s_seenTot=-1;
+   static uint s_seenMs=0;
+   if(tot!=s_seenTot){ s_seenTot=tot; s_seenMs=GetTickCount(); return; }
+   if(GetTickCount()-s_seenMs<5000) return;
    int cnt=0, skipType=0, skipScope=0, seenMagic=-1; double sum=0;
    for(int i=0;i<tot;i++)
    {
@@ -1608,15 +1649,33 @@ void BackfillHistory()
               OrderTicket(),net);
       cnt++; sum+=net;
    }
-   // ALWAYS log, even with 0 hits — otherwise there is no telling afterwards whether the
-   //   backfill ran at all and what it failed on (exactly this case occurred).
-   Journal("INFO","-","-",0,0,0,0,0,StringFormat(
+   string diag=StringFormat(
       "Backfill: %d backfilled (sum %.2f) | history=%d, skipped: %d no trade, %d out of range | InpMagic=%d, first magic in history=%d, Scope=%d",
-      cnt,sum,tot,skipType,skipScope,InpMagic,seenMagic,(int)InpWatchScope));
-   if(cnt>0)
-   { GlobalVariableSet(GV_BACKFILL,(double)AccountNumber()); GlobalVariablesFlush();
-     Notify(TF("backfill.done",IntegerToString(cnt),DoubleToString(sum,2)),false,true); }
-   else Notify(TF("backfill.empty",IntegerToString(tot),IntegerToString(skipScope)),false,true);
+      cnt,sum,tot,skipType,skipScope,InpMagic,seenMagic,(int)InpWatchScope);
+   // v0.68: ONE completed pass per account ends it — in EVERY outcome, not only on cnt>0.
+   //   Setting the guard on success alone turned a no-op into permanent unfinished business:
+   //   on a fresh account (history = the opening deposit and nothing else) the entire run came
+   //   back every cycle, ~2s apart, as a MODAL Alert.
+   //   Latching on the history count instead is no fix either: in funded mode
+   //   ApplyFundedAndProfile() forces InpWatchScope=TOOL_ONLY, so manual trades (magic 0) can
+   //   never be in scope and cnt stays 0 for the life of the account. Every closed trade would
+   //   then report again — carrying advice ("check InpMagic") the user cannot act on, because
+   //   the scope is locked.
+   //   Repeating the import is deliberately a manual act: widen the History tab, delete the
+   //   global variable RG_BACKFILL2_<login> (F3), re-attach the EA.
+   s_passDone=true;
+   GlobalVariableSet(gv,1); GlobalVariablesFlush();
+   Journal("INFO","-","-",0,0,0,0,0,diag);   // Notify's Print() also puts it in the expert log
+   // The terminal's global-variable table can fill up (this EA creates per-ticket slots). If the
+   //   guard did not stick, say so: s_passDone keeps this session quiet, but after a restart the
+   //   import would run again and duplicate the rows.
+   if(!GlobalVariableCheck(gv))
+      Journal("INFO","-","-",0,0,0,0,0,"Backfill: guard write FAILED ("+gv+") — import ran, but a terminal restart would repeat it. Clear unused RG* globals (F3).");
+   // info=true / loud=false in BOTH branches. loud=true renders a plain status note as the red
+   //   "NOT POSSIBLE" box, fires a modal Alert, and holds the panel for 120s — long enough to
+   //   swallow the lock explanation the ResolveHistory() right after this call can produce.
+   if(cnt>0) Notify(TF("backfill.done", IntegerToString(cnt),DoubleToString(sum,2)),true,false);
+   else      Notify(TF("backfill.empty",IntegerToString(tot),IntegerToString(skipScope)),true,false);
 }
 void ClearLockWhy(){ if(GlobalVariableCheck(GV_LOCK_WHY)) GlobalVariableSet(GV_LOCK_WHY,0); }   // v0.65
 void ApplyResult(double net,int ticket,string sym,int type)
@@ -3081,8 +3140,8 @@ string T(string k)
    if(k=="why.history") return en?"a closed trade was not visible in the history":"ein geschlossener Trade war in der Historie nicht sichtbar";
    if(k=="why.tamper") return en?"lockstate file missing or tampered with":"Lockstate-Datei fehlt oder wurde manipuliert";
    if(k=="why.test") return en?"set by the test button":"per Test-Knopf gesetzt";
-   if(k=="backfill.done") return en?"Mamal: {0} closed trades added from the account history (net {1}). You can switch InpHistoryBackfill off again.":"Mamal: {0} geschlossene Trades aus der Kontohistorie nachgetragen (Netto {1}). InpHistoryBackfill kann wieder aus.";
-   if(k=="backfill.empty") return en?"Mamal: nothing added. History holds {0} entries, {1} of them outside this tool's magic. Set the History tab to \"All History\" and check InpMagic.":"Mamal: nichts nachgetragen. Die Historie hat {0} Eintraege, davon {1} ausserhalb der Magic dieses Tools. History-Tab auf \"Gesamte Historie\" stellen und InpMagic pruefen.";
+   if(k=="backfill.done") return en?"Mamal: {0} closed trades added from the account history (net {1}). Only what the History tab showed was imported; runs once per account — to repeat: widen the tab, delete the RG_BACKFILL2_* global (F3), re-attach.":"Mamal: {0} geschlossene Trades aus der Kontohistorie nachgetragen (Netto {1}). Nachgetragen wurde nur, was der History-Tab zeigte; einmal je Konto — zum Wiederholen: Tab erweitern, Globale RG_BACKFILL2_* (F3) loeschen, EA neu aufziehen.";
+   if(k=="backfill.empty") return en?"Mamal: nothing to add — history holds {0} entries, {1} outside this tool's magic. Runs once per account — to repeat: widen the History tab, delete the RG_BACKFILL2_* global (F3), re-attach.":"Mamal: nichts nachzutragen — die Historie hat {0} Eintraege, {1} ausserhalb der Magic dieses Tools. Einmal je Konto — zum Wiederholen: History-Tab erweitern, Globale RG_BACKFILL2_* (F3) loeschen, EA neu aufziehen.";
    if(k=="why.maxloss") return en?"total loss limit reached (R4b)":"Gesamtverlust-Grenze erreicht (R4b)";
    if(k=="why.week") return en?"weekly loss limit reached (R18)":"Wochen-Verlustlimit erreicht (R18)";
    if(k=="tamper.lockstateMissing") return en?"Mamal: LOCKSTATE file is GONE (deleted?) -> FAIL-CLOSED (locked for today).":"Mamal: LOCKSTATE-Datei ist WEG (geloescht?) -> FAIL-CLOSED (heute gesperrt).";
