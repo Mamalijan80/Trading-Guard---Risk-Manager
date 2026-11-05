@@ -38,3 +38,6 @@ docs/FTMO-INQUIRY.md
 
 # Passwort-Hash und Sitzungsschluessel des Cockpits — niemals ins Repo
 cockpit/cockpit-config.json
+
+# Lokale Zugangsdaten fuer das Relay — niemals ins Repo
+cockpit/.env.local
