@@ -20,12 +20,81 @@
 // v0.38: multi-account — the EA drops one signpost per login (mamal_files_<login>.txt)
 // into the Common folder; from these the server offers an account switcher (?acct=...).
 'use strict';
-const http = require('http');
-const fs   = require('fs');
-const path = require('path');
+const http  = require('http');
+const https = require('https');
+const fs    = require('fs');
+const path  = require('path');
 const { exec } = require('child_process');
+const auth  = require('./auth');
 
 const PORT = Number(process.env.MAMAL_PORT) || 8730;
+
+// ── v0.70: Anmeldung und Erreichbarkeit ────────────────────────────────────────────────
+// Standard bleibt 127.0.0.1. Wer nichts konfiguriert, aendert nichts und bleibt dicht.
+// Sobald MAMAL_BIND auf etwas anderes zeigt, greift weiter unten ein Start-Riegel:
+// ohne Passwort, ohne erlaubten Hostnamen und ohne TLS faehrt der Server gar nicht hoch.
+const BIND = process.env.MAMAL_BIND || '127.0.0.1';
+const IS_LOCAL_BIND = /^(127\.0\.0\.1|::1|localhost)$/i.test(BIND);
+// Zusaetzlich zugelassene Host-Header. Der DNS-Rebinding-Schutz bleibt dabei bestehen:
+// alles, was weder localhost noch hier gelistet ist, wird abgewiesen.
+const EXTRA_HOSTS = (process.env.MAMAL_HOSTS || '').split(',')
+  .map(s => s.trim().toLowerCase()).filter(Boolean);
+const TLS_CERT = process.env.MAMAL_TLS_CERT || '';
+const TLS_KEY  = process.env.MAMAL_TLS_KEY  || '';
+const USE_TLS  = !!(TLS_CERT && TLS_KEY);
+const SCHEME   = USE_TLS ? 'https' : 'http';
+
+// Passwort setzen: `node server.js --set-password`. Bewusst keine Eingabe per Argument
+// oder Umgebungsvariable — beides landet in der Shell-Historie bzw. in der Prozessliste.
+function askHidden(prompt) {
+  return new Promise((resolve) => {
+    process.stdout.write(prompt);
+    const stdin = process.stdin;
+    const wasRaw = !!stdin.isRaw;
+    if (stdin.isTTY) stdin.setRawMode(true);
+    else process.stdout.write('(Achtung: keine TTY — die Eingabe ist sichtbar) ');
+    stdin.resume(); stdin.setEncoding('utf8');
+    let buf = '';
+    const onData = (chunk) => {
+      for (let i = 0; i < chunk.length; i++) {
+        const c = chunk[i];
+        if (c === '\r' || c === '\n' || c === '\u0004') {
+          // Den Rest des Blocks zurueckgeben. Ohne das geht die zweite Eingabe verloren,
+          //   sobald beide Zeilen in EINEM Block ankommen — beim Einfuegen und bei jeder
+          //   Pipe. Bei \r\n die Zeilenschaltung mit ueberspringen, sonst liest der
+          //   naechste Aufruf sofort eine leere Zeile.
+          let j = i + 1;
+          if (c === '\r' && chunk[j] === '\n') j++;
+          const rest = chunk.slice(j);
+          if (stdin.isTTY) stdin.setRawMode(wasRaw);
+          stdin.removeListener('data', onData);
+          if (rest.length) stdin.unshift(rest);
+          stdin.pause();
+          process.stdout.write('\n');
+          return resolve(buf);
+        }
+        if (c === '\u0003') { process.stdout.write('\n'); process.exit(130); }      // Ctrl-C
+        if (c === '\u007f' || c === '\b') { buf = buf.slice(0, -1); continue; }     // Backspace
+        buf += c;
+      }
+    };
+    stdin.on('data', onData);
+  });
+}
+
+if (process.argv.includes('--set-password')) {
+  (async () => {
+    const pw = await askHidden('Neues Cockpit-Passwort (min. 10 Zeichen): ');
+    const again = await askHidden('Wiederholen: ');
+    if (pw !== again) { console.error('\n  Passwoerter stimmen nicht ueberein.\n'); process.exit(1); }
+    try { auth.setPassword(pw); }
+    catch (e) { console.error('\n  ' + e.message + '\n'); process.exit(1); }
+    console.log('\n  Passwort gesetzt: ' + auth.CONFIG);
+    console.log('  Alle offenen Sitzungen sind damit abgemeldet.\n');
+    process.exit(0);
+  })();
+  return;   // CommonJS: Modul laeuft in einer Funktion, top-level return ist zulaessig
+}
 
 // §07-fix: the default path was hard-wired to macOS/Wine (and used $HOME, which does not exist that way on Windows).
 // v0.37-fix: determine the folder DYNAMICALLY instead of once at startup (otherwise the server points
@@ -602,7 +671,66 @@ const HOST_OK = new RegExp('^(localhost|127\\.0\\.0\\.1)(:' + PORT + ')?$', 'i')
 function hostAllowed(req) {
   const h = req.headers.host;
   if (!h) return false;
-  return HOST_OK.test(h.trim());
+  const host = h.trim().toLowerCase();
+  if (HOST_OK.test(host)) return true;
+  // v0.70: ohne Port vergleichen, damit MAMAL_HOSTS keinen Port enthalten muss.
+  return EXTRA_HOSTS.includes(host) || EXTRA_HOSTS.includes(host.replace(/:\d+$/, ''));
+}
+// v0.70: CSRF. Fehlt der Origin-Header (curl, CLI), ist es kein Browser-Formular und der
+// Angriffsweg existiert nicht. Ist er gesetzt, muss er auf denselben Host zeigen.
+function originOk(req) {
+  const orig = req.headers.origin;
+  if (!orig) return true;
+  try { return hostAllowed({ headers: { host: new URL(orig).host } }); }
+  catch (e) { return false; }
+}
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function loginPage(res, errorMsg, status) {
+  fs.readFile(path.join(__dirname, 'login.html'), 'utf8', (err, html) => {
+    if (err) { res.writeHead(500); return res.end('login.html fehlt'); }
+    if (errorMsg) html = html.replace('<!--ERRORBOX-->', '<div class="err">' + escHtml(errorMsg) + '</div>');
+    res.writeHead(status || 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(html);
+  });
+}
+function handleLogin(req, res) {
+  if (req.method === 'GET') {
+    if (auth.validSession(auth.parseCookies(req)['mamal_sess'])) {
+      res.writeHead(302, { Location: '/' }); return res.end();
+    }
+    return loginPage(res, '', 200);
+  }
+  if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
+  if (!originOk(req)) { res.writeHead(403); return res.end('Origin'); }
+  const wait = auth.lockedFor(req);
+  if (wait > 0) return loginPage(res, 'Zu viele Fehlversuche. Nochmal in ' + wait + ' s.', 429);
+  let body = '', tooBig = false;
+  req.on('data', (c) => { body += c; if (body.length > 4096) { tooBig = true; req.destroy(); } });
+  req.on('end', () => {
+    if (tooBig) return;
+    if (!auth.verifyPassword(new URLSearchParams(body).get('password') || '')) {
+      auth.noteFailure(req);
+      return loginPage(res, 'Falsches Passwort.', 401);
+    }
+    auth.noteSuccess(req);
+    const flags = ['Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' + (auth.SESSION_HOURS * 3600)];
+    if (USE_TLS) flags.push('Secure');   // ohne TLS wuerde Secure das Cookie unbrauchbar machen
+    res.writeHead(302, {
+      Location: '/', 'Cache-Control': 'no-store',
+      'Set-Cookie': 'mamal_sess=' + auth.makeSession() + '; ' + flags.join('; '),
+    });
+    res.end();
+  });
+}
+function handleLogout(req, res) {
+  res.writeHead(302, {
+    Location: '/login', 'Cache-Control': 'no-store',
+    'Set-Cookie': 'mamal_sess=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+  });
+  res.end();
 }
 function sendFile(res, name) {
   fs.readFile(path.join(__dirname, name), (err, buf) => {
@@ -612,14 +740,41 @@ function sendFile(res, name) {
   });
 }
 
-const server = http.createServer((req, res) => {
+function handler(req, res) {
   let u;
   try { u = new URL(req.url, 'http://x'); } catch (e) { res.writeHead(400); return res.end('bad url'); }
   if (!hostAllowed(req)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('Verboten: nur localhost / 127.0.0.1 erlaubt.');
+    return res.end('Verboten: Host nicht zugelassen (MAMAL_HOSTS).');
   }
   const p = u.pathname;
+
+  // ── v0.70 Anmeldung ──────────────────────────────────────────────────────────────────
+  // Ist ein Passwort gesetzt, gilt es fuer ALLES ausser der Anmeldeseite — auch auf
+  // localhost. Ist keines gesetzt, laeuft alles wie bisher; der Start-Riegel unten sorgt
+  // dafuer, dass der Server dann gar nicht erst nach aussen gebunden sein kann.
+  if (auth.isConfigured()) {
+    if (p === '/login')  return handleLogin(req, res);
+    if (p === '/logout') return handleLogout(req, res);
+    if (!auth.validSession(auth.parseCookies(req)['mamal_sess'])) {
+      if (p === '/favicon.ico') { res.writeHead(204); return res.end(); }
+      // Datenpfade bekommen 401 mit JSON, Seiten eine Weiterleitung. Sonst bekaeme das
+      //   Dashboard HTML, wo es JSON erwartet, und zeigte stumm "keine Daten" an —
+      //   genau die Art stiller Fehlanzeige, die hier schon einmal Tage gekostet hat.
+      if (/^\/(state|accounts|journal|analytics|day|equity|trade|trades|cmd|shot)\b/.test(p)) {
+        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({ ok: false, error: 'auth', login: '/login' }));
+      }
+      res.writeHead(302, { Location: '/login', 'Cache-Control': 'no-store' });
+      return res.end();
+    }
+  }
+  // Zustandsaendernde Aufrufe brauchen einen passenden Origin (CSRF). Bisher galt das nur
+  // fuer /cmd/endday — mit Sitzungs-Cookies muss es fuer jeden nicht-lesenden Aufruf gelten.
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !originOk(req)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Origin nicht zugelassen.');
+  }
   const acct = (u.searchParams.get('acct') || '').replace(/\D/g, '');   // digits only (path injection ruled out)
   // serverPort = the ACTUAL port; state.port is only the EA input InpCockpitPort (display only)
   if (p === '/state')     return sendJson(res, { ok: true, state: readState(acct), ageMs: stateAgeMs(acct), serverPort: PORT, accounts: accountsList() });
@@ -685,7 +840,33 @@ const server = http.createServer((req, res) => {
   if (p === '/' || p === '/index.html') return sendFile(res, 'dashboard.html');
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   return res.end('404 — nicht gefunden');
-});
+}
+
+// ── v0.70: fail-closed. Nach aussen binden nur mit Passwort, zugelassenem Hostnamen und
+// TLS. Das Cockpit liefert Kontodaten und nimmt Befehle entgegen — lieber gar nicht
+// starten als ungeschuetzt erreichbar sein. Dieselbe Haltung wie im EA.
+if (!IS_LOCAL_BIND) {
+  const problems = [];
+  if (!auth.isConfigured())
+    problems.push('kein Passwort gesetzt   ->  node server.js --set-password');
+  if (!EXTRA_HOSTS.length)
+    problems.push('kein Hostname erlaubt   ->  MAMAL_HOSTS=cockpit.example.com  (DNS-Rebinding-Schutz)');
+  if (!USE_TLS && !/^(1|true|yes)$/i.test(process.env.MAMAL_ALLOW_PLAINTEXT || ''))
+    problems.push('kein TLS                ->  MAMAL_TLS_CERT und MAMAL_TLS_KEY setzen,\n'
+                + '                             oder bewusst MAMAL_ALLOW_PLAINTEXT=1');
+  if (problems.length) {
+    console.error('\n  MAMAL_BIND=' + BIND + ' macht das Cockpit ueber das Netz erreichbar.');
+    console.error('  Es zeigt Kontodaten und nimmt Befehle entgegen. Start abgebrochen:\n');
+    for (const x of problems) console.error('   - ' + x);
+    console.error('\n  Empfehlung statt oeffentlicher Freigabe: ein privates Netz (Tailscale/WireGuard).');
+    console.error('  Dann MAMAL_BIND auf die Adresse in diesem Netz, MAMAL_HOSTS auf dessen Namen.\n');
+    process.exit(1);
+  }
+}
+
+const server = USE_TLS
+  ? https.createServer({ cert: fs.readFileSync(TLS_CERT), key: fs.readFileSync(TLS_KEY) }, handler)
+  : http.createServer(handler);
 
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
@@ -695,9 +876,12 @@ server.on('error', (e) => {
   throw e;
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, BIND, () => {
   console.log('\n  Mamal-Trading Cockpit laeuft');
-  console.log('  → http://localhost:' + PORT);
+  console.log('  → ' + SCHEME + '://' + (IS_LOCAL_BIND ? 'localhost' : (EXTRA_HOSTS[0] || BIND)) + ':' + PORT);
+  if (auth.isConfigured()) console.log('  Anmeldung: aktiv');
+  else console.log('  Anmeldung: AUS (nur localhost moeglich) — setzen: node server.js --set-password');
+  if (!IS_LOCAL_BIND && !USE_TLS) console.log('  WARNUNG: ohne TLS — Passwort und Daten gehen im Klartext ueber das Netz.');
   const dirs = allFilesDirs();
   console.log('  Ordner (' + dirs.length + '): ' + (currentFiles() || '— keiner gefunden'));
   const accts = accountsList();

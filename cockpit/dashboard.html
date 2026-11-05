@@ -980,6 +980,9 @@ async function tick(){
   let ok=false;
   try{
     const j=await (await fetch('/state'+AQ())).json(); const st=$('stand'); ok=true;
+    // v0.70: Sitzung abgelaufen. Ohne das hier bekaeme die Seite ein 401-JSON ohne
+    //   state und zeigte stumm "warte auf MetaTrader" — falsche Ursache, echte Sackgasse.
+    if(j && j.error==='auth'){ location.href='/login'; return; }
     // v0.48-fix: without an explicit choice ALWAYS show the live running account. Previously the server
     // without ?acct delivered the sum of ALL accounts of the same terminal — after an account switch the old
     // numbers (net, calendar, blocks) stuck to the new account.

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mamal-Trading · Anmeldung</title>
+<style>
+  /* Bewusst eigenstaendig: diese Seite wird VOR der Anmeldung ausgeliefert und darf
+     deshalb nichts nachladen, was hinter dem Login liegt. Gleiche Apple-Tokens wie das
+     Dashboard, nur das Noetigste davon. */
+  :root{
+    --bg:#f5f5f7; --card:#ffffff; --line:rgba(0,0,0,.09);
+    --txt:#1d1d1f; --txt2:#6e6e73; --accent:#0071e3; --red:#d70015;
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text',
+           'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#000000; --card:#1c1c1e; --line:rgba(255,255,255,.12);
+           --txt:#f5f5f7; --txt2:#aeaeb2; --accent:#0a84ff; --red:#ff453a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);color:var(--txt);font-family:var(--font);letter-spacing:-.01em;
+    -webkit-font-smoothing:antialiased;padding:24px}
+  .box{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);
+    border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 28px rgba(0,0,0,.08);
+    padding:28px 26px}
+  .logo{display:flex;align-items:flex-end;gap:3px;height:20px;margin-bottom:14px}
+  .logo i{width:4px;background:var(--accent);border-radius:1px;display:block}
+  .logo i:nth-child(1){height:9px}.logo i:nth-child(2){height:14px}.logo i:nth-child(3){height:20px}
+  h1{font-size:19px;margin:0 0 4px;letter-spacing:-.02em}
+  p.sub{margin:0 0 20px;color:var(--txt2);font-size:13px;line-height:1.45}
+  label{display:block;font-size:12px;color:var(--txt2);margin-bottom:6px;font-weight:600}
+  input{width:100%;padding:11px 13px;font-size:16px;font-family:inherit;
+    border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--txt)}
+  input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  button{width:100%;margin-top:14px;padding:11px;font-size:15px;font-weight:600;
+    font-family:inherit;border:0;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer}
+  button:active{opacity:.85}
+  .err{margin-top:14px;padding:10px 12px;border-radius:10px;font-size:13px;
+    background:rgba(215,0,21,.1);color:var(--red);border:1px solid rgba(215,0,21,.2)}
+  .foot{margin-top:18px;font-size:11px;color:var(--txt2);line-height:1.5}
+</style>
+</head>
+<body>
+  <form class="box" method="POST" action="/login">
+    <div class="logo"><i></i><i></i><i></i></div>
+    <h1>Mamal-Trading</h1>
+    <p class="sub">Cockpit — Anmeldung erforderlich.</p>
+    <label for="pw">Passwort</label>
+    <!-- autofocus nur hier sinnvoll; current-password laesst Passwortmanager greifen -->
+    <input id="pw" name="password" type="password" autocomplete="current-password"
+           autofocus required>
+    <button type="submit">Anmelden</button>
+    <!--ERRORBOX-->
+    <p class="foot">Passwort setzen oder aendern:<br><code>node server.js --set-password</code></p>
+  </form>
+</body>
+</html>

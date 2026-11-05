@@ -35,3 +35,6 @@ docs/SAAS-BUSINESS-PLAN.md
 
 # Enthaelt Klarnamen und Kontonummer — bleibt lokal
 docs/FTMO-INQUIRY.md
+
+# Passwort-Hash und Sitzungsschluessel des Cockpits — niemals ins Repo
+cockpit/cockpit-config.json
