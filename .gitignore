@@ -32,3 +32,6 @@ node_modules/
 
 # Interner Strategie-Brief, nicht Teil der Veroeffentlichung.
 docs/SAAS-BUSINESS-PLAN.md
+
+# Enthaelt Klarnamen und Kontonummer — bleibt lokal
+docs/FTMO-INQUIRY.md
