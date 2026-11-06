@@ -23,18 +23,74 @@ const crypto = require('crypto');
 const fs     = require('fs');
 const path   = require('path');
 
-const CONFIG = path.join(__dirname, 'cockpit-config.json');
+// Wo die Konfigurationsdatei liegt. MAMAL_CONFIG zeigt sie auf einen Datentraeger, der
+// einen Deploy ueberlebt (Railway-Volume, Docker-Volume). Ist sie gesetzt, darf das Cockpit
+// das Passwort SELBST schreiben — und damit im Browser aenderbar machen, ohne node.
+const CONFIG = process.env.MAMAL_CONFIG || path.join(__dirname, 'cockpit-config.json');
+const CONFIG_EXPLICIT = !!process.env.MAMAL_CONFIG;
 
 // scrypt parameters. N=16384 is Node's default and lands around 60-100 ms on a small VPS —
 //   slow enough to make offline guessing expensive, fast enough that a login does not hang.
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 const SESSION_HOURS = 24 * 14;   // a phone should not have to log in every morning
 
-// Konfiguration kommt aus Umgebungsvariablen ODER aus der Datei — in dieser Reihenfolge.
-// Grund: in einem Container (Railway, Docker, Fly) ist das Dateisystem fluechtig. Eine
-// Datei waere nach jedem Deploy weg und das Passwort damit zurueckgesetzt. Lokal bleibt
-// die Datei der bequemere Weg, weil man sie mit --set-password einfach schreiben kann.
-function readConfig() {
+// Woher das Passwort kommt — in genau dieser Reihenfolge:
+//
+//   1. MAMAL_PASS_PLAIN  Notzugang: das Passwort im Klartext in der Variablenliste des
+//                        Hosters. Der einzige Weg zurueck in ein gehostetes Cockpit, fuer
+//                        den man KEIN node auf dem eigenen Rechner braucht — Variable
+//                        setzen, Dienst startet neu, anmelden. Danach gehoert sie geloescht.
+//   2. die Datei         Sie ist der aktuelle Stand, denn nur sie laesst sich im Browser
+//                        aendern (/passwort). Ohne Datentraeger ist sie beim naechsten
+//                        Deploy weg, deshalb schreibt der Server sie nur, wenn MAMAL_CONFIG
+//                        bewusst auf einen haltbaren Ort zeigt.
+//   3. MAMAL_PASS_HASH/_SALT/_SESSION_SECRET  Der Startwert. In einem Container ohne
+//                        Datentraeger der einzige Ort, der einen Deploy ueberlebt.
+//
+// WARUM DIE DATEI VOR DEN VARIABLEN STEHT: wer im Browser ein neues Passwort setzt, erwartet
+// dass es gilt. In der umgekehrten Reihenfolge gewaenne der alte Hash aus der Variablenliste,
+// und die Aenderung waere wirkungslos — ohne jede Fehlermeldung. Genau die Art stiller
+// Fehlanzeige, die hier schon Abende gekostet hat.
+function readConfigFile() {
+  try { return JSON.parse(fs.readFileSync(CONFIG, 'utf8')); }
+  catch (err) { return null; }
+}
+
+// scrypt kostet 60-100 ms. readConfig() laeuft bei JEDEM Aufruf (das Dashboard fragt alle
+// 1,5 s), also wird die Ableitung aus dem Klartext einmal gerechnet und gemerkt.
+let plainCache = null;
+function configFromPlain() {
+  const plain = process.env.MAMAL_PASS_PLAIN;
+  if (!plain || String(plain).length < 10) return null;
+  if (plainCache && plainCache.plain === plain) return plainCache.cfg;
+  // Salt zufaellig, nicht aus dem Passwort abgeleitet: ein abgeleitetes Salt waere ein
+  //   billiger Pruefwert fuer das Passwort und wuerde scrypt umgehen. Innerhalb des
+  //   Prozesses bleibt es stabil, weil die Ableitung gemerkt wird.
+  const salt = crypto.randomBytes(16).toString('hex');
+  const cfg = {
+    passSalt: salt,
+    passHash: hashPassword(String(plain), salt),
+    // Der Sitzungsschluessel muss ueber einen Neustart hinweg GLEICH bleiben, sonst ist man
+    //   nach jedem Container-Neustart abgemeldet. Deshalb abgeleitet, nicht zufaellig.
+    sessionSecret: process.env.MAMAL_SESSION_SECRET
+      || crypto.createHash('sha256').update('mamal-session-v1:' + plain).digest('hex'),
+    sessionEpoch: Number(process.env.MAMAL_SESSION_EPOCH || 1) || 1,
+    fromEnv: true, fromPlain: true,
+  };
+  plainCache = { plain, cfg };
+  return cfg;
+}
+
+// Ist MAMAL_PASS_PLAIN gesetzt, aber unbrauchbar? Dann wuerde sie stumm ignoriert — der
+// Start-Hinweis sagt es stattdessen laut.
+function plainProblem() {
+  const plain = process.env.MAMAL_PASS_PLAIN;
+  if (!plain) return '';
+  if (String(plain).length < 10) return 'MAMAL_PASS_PLAIN ist kuerzer als 10 Zeichen und wird ignoriert.';
+  return '';
+}
+
+function configFromEnv() {
   const e = process.env;
   if (e.MAMAL_PASS_HASH && e.MAMAL_PASS_SALT && e.MAMAL_SESSION_SECRET) {
     return {
@@ -45,8 +101,21 @@ function readConfig() {
       fromEnv: true,
     };
   }
-  try { return JSON.parse(fs.readFileSync(CONFIG, 'utf8')); }
-  catch (err) { return null; }
+  return null;
+}
+
+function readConfig() {
+  return configFromPlain() || readConfigFile() || configFromEnv();
+}
+
+// Fuer die Passwort-Seite: woher gilt das Passwort gerade, und darf der Server ein neues
+// selbst schreiben? Ohne haltbaren Ort darf er es NICHT — sonst gilt das neue Passwort bis
+// zum naechsten Deploy und danach wieder das alte, ohne dass irgendwo etwas davon steht.
+function configSource() {
+  if (configFromPlain())  return { kind: 'plain', canWrite: CONFIG_EXPLICIT, path: CONFIG };
+  if (readConfigFile())   return { kind: 'file',  canWrite: true,            path: CONFIG };
+  if (configFromEnv())    return { kind: 'env',   canWrite: CONFIG_EXPLICIT, path: CONFIG };
+  return { kind: 'none', canWrite: true, path: CONFIG };
 }
 
 function writeConfig(cfg) {
@@ -182,7 +251,23 @@ function parseCookies(req) {
 const fails = new Map();
 const MAX_TRIES = 5;
 
+// Hinter einem Anbieter, der TLS beendet (Railway, Fly, nginx), ist remoteAddress die Adresse
+// des PROXYS — bei jedem Besucher dieselbe. Die Sperre haette dann einen einzigen Topf fuer
+// alle: ein Bot, der die Anmeldung abklopft, sperrt den Eigentuemer aus seinem eigenen
+// Cockpit aus. Mit MAMAL_TRUST_PROXY zaehlt deshalb die vorderste Adresse aus X-Forwarded-For.
+//
+// Die ist faelschbar, und das ist hier das kleinere Uebel: wer sie faelscht, umgeht seine
+// eigene Bremse — gegen das Passwort selbst steht weiter scrypt mit 60-100 ms je Versuch.
+// Ohne die Aenderung trifft es garantiert den Falschen.
+const TRUST_PROXY_HDR = /^(1|true|yes)$/i.test(process.env.MAMAL_TRUST_PROXY || '');
 function clientKey(req) {
+  if (TRUST_PROXY_HDR) {
+    const xff = req.headers && req.headers['x-forwarded-for'];
+    if (xff) {
+      const first = String(xff).split(',')[0].trim();
+      if (first) return first.slice(0, 64);
+    }
+  }
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
@@ -207,8 +292,9 @@ function noteFailure(req) {
 function noteSuccess(req) { fails.delete(clientKey(req)); }
 
 module.exports = {
-  CONFIG, SESSION_HOURS,
+  CONFIG, CONFIG_EXPLICIT, SESSION_HOURS,
   isConfigured, setPassword, envForPassword, verifyPassword, matchesHash, readConfig,
+  configSource, plainProblem,
   makeSession, validSession, logoutEverywhere,
   parseCookies, lockedFor, noteFailure, noteSuccess,
 };

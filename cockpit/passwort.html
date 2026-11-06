@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mamal-Trading · Passwort</title>
+<style>
+  /* Eigenstaendig wie login.html: diese Seite verwaltet den Zugang und soll nicht von
+     Dateien abhaengen, die selbst hinter dem Zugang liegen. Gleiche Apple-Tokens wie das
+     Dashboard, nur das Noetigste davon. */
+  :root{
+    --bg:#f5f5f7; --card:#ffffff; --line:rgba(0,0,0,.09);
+    --txt:#1d1d1f; --txt2:#6e6e73; --accent:#0071e3; --red:#d70015; --green:#1d7a33;
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text',
+           'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,'SF Mono',Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#000000; --card:#1c1c1e; --line:rgba(255,255,255,.12);
+           --txt:#f5f5f7; --txt2:#aeaeb2; --accent:#0a84ff; --red:#ff453a; --green:#32d74b; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--txt);
+    font-family:var(--font);letter-spacing:-.01em;-webkit-font-smoothing:antialiased;
+    padding:24px 16px 48px}
+  .wrap{width:100%;max-width:520px;margin:0 auto}
+  .logo{display:flex;align-items:flex-end;gap:3px;height:20px;margin-bottom:14px}
+  .logo i{width:4px;background:var(--accent);border-radius:1px;display:block}
+  .logo i:nth-child(1){height:9px}.logo i:nth-child(2){height:14px}.logo i:nth-child(3){height:20px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-.02em}
+  h2{font-size:15px;margin:0 0 10px;letter-spacing:-.01em}
+  p.sub{margin:0 0 22px;color:var(--txt2);font-size:13px;line-height:1.5}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 28px rgba(0,0,0,.06);
+    padding:22px 20px;margin-bottom:16px}
+  label{display:block;font-size:12px;color:var(--txt2);margin:12px 0 6px;font-weight:600}
+  label:first-of-type{margin-top:0}
+  input{width:100%;padding:11px 13px;font-size:16px;font-family:inherit;
+    border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--txt)}
+  input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  button{width:100%;margin-top:16px;padding:11px;font-size:15px;font-weight:600;
+    font-family:inherit;border:0;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer}
+  button:active{opacity:.85}
+  .hint{margin:10px 0 0;font-size:12px;color:var(--txt2);line-height:1.55}
+  .res{margin:0 0 16px;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.55}
+  .res.ok{background:rgba(29,122,51,.1);color:var(--green);border:1px solid rgba(29,122,51,.25)}
+  .res.bad{background:rgba(215,0,21,.1);color:var(--red);border:1px solid rgba(215,0,21,.2)}
+  .res.info{background:rgba(0,113,227,.08);color:var(--txt);border:1px solid rgba(0,113,227,.25)}
+  .res b{font-weight:700}
+  pre{margin:10px 0 0;padding:12px;border-radius:10px;background:var(--bg);
+    border:1px solid var(--line);font-family:var(--mono);font-size:11.5px;line-height:1.6;
+    overflow-x:auto;white-space:pre;color:var(--txt);-webkit-user-select:all;user-select:all}
+  /* Pfade und Variablennamen sind lang. Ohne den Umbruch schiebt ein einziger davon die
+     ganze Seite auf dem Telefon in die Breite. */
+  code{font-family:var(--mono);font-size:12px;background:var(--bg);
+    border:1px solid var(--line);border-radius:5px;padding:1px 5px;
+    overflow-wrap:anywhere;word-break:break-word}
+  .nav{display:flex;gap:14px;margin-top:4px;font-size:13px}
+  .nav a{color:var(--accent);text-decoration:none}
+  .src{font-size:12px;color:var(--txt2);line-height:1.6;margin:0}
+  .src + .src{margin-top:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><i></i><i></i><i></i></div>
+  <h1>Passwort</h1>
+  <p class="sub">Setzen, aendern und pruefen — hier im Browser. Dafuer wird kein
+     <code>node</code> auf einem eigenen Rechner gebraucht.</p>
+
+  <!--RESULT-->
+
+  <div class="box">
+    <h2>Neues Passwort setzen</h2>
+    <form method="POST" action="/passwort" autocomplete="off">
+      <input type="hidden" name="action" value="set">
+      <label for="p1">Neues Passwort (min. 10 Zeichen)</label>
+      <input id="p1" name="p1" type="password" autocomplete="new-password" required minlength="10">
+      <label for="p2">Wiederholen</label>
+      <input id="p2" name="p2" type="password" autocomplete="new-password" required minlength="10">
+      <button type="submit">Passwort setzen</button>
+    </form>
+    <p class="hint">Ein neues Passwort meldet alle offenen Sitzungen ab — auch auf anderen
+       Geraeten. Genau so wirft man ein Cookie hinaus, von dem man nicht mehr weiss, wo es liegt.</p>
+  </div>
+
+  <div class="box">
+    <h2>Passwort pruefen</h2>
+    <form method="POST" action="/passwort" autocomplete="off">
+      <input type="hidden" name="action" value="check">
+      <label for="pc">Passwort</label>
+      <input id="pc" name="pc" type="password" autocomplete="current-password" required>
+      <button type="submit">Pruefen</button>
+    </form>
+    <p class="hint">Antwortet nur mit <i>passt</i> oder <i>passt nicht</i> und aendert nichts.
+       Gedacht fuer die Frage, ob ein 401 am Passwort liegt oder am hinterlegten Hash.</p>
+  </div>
+
+  <div class="box">
+    <h2>Woher das Passwort gerade gilt</h2>
+    <!--STATUS-->
+  </div>
+
+  <div class="nav">
+    <a href="/">&larr; Cockpit</a>
+    <a href="/logout">Abmelden</a>
+  </div>
+</div>
+</body>
+</html>

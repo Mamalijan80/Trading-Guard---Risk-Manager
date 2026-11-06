@@ -781,9 +781,11 @@ function loginPage(res, errorMsg, status) {
     // Der Hinweis muss zu DIESER Instanz passen. Auf dem Hoster laeuft kein `node server.js`
     //   zum Anfassen, und sein Dateisystem ist fluechtig — dort fuehrt der Weg ueber die
     //   Umgebungsvariablen. Stand vorher pauschal der lokale Befehl da: eine Sackgasse.
-    html = html.replace('<!--HINT-->', process.env.MAMAL_PASS_HASH
-      ? 'Passwort vergessen oder aendern: lokal <code>node server.js --set-password --env</code>' +
-        ' aufrufen und die ausgegebenen <code>MAMAL_*</code>-Variablen beim Hoster ersetzen.'
+    const k = auth.configSource().kind;
+    html = html.replace('<!--HINT-->', (k === 'env' || k === 'plain')
+      ? 'Ausgesperrt? Beim Hoster <code>MAMAL_PASS_PLAIN</code> auf ein Passwort setzen' +
+        ' (min. 10 Zeichen). Der Dienst startet neu, damit kommt man herein — danach unter' +
+        ' <b>Passwort</b> ein richtiges setzen und die Variable wieder loeschen.'
       : 'Passwort setzen oder aendern:<br><code>node server.js --set-password</code>');
     res.writeHead(status || 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(html);
@@ -875,6 +877,99 @@ function handleLogout(req, res) {
   });
   res.end();
 }
+// ── v0.72: /passwort — den Zugang verwalten, ohne node auf einem eigenen Rechner ────────
+//
+// WARUM DAS EXISTIERT: --set-password und --check-password brauchen eine Kommandozeile auf
+// GENAU DIESER Maschine. Bei einem Hoster gibt es die nicht. Bisher musste das Passwort
+// deshalb auf dem eigenen Rechner erzeugt und als Variablen hinuebergetragen werden — ein
+// Umweg, der genau dann im Weg steht, wenn man unterwegs ist und nur ein Telefon hat.
+// Hier macht es der Server selbst.
+function passwortBox(kind, html) { return '<div class="res ' + kind + '">' + html + '</div>'; }
+
+function passwortStatus(src) {
+  const where = {
+    plain: 'aus <code>MAMAL_PASS_PLAIN</code> — dem Klartext-Notzugang in der Variablenliste des Hosters.',
+    file:  'aus der Datei <code>' + escHtml(src.path) + '</code>.',
+    env:   'aus <code>MAMAL_PASS_HASH</code> und <code>MAMAL_PASS_SALT</code> in der Variablenliste des Hosters.',
+    none:  'nirgendwo — es ist kein Passwort gesetzt. Dann ist das Cockpit nur auf localhost erreichbar.',
+  }[src.kind] || '—';
+  let out = '<p class="src">Es gilt ' + where + '</p>';
+  if (src.kind === 'plain')
+    out += '<p class="src"><b>Diese Variable gehoert geloescht</b>, sobald hier ein Passwort steht.'
+         + ' Ein Klartext-Passwort in einer Variablenliste wird mitkopiert, mitfotografiert und'
+         + ' mitgeschickt. Und solange sie da ist, gewinnt sie gegen jedes hier gesetzte Passwort.</p>';
+  out += src.canWrite
+    ? '<p class="src">Ein hier gesetztes Passwort landet in <code>' + escHtml(src.path)
+      + '</code> und ueberlebt Neustart und Deploy.</p>'
+    : '<p class="src">Dieser Dienst hat keinen haltbaren Platz fuer die Datei —'
+      + ' <code>MAMAL_CONFIG</code> ist nicht gesetzt, und das Dateisystem eines Containers ist'
+      + ' beim naechsten Deploy wieder leer. Ein hier gesetztes Passwort wird deshalb bewusst'
+      + ' <b>nicht gespeichert</b>; die Seite gibt stattdessen die vier Variablen aus. Dauerhaft'
+      + ' loest das ein Datentraeger plus <code>MAMAL_CONFIG=/data/cockpit-config.json</code>.</p>';
+  return out;
+}
+
+function passwortPage(res, result, status) {
+  fs.readFile(path.join(__dirname, 'passwort.html'), 'utf8', (err, html) => {
+    if (err) { res.writeHead(500); return res.end('passwort.html fehlt'); }
+    html = html.replace('<!--RESULT-->', result || '')
+               .replace('<!--STATUS-->', passwortStatus(auth.configSource()));
+    res.writeHead(status || 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(html);
+  });
+}
+
+function handlePasswort(req, res) {
+  if (req.method === 'GET')   return passwortPage(res, '', 200);
+  if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
+  let body = '', tooBig = false;
+  req.on('data', (c) => { body += c; if (body.length > 4096) { tooBig = true; req.destroy(); } });
+  req.on('end', () => {
+    if (tooBig) return;
+    const f = new URLSearchParams(body);
+    const action = f.get('action') || '';
+
+    // Pruefen: aendert nichts, antwortet nur ja oder nein. Ersetzt --check-password.
+    if (action === 'check') {
+      const c = auth.readConfig();
+      if (!c) return passwortPage(res, passwortBox('info', 'Es ist kein Passwort gesetzt — nichts zu pruefen.'), 200);
+      const ok = auth.matchesHash(f.get('pc') || '', c.passHash, c.passSalt);
+      return passwortPage(res, ok
+        ? passwortBox('ok',  '<b>Passt.</b> Dieses Passwort gehoert zu dem Hash, der hier gerade gilt.')
+        : passwortBox('bad', '<b>Passt nicht.</b> Der hier geltende Hash gehoert zu einem anderen Passwort.'), 200);
+    }
+    if (action !== 'set') return passwortPage(res, passwortBox('bad', 'Unbekannte Aktion.'), 400);
+
+    const p1 = f.get('p1') || '', p2 = f.get('p2') || '';
+    if (p1 !== p2)        return passwortPage(res, passwortBox('bad', 'Die beiden Eingaben stimmen nicht ueberein.'), 400);
+    if (p1.length < 10)   return passwortPage(res, passwortBox('bad', 'Mindestens 10 Zeichen.'), 400);
+
+    const src = auth.configSource();
+    if (src.canWrite) {
+      try { auth.setPassword(p1); }
+      catch (e) { return passwortPage(res, passwortBox('bad', 'Konnte nicht gespeichert werden: ' + escHtml(e.message)), 500); }
+      let msg = '<b>Passwort gesetzt.</b> Gespeichert in <code>' + escHtml(src.path)
+              + '</code>. Alle offenen Sitzungen sind damit abgemeldet, diese hier beim naechsten Aufruf.';
+      if (src.kind === 'plain')
+        msg += ' <b>Es gilt aber weiter <code>MAMAL_PASS_PLAIN</code></b> — loesche die Variable'
+             + ' beim Hoster, erst dann greift das neue Passwort.';
+      return passwortPage(res, passwortBox('ok', msg), 200);
+    }
+
+    // Kein haltbarer Platz: lieber die Variablen ausgeben als eine Datei schreiben, die der
+    //   naechste Deploy wegwirft. Sonst waere es ein Passwort, das stumm wieder verschwindet.
+    let msg = '<b>Diese vier Variablen beim Hoster hinterlegen</b> und die alten damit ersetzen.'
+            + ' Der Dienst startet daraufhin neu, dann gilt das neue Passwort:'
+            + '<pre>' + escHtml(auth.envForPassword(p1).join('\n')) + '</pre>'
+            + 'Sie enthalten kein Passwort im Klartext. Trotzdem geheim halten: wer den'
+            + ' Sitzungsschluessel hat, faelscht Sitzungen und braucht das Passwort nie.';
+    if (src.kind === 'plain')
+      msg += ' <b>Und <code>MAMAL_PASS_PLAIN</code> dabei loeschen</b> — sonst gewinnt weiter'
+           + ' die Klartext-Variable.';
+    return passwortPage(res, passwortBox('info', msg), 200);
+  });
+}
+
 function sendFile(res, name) {
   fs.readFile(path.join(__dirname, name), (err, buf) => {
     if (err) { res.writeHead(404); return res.end(name + ' nicht gefunden'); }
@@ -920,6 +1015,10 @@ function handler(req, res) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('Origin nicht zugelassen.');
   }
+  // Zugangsverwaltung. Steht hinter der Anmeldung, aber VOR den Datenpfaden: wer drin ist,
+  // soll sein Passwort aendern koennen, ohne irgendwo eine Kommandozeile zu haben.
+  if (p === '/passwort') return handlePasswort(req, res);
+
   const acct = (u.searchParams.get('acct') || '').replace(/\D/g, '');   // digits only (path injection ruled out)
   // serverPort = the ACTUAL port; state.port is only the EA input InpCockpitPort (display only)
   if (p === '/state')     return sendJson(res, { ok: true, state: readState(acct), ageMs: stateAgeMs(acct), serverPort: PORT, accounts: accountsList() });
@@ -1071,7 +1170,9 @@ function startPushLoop() {
 if (!IS_LOCAL_BIND) {
   const problems = [];
   if (!auth.isConfigured())
-    problems.push('kein Passwort gesetzt   ->  node server.js --set-password');
+    problems.push('kein Passwort gesetzt   ->  node server.js --set-password\n'
+                + '                             bei einem Hoster ohne Kommandozeile:\n'
+                + '                             MAMAL_PASS_PLAIN=<Passwort, min. 10 Zeichen>');
   if (!EXTRA_HOSTS.length)
     problems.push('kein Hostname erlaubt   ->  MAMAL_HOSTS=cockpit.example.com  (DNS-Rebinding-Schutz)');
   if (!USE_TLS && !TRUST_PROXY && !/^(1|true|yes)$/i.test(process.env.MAMAL_ALLOW_PLAINTEXT || ''))
@@ -1103,8 +1204,22 @@ server.on('error', (e) => {
 server.listen(PORT, BIND, () => {
   console.log('\n  Mamal-Trading Cockpit laeuft');
   console.log('  → ' + SCHEME + '://' + (IS_LOCAL_BIND ? 'localhost' : (EXTRA_HOSTS[0] || BIND)) + ':' + PORT);
-  if (auth.isConfigured()) console.log('  Anmeldung: aktiv');
-  else console.log('  Anmeldung: AUS (nur localhost moeglich) — setzen: node server.js --set-password');
+  if (auth.isConfigured()) {
+    const src = auth.configSource();
+    const from = { plain: 'MAMAL_PASS_PLAIN (Klartext!)', file: auth.CONFIG,
+                   env: 'MAMAL_PASS_HASH/_SALT' }[src.kind] || '?';
+    console.log('  Anmeldung: aktiv — Passwort aus ' + from);
+    if (src.kind === 'plain')
+      console.log('  WARNUNG: Klartext-Passwort in der Variablenliste. Unter /passwort ein'
+                + ' richtiges setzen und MAMAL_PASS_PLAIN loeschen.');
+    if (!src.canWrite)
+      console.log('  Hinweis: /passwort kann hier nichts speichern (MAMAL_CONFIG fehlt) und gibt'
+                + ' stattdessen die Variablen aus.');
+  } else {
+    console.log('  Anmeldung: AUS (nur localhost moeglich) — setzen: node server.js --set-password');
+  }
+  const pp = auth.plainProblem();
+  if (pp) console.log('  WARNUNG: ' + pp);
   if (!IS_LOCAL_BIND && !USE_TLS && !TRUST_PROXY) console.log('  WARNUNG: ohne TLS — Passwort und Daten gehen im Klartext ueber das Netz.');
   if (TRUST_PROXY) console.log('  TLS wird vom vorgelagerten Dienst beendet (MAMAL_TRUST_PROXY=1).');
   if (RELAY_ROOT) console.log('  Relay-Modus: Daten kommen per POST /ingest nach ' + RELAY_ROOT);

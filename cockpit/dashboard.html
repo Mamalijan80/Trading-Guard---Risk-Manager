@@ -305,6 +305,10 @@
     <button id="notifBtn" class="hbtn" title="Benachrichtigungen (Cooldown vorbei, Sperre, Ziel erreicht)">🔔</button>
     <button id="tradesBtn" class="hbtn" title="Trade-Akte: Einzelheiten, SL/TP-Chronik und Screenshots je Trade">📁</button>
     <button id="reportBtn" class="hbtn" title="Open weekly report (printable)">📄</button>
+    <!-- v0.72: Zugang verwalten. Bewusst ein Link und keine Schaltflaeche: die Seite liegt
+         serverseitig und muss auch erreichbar sein, wenn das Dashboard-Skript nicht laeuft. -->
+    <a id="pwBtn" class="hbtn" href="/passwort" style="text-decoration:none"
+       title="Passwort setzen, aendern oder pruefen">🔑</a>
     <select id="acctSel" class="chip" style="display:none;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:4px 8px;font:inherit"></select>
     <span id="chip" class="chip">—</span>
     <div class="eq"><div class="l">KAPITAL</div><div class="v" id="equity">—</div></div>
