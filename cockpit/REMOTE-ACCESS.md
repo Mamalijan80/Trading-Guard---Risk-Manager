@@ -262,5 +262,14 @@ server. No credentials go with them — the relay never sees a broker password a
 that trade-off is unwelcome, the alternative is the private-network route above, where nothing is
 published at all.
 
+**Forgetting an account means two different things.** An expired challenge otherwise sits in
+the switcher forever. On the relay each account has a directory this server created itself, so
+the trash can beside the switcher really deletes it, equity series included. On the cockpit next
+to MetaTrader those directories are the `MQL4/Files` folders of running terminals — journal,
+state, lock record — so there the account is only hidden and nothing on disk is touched. Either
+way it is refused while data is still arriving: a live account would be back within seconds, and
+an action that undoes itself is worse than no action. An account that starts delivering again
+reappears on its own; forgetting clears what is there, it is not a ban.
+
 **Screenshots are not relayed.** `/shot/...` reads image files that are not pushed, so trade
 screenshots stay blank on the relay. They work on the local cockpit.

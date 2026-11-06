@@ -314,8 +314,39 @@ function accountsList() {
       }
     }
   } catch (e) { /* Historie ist Komfort, kein Muss */ }
-  return [...seen.values()].sort((a, b) => a.ageMs - b.ageMs);
+  const hidden = readHidden();
+  return [...seen.values()]
+    .filter(a => !hidden[a.account] || a.ageMs < LIVE_MS)   // liefert es wieder, ist es wieder da
+    .sort((a, b) => a.ageMs - b.ageMs);
 }
+// ── v0.72: Konten vergessen ────────────────────────────────────────────────────────────
+// Eine abgelaufene Challenge bleibt sonst fuer immer im Umschalter stehen. Zwei Faelle, und
+// sie sind NICHT dasselbe:
+//
+//   Relay (MAMAL_FILES_ROOT): je Konto ein eigener Ordner, den dieser Server selbst angelegt
+//     hat. Der darf wirklich weg, samt Equity-Reihe.
+//   Lokal: die Ordner sind die MQL4/Files-Verzeichnisse LAUFENDER MetaTrader-Terminals. Dort
+//     etwas zu loeschen hiesse, dem EA unter den Haenden aufzuraeumen — Journal, Zustand,
+//     Sperrvermerk. Lokal wird deshalb nur ausgeblendet, nie geloescht.
+//
+// Dazu kommen Konten, die es gar nicht mehr als Ordner gibt, sondern nur noch als Zeilen im
+// Journal eines anderen Kontos (nach einem Login-Wechsel im selben Terminal). Die kann man
+// nicht loeschen, nur ausblenden — fuer sie ist diese Liste da.
+const HIDDEN_FILE = () => path.join(DATA_DIR, 'hidden-accounts.json');
+function readHidden() {
+  try { const o = JSON.parse(fs.readFileSync(HIDDEN_FILE(), 'utf8')); return (o && typeof o === 'object') ? o : {}; }
+  catch (e) { return {}; }
+}
+function writeHidden(o) {
+  const tmp = HIDDEN_FILE() + '.neu.' + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(o, null, 2));
+  fs.renameSync(tmp, HIDDEN_FILE());
+}
+// Ein ausgeblendetes Konto kommt von selbst zurueck, sobald es wieder liefert. "Vergessen"
+// heisst also: weg mit dem, was da ist — kein Hausverbot. Sonst stuende man vor einem Konto,
+// das laeuft und trotzdem nirgends auftaucht, und suchte den Fehler im EA.
+const LIVE_MS = 10 * 60 * 1000;
+
 const stateFile   = (acct) => { const d = dirForAccount(acct); return d ? path.join(d, 'mamal_cockpit.json') : ''; };
 // v0.48-fix: an account's journal lies where its lines are — NOT necessarily where a
 // matching cockpit.json lies. After a login change in the same terminal the JSON belongs to the new account,
@@ -1096,6 +1127,48 @@ function handler(req, res) {
   // v0.39: "Tag beenden" (end day) — writes the tighten-only command into the account's Files folder.
   // POST only; the worst abuse would be an ADDITIONAL lock (never a loosening) — tighten-only by design.
   // Content is BOM-free ASCII (latin1) — the EA prefix check "endday" relies on that.
+  // v0.72: Konto vergessen. POST, damit es nicht aus Versehen ueber einen Link passiert; der
+  // allgemeine Origin-Riegel oben deckt CSRF ab.
+  if (p === '/cmd/forget') {
+    if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
+    if (!acct) { res.writeHead(400); return res.end('acct erforderlich'); }
+    const entry = accountsList().find(a => String(a.account) === String(acct));
+    if (!entry) return sendJson(res, { ok: false, error: 'Konto ' + acct + ' steht gar nicht in der Liste.' });
+    // Ein Konto, das noch liefert, zu vergessen waere folgenlos: der Agent legt es in Sekunden
+    //   wieder an. Lieber sagen warum, als etwas tun, das sich selbst rueckgaengig macht.
+    if (entry.ageMs < LIVE_MS) {
+      const min = Math.max(1, Math.round(entry.ageMs / 60000));
+      return sendJson(res, { ok: false, error: 'Konto ' + acct + ' liefert noch Daten (zuletzt vor '
+        + (entry.ageMs < 60000 ? 'unter einer Minute' : min + ' min') + '). Erst wenn seit 10 Minuten'
+        + ' nichts mehr kommt, laesst es sich vergessen — sonst ist es gleich wieder da.' });
+    }
+
+    let geloescht = [];
+    if (RELAY_ROOT) {
+      const dir = dirForAccount(acct);
+      // Nur ein unmittelbares Unterverzeichnis der Relay-Wurzel. acct ist bereits auf Ziffern
+      //   beschraenkt; diese zweite Pruefung haengt nicht daran, sondern am wirklichen Pfad.
+      const rootAbs = path.resolve(RELAY_ROOT);
+      if (dir && path.resolve(path.dirname(dir)) === rootAbs && path.resolve(dir) !== rootAbs) {
+        try { fs.rmSync(dir, { recursive: true, force: true }); geloescht.push('Daten'); }
+        catch (e) { return sendJson(res, { ok: false, error: 'Loeschen fehlgeschlagen: ' + e.message }); }
+        try { if (fs.existsSync(equityFile(acct))) { fs.rmSync(equityFile(acct)); geloescht.push('Equity-Verlauf'); } }
+        catch (e) { /* die Reihe ist Beiwerk; der Ordner ist weg, das zaehlt */ }
+      }
+    }
+
+    const hidden = readHidden();
+    hidden[String(acct)] = Date.now();
+    try { writeHidden(hidden); }
+    catch (e) { return sendJson(res, { ok: false, error: 'Konnte die Liste nicht merken: ' + e.message }); }
+
+    return sendJson(res, { ok: true, account: String(acct), geloescht,
+      hinweis: geloescht.length
+        ? 'Konto ' + acct + ' entfernt: ' + geloescht.join(' und ') + ' geloescht.'
+        : 'Konto ' + acct + ' ausgeblendet. Die Dateien bleiben liegen — hier laufen echte'
+          + ' MetaTrader-Ordner, in denen dieser Server nichts loescht.' });
+  }
+
   if (p === '/cmd/endday') {
     if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
     // v0.72: Die zweite, auf localhost festgenagelte Origin-Pruefung ist hier RAUS. Sie war

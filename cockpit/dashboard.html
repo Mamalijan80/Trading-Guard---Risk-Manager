@@ -310,6 +310,7 @@
     <a id="pwBtn" class="hbtn" href="/passwort" style="text-decoration:none"
        title="Passwort setzen, aendern oder pruefen">🔑</a>
     <select id="acctSel" class="chip" style="display:none;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:4px 8px;font:inherit"></select>
+    <button id="acctDel" class="hbtn" style="display:none" title="Dieses Konto aus der Liste entfernen (nur wenn es keine Daten mehr liefert)">🗑</button>
     <span id="chip" class="chip">—</span>
     <div class="eq"><div class="l">KAPITAL</div><div class="v" id="equity">—</div></div>
   </header>
@@ -712,7 +713,7 @@ function renderAccounts(list){
     if(!list.some(a=>String(a.account)===ACCT)){ if(++acctMiss>=5){ ACCT=''; localStorage.removeItem('mamalAcct'); acctMiss=0; } }
     else acctMiss=0;
   }
-  if(list.length<2){ sel.style.display='none'; return; }
+  if(list.length<2){ sel.style.display='none'; $('acctDel').style.display='none'; return; }
   // Pin the selection down: without an explicit choice the display jumps between two accounts writing live.
   if(!ACCT){ ACCT=String(list[0].account); localStorage.setItem('mamalAcct',ACCT); }
   const cur=ACCT;
@@ -721,8 +722,31 @@ function renderAccounts(list){
   const html=opts.map(a=>`<option value="${esc(a.account)}"${String(a.account)===cur?' selected':''}>Konto ${esc(a.account)}${a.historic?' · nur Historie':(a.profile?' · '+esc(a.profile):'')}</option>`).join('');
   if(sel.dataset.h!==html){ sel.innerHTML=html; sel.dataset.h=html; }
   sel.style.display='';
+  // Der Papierkorb erscheint nur bei einem Konto, das nichts mehr liefert. Ein Knopf, der bei
+  // einem laufenden Konto dasteht und dann doch nichts tut, waere schlimmer als keiner.
+  const a=list.find(x=>String(x.account)===cur);
+  $('acctDel').style.display=(a && (a.historic || a.ageMs>=600000)) ? '' : 'none';
 }
 $('acctSel').addEventListener('change',function(){ ACCT=this.value; localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); });   // v0.39-fix: reset prevS — otherwise wrong notifications on account switch
+
+// v0.72: Konto vergessen. Die Rueckfrage nennt die Kontonummer ausgeschrieben — ein "Wirklich
+// loeschen?" ohne Nummer ist beim zweiten Mal nur noch ein Klick.
+$('acctDel').addEventListener('click',async function(){
+  const nr=ACCT; if(!nr) return;
+  if(!confirm('Konto '+nr+' aus dem Cockpit entfernen?\n\nAuf dem Relay werden die Daten dieses '
+             +'Kontos samt Equity-Verlauf geloescht. Das laesst sich nicht rueckgaengig machen.\n\n'
+             +'Liefert das Konto spaeter wieder, taucht es von selbst wieder auf.')) return;
+  this.disabled=true;
+  try{
+    const r=await fetch('/cmd/forget?acct='+encodeURIComponent(nr),{method:'POST'});
+    const j=await r.json().catch(()=>({ok:false,error:'Unerwartete Antwort ('+r.status+')'}));
+    if(!j.ok){ alert(j.error||'Hat nicht geklappt.'); return; }
+    ACCT=''; localStorage.removeItem('mamalAcct'); prevS=null;
+    alert(j.hinweis||('Konto '+nr+' entfernt.'));
+    tick(); loadAnalytics(); loadEquity();
+  }catch(e){ alert('Hat nicht geklappt: '+e.message); }
+  finally{ this.disabled=false; }
+});
 
 // ==== v0.39: Dark Mode ====
 (function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
