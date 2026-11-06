@@ -20,7 +20,9 @@ commit it). Changing the password invalidates every open session.
 
 Once you are logged in, the same thing is available in the browser under **Passwort** (the key
 in the header, or `/passwort`): set a new one, or check whether a password matches the hash
-that is currently in force. That page is the only route that works on a host where there is no
+that is currently in force. Setting one asks for the current password as well — a session
+cookie alone must not be enough, or a cookie that went astray turns a reader into someone who
+locks you out for good. A cookie can be revoked; a changed password cannot. That page is the only route that works on a host where there is no
 command line to run `node` on — see *Locked out of the hosted cockpit* below.
 
 From then on the login applies to **everything, including localhost**. Sessions last 14 days in an
@@ -79,6 +81,7 @@ not run at all than run unprotected.
 | `MAMAL_FILES` | — | override for the MQL4 `Files` folder when the beacon fails |
 | `MAMAL_CONFIG` | `cockpit/cockpit-config.json` | where the password file lives. Point it at a volume and the cockpit may write its own password — that is what makes `/passwort` self-sufficient in a container |
 | `MAMAL_PASS_PLAIN` | — | emergency access: the password in clear text. Beats everything else, so it also gets you back in when the stored hash is wrong. Delete it again afterwards |
+| `MAMAL_PROXY_HOPS` | `1` | how many trusted proxies sit in front, counted back from the end of `X-Forwarded-For` |
 
 ## Two things worth saying plainly
 
@@ -117,7 +120,9 @@ not MQL4.
 | `MAMAL_HOSTS` | the service hostname |
 | `MAMAL_TRUST_PROXY` | `1` — the platform terminates TLS, the cookie still gets `Secure` |
 | `MAMAL_PASS_*` | from `npm run set-password-env`, or from `/passwort` in the browser |
-| `MAMAL_CONFIG` | `/data/cockpit-config.json` — only with a volume mounted at `/data` |
+| `MAMAL_CONFIG` | `/data/cockpit-config.json` — needs a volume mounted at `/data` |
+| `MAMAL_FILES_ROOT` | `/data/mamal` with a volume, otherwise the data is gone on every deploy |
+| `MAMAL_DATA_DIR` | `/data/equity` with a volume. The equity series is sampled here from the live accounts, not sent by the agent, so once a deploy wipes it nobody can supply it again |
 
 `PORT` is supplied by the platform and is picked up automatically.
 
@@ -125,8 +130,23 @@ not MQL4.
 a path inside it, and a password set under `/passwort` is written there and survives every
 deploy. Without a volume the page deliberately refuses to write the file and prints the four
 variables instead — a password that works until the next deploy and then silently reverts to
-the old one is worse than no password change at all. The volume also keeps the ingested account
-data across deploys; today every deploy empties it until the agent pushes again.
+the old one is worse than no password change at all.
+
+The volume is the whole storage layer, and it is deliberately not a database. What has to
+persist is one record: a hash, a salt, a session secret and a counter. A database service for
+that would mean a second thing to pay for, a second thing that can be down while you are
+standing in front of the login page, and — because this server has no dependencies at all and
+nobody speaks the Postgres wire protocol by hand — the first `npm install` in the project. The
+file on the volume survives exactly the same events and needs none of that. Point
+`MAMAL_FILES_ROOT` into the volume as well and the ingested account data stops being wiped on
+every deploy too.
+
+The write itself is all-or-nothing: the file is written beside the target and then renamed,
+and `rename()` within one filesystem is indivisible. Without that, a deploy landing mid-write
+would leave a truncated JSON behind — the password would not be broken but *gone*, the server
+would quietly fall back to the `MAMAL_PASS_*` variables, the previous password would work
+again, and nothing anywhere would say why. If the file ever does turn up unreadable, the
+server says so in the log instead of falling back in silence.
 
 ## Where the password comes from
 
@@ -137,6 +157,13 @@ Three sources, in this order — the first one that answers wins:
 | 1 | `MAMAL_PASS_PLAIN` | the emergency door. It has to beat the stored hash, because the usual reason for needing it is that the stored hash is not the one you think it is |
 | 2 | the file at `MAMAL_CONFIG` | the current state: it is the only one `/passwort` can change |
 | 3 | `MAMAL_PASS_HASH` / `_SALT` / `_SESSION_SECRET` | the seed. In a container without a volume, the only place that survives a deploy |
+
+**Once the file works, the variables can go.** As long as `MAMAL_PASS_HASH` and friends sit in
+the list, they stay a second, silent way in: lose the file and the old password is live again,
+with the old session secret, so a cookie that should have died comes back with it. Deleting them
+is safe — the authentication gate latches, so once a password has ever been configured the
+cockpit will not serve a single page without a login again, whatever happens to the file
+afterwards, and a restart with no password at all is refused outright by the startup guard.
 
 The file beating the variables is the part worth remembering. The other way round, a password
 set in the browser would lose against the old hash in the variable list and the change would do
@@ -193,12 +220,23 @@ character by character, and look for a trailing space or line break from pasting
 Five wrong attempts start a doubling lockout per client address, up to 15 minutes. It lives in
 memory, so replacing the variables clears it along with the restart.
 
-Behind a proxy that address needs care. `remoteAddress` is then the proxy's — the same for every
-visitor — so the brake would have a single bucket for everyone and a bot hammering the login page
-would lock the owner out of his own cockpit. With `MAMAL_TRUST_PROXY` the count therefore goes by
-the first entry in `X-Forwarded-For`. That one is forgeable, and that is the lesser evil here:
-forging it evades your own brake, while the password itself is still behind scrypt at 60-100 ms a
-try. The alternative hits the wrong person every time.
+**The lockout throttles, it does not refuse.** While it runs, one attempt every ten seconds still
+gets checked — so a correct password always gets in, at worst ten seconds late. A lockout that
+turns a correct password away is a weapon: whoever can hit your bucket keeps you out of your own
+cockpit for a quarter of an hour, as often as they like. Ten seconds a try is still four hundred
+times worse for someone guessing than the 60-100 ms that scrypt costs, so nothing is given away.
+
+Behind a proxy the address needs care. `remoteAddress` is the proxy's — the same for every
+visitor — so the brake would have one bucket for everybody. With `MAMAL_TRUST_PROXY` the count
+goes by `X-Forwarded-For`, and by the **last** entry, not the first: a proxy appends the address
+it actually sees, so anything the caller made up sits in front of it and the truth sits at the
+end. `MAMAL_PROXY_HOPS` says how many trusted stations to count back, if it is ever more than one.
+
+Two more brakes sit behind that one. The table of failed attempts forgets an address after
+fifteen minutes and is capped, so nobody can fill memory by inventing a new address per request.
+And across all addresses together, at most thirty password checks run per ten seconds: each one
+costs 60-100 ms during which the server does nothing else, so without that ceiling a flood of
+login attempts would stall the whole cockpit, account data included.
 
 ## The agent (where MT4 runs)
 

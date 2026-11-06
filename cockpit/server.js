@@ -547,8 +547,13 @@ setInterval(() => {
 
 // v0.39: equity time series — the server samples the equity of every LIVE writing account every 5s
 // into cockpit/data/equity_<account>.csv (epochMs;equity;dayBase). The EA stays unchanged.
-const DATA_DIR = path.join(__dirname, 'data');
-try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { /* existiert */ }
+// v0.72: MAMAL_DATA_DIR, damit die Reihe auf einen Datentraeger zeigen kann. In einem
+// Container liegt __dirname im Abbild — die Equity-Kurve waere nach jedem Deploy weg, und
+// zwar endgueltig: sie wird hier aus den laufenden Konten abgetastet, nicht vom Agenten
+// geschickt, also kann sie auch niemand nachliefern.
+const DATA_DIR = process.env.MAMAL_DATA_DIR || path.join(__dirname, 'data');
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); }
+catch (e) { console.error('  WARNUNG: ' + DATA_DIR + ' ist nicht anlegbar (' + e.message + ') — keine Equity-Kurve.'); }
 function equityFile(acct) { return path.join(DATA_DIR, 'equity_' + String(acct).replace(/\D/g, '') + '.csv'); }
 setInterval(() => {
   for (const a of accountsList()) {
@@ -800,15 +805,28 @@ function handleLogin(req, res) {
   }
   if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
   if (!originOk(req)) { res.writeHead(403); return res.end('Origin'); }
-  const wait = auth.lockedFor(req);
-  if (wait > 0) return loginPage(res, 'Zu viele Fehlversuche. Nochmal in ' + wait + ' s.', 429);
   let body = '', tooBig = false;
+  // setEncoding, nicht Buffer-zu-String je Haeppchen: ein Umlaut, dessen zwei Bytes auf zwei
+  //   Haeppchen fallen, wuerde sonst zu einem Ersatzzeichen — und ein Passwort mit ae, oe, ue
+  //   oder ss liesse sich dauerhaft nicht eingeben, ohne dass irgendwo ein Fehler stuende.
+  req.setEncoding('utf8');
   req.on('data', (c) => { body += c; if (body.length > 4096) { tooBig = true; req.destroy(); } });
   req.on('end', () => {
     if (tooBig) return;
+    // v0.72: Die Sperre weist nicht mehr ab, sie drosselt. Ein richtiges Passwort kommt immer
+    //   durch, spaetestens nach zehn Sekunden — sonst waere die Sperre eine Waffe gegen den
+    //   Eigentuemer, und genau das ist hinter einem Proxy der wahrscheinlichere Angriff.
+    const wait = auth.lockedFor(req);
+    if (wait > 0 && !auth.allowTryWhileLocked(req))
+      return loginPage(res, 'Zu viele Fehlversuche. Es wird weiter geprueft, aber nur alle'
+                          + ' 10 Sekunden — gleich noch einmal.', 429);
+    // Und ein Riegel ueber alle Adressen hinweg: jede Pruefung kostet 60-100 ms Rechenzeit,
+    //   in denen der Server nichts anderes tut.
+    if (!auth.hashBudgetOk())
+      return loginPage(res, 'Gerade zu viele Anmeldeversuche. In ein paar Sekunden noch einmal.', 429);
     if (!auth.verifyPassword(new URLSearchParams(body).get('password') || '')) {
       auth.noteFailure(req);
-      return loginPage(res, 'Falsches Passwort.', 401);
+      return loginPage(res, wait > 0 ? 'Falsches Passwort. Die Sperre laeuft weiter.' : 'Falsches Passwort.', 401);
     }
     auth.noteSuccess(req);
     const flags = ['Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' + (auth.SESSION_HOURS * 3600)];
@@ -901,11 +919,17 @@ function passwortStatus(src) {
   out += src.canWrite
     ? '<p class="src">Ein hier gesetztes Passwort landet in <code>' + escHtml(src.path)
       + '</code> und ueberlebt Neustart und Deploy.</p>'
-    : '<p class="src">Dieser Dienst hat keinen haltbaren Platz fuer die Datei —'
+    : (src.missingDir
+      ? '<p class="src"><b>Achtung:</b> <code>MAMAL_CONFIG</code> zeigt nach <code>'
+        + escHtml(src.path) + '</code>, aber das Verzeichnis <code>' + escHtml(src.missingDir)
+        + '</code> gibt es dort gar nicht. Fast immer heisst das: der Datentraeger ist nicht'
+        + ' (oder woanders) eingehaengt. Solange das so ist, wird hier nichts gespeichert —'
+        + ' die Seite gibt stattdessen die vier Variablen aus.</p>'
+      : '<p class="src">Dieser Dienst hat keinen haltbaren Platz fuer die Datei —'
       + ' <code>MAMAL_CONFIG</code> ist nicht gesetzt, und das Dateisystem eines Containers ist'
       + ' beim naechsten Deploy wieder leer. Ein hier gesetztes Passwort wird deshalb bewusst'
       + ' <b>nicht gespeichert</b>; die Seite gibt stattdessen die vier Variablen aus. Dauerhaft'
-      + ' loest das ein Datentraeger plus <code>MAMAL_CONFIG=/data/cockpit-config.json</code>.</p>';
+      + ' loest das ein Datentraeger plus <code>MAMAL_CONFIG=/data/cockpit-config.json</code>.</p>');
   return out;
 }
 
@@ -923,6 +947,10 @@ function handlePasswort(req, res) {
   if (req.method === 'GET')   return passwortPage(res, '', 200);
   if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
   let body = '', tooBig = false;
+  // setEncoding, nicht Buffer-zu-String je Haeppchen: ein Umlaut, dessen zwei Bytes auf zwei
+  //   Haeppchen fallen, wuerde sonst zu einem Ersatzzeichen — und ein Passwort mit ae, oe, ue
+  //   oder ss liesse sich dauerhaft nicht eingeben, ohne dass irgendwo ein Fehler stuende.
+  req.setEncoding('utf8');
   req.on('data', (c) => { body += c; if (body.length > 4096) { tooBig = true; req.destroy(); } });
   req.on('end', () => {
     if (tooBig) return;
@@ -933,7 +961,16 @@ function handlePasswort(req, res) {
     if (action === 'check') {
       const c = auth.readConfig();
       if (!c) return passwortPage(res, passwortBox('info', 'Es ist kein Passwort gesetzt — nichts zu pruefen.'), 200);
+      // Dieselbe Bremse wie bei der Anmeldung. Ohne sie waere diese Seite ein stilles
+      //   Passwort-Orakel fuer jeden, der an ein Sitzungs-Cookie gekommen ist: beliebig oft
+      //   raten, ohne Fehlversuch irgendwo, und jede Antwort kostet 60-100 ms Rechenzeit.
+      const wait = auth.lockedFor(req);
+      if (wait > 0 && !auth.allowTryWhileLocked(req))
+        return passwortPage(res, passwortBox('bad', 'Zu viele Versuche. Nur alle 10 Sekunden einer.'), 429);
+      if (!auth.hashBudgetOk())
+        return passwortPage(res, passwortBox('bad', 'Gerade zu viele Pruefungen. In ein paar Sekunden noch einmal.'), 429);
       const ok = auth.matchesHash(f.get('pc') || '', c.passHash, c.passSalt);
+      if (ok) auth.noteSuccess(req); else auth.noteFailure(req);
       return passwortPage(res, ok
         ? passwortBox('ok',  '<b>Passt.</b> Dieses Passwort gehoert zu dem Hash, der hier gerade gilt.')
         : passwortBox('bad', '<b>Passt nicht.</b> Der hier geltende Hash gehoert zu einem anderen Passwort.'), 200);
@@ -943,16 +980,32 @@ function handlePasswort(req, res) {
     const p1 = f.get('p1') || '', p2 = f.get('p2') || '';
     if (p1 !== p2)        return passwortPage(res, passwortBox('bad', 'Die beiden Eingaben stimmen nicht ueberein.'), 400);
     if (p1.length < 10)   return passwortPage(res, passwortBox('bad', 'Mindestens 10 Zeichen.'), 400);
+    // Das bisherige Passwort gehoert dazu. Ein Sitzungs-Cookie allein darf nicht reichen:
+    //   sonst macht ein abhanden gekommenes Cookie aus einem Mitleser jemanden, der den
+    //   Eigentuemer dauerhaft aussperrt — ein Cookie ist zurueckziehbar, ein geaendertes
+    //   Passwort nicht. Nur wenn es ueberhaupt keines gibt, ist nichts zu bestaetigen.
+    if (auth.isConfigured()) {
+      if (!auth.hashBudgetOk())
+        return passwortPage(res, passwortBox('bad', 'Gerade zu viele Pruefungen. In ein paar Sekunden noch einmal.'), 429);
+      if (!auth.verifyPassword(f.get('cur') || ''))
+        return passwortPage(res, passwortBox('bad', 'Das bisherige Passwort stimmt nicht. Es bleibt alles, wie es war.'), 401);
+    }
 
     const src = auth.configSource();
     if (src.canWrite) {
       try { auth.setPassword(p1); }
       catch (e) { return passwortPage(res, passwortBox('bad', 'Konnte nicht gespeichert werden: ' + escHtml(e.message)), 500); }
-      let msg = '<b>Passwort gesetzt.</b> Gespeichert in <code>' + escHtml(src.path)
-              + '</code>. Alle offenen Sitzungen sind damit abgemeldet, diese hier beim naechsten Aufruf.';
+      let msg = '<b>Passwort gesetzt.</b> Gespeichert in <code>' + escHtml(src.path) + '</code>.';
+      // Stimmt nur, wenn die Datei auch gilt. Unter MAMAL_PASS_PLAIN haengen Schluessel und
+      //   Epoche weiter an der Variablen — die Sitzung laeuft also einfach weiter, und zu
+      //   behaupten sie sei beendet waere genau die Art kleiner Unwahrheit, nach der man
+      //   spaeter dem Rest der Seite nicht mehr glaubt.
       if (src.kind === 'plain')
         msg += ' <b>Es gilt aber weiter <code>MAMAL_PASS_PLAIN</code></b> — loesche die Variable'
-             + ' beim Hoster, erst dann greift das neue Passwort.';
+             + ' beim Hoster. Erst dann greift das neue Passwort, und erst dann sind die offenen'
+             + ' Sitzungen beendet; diese hier bleibt bis dahin bestehen.';
+      else
+        msg += ' Alle offenen Sitzungen sind damit abgemeldet, diese hier beim naechsten Aufruf.';
       return passwortPage(res, passwortBox('ok', msg), 200);
     }
 
@@ -978,6 +1031,7 @@ function sendFile(res, name) {
   });
 }
 
+let authLatched = false;   // siehe unten: einmal true, immer true
 function handler(req, res) {
   let u;
   try { u = new URL(req.url, 'http://x'); } catch (e) { res.writeHead(400); return res.end('bad url'); }
@@ -993,7 +1047,13 @@ function handler(req, res) {
   // dafuer, dass der Server dann gar nicht erst nach aussen gebunden sein kann.
   // Die Aufnahme laeuft VOR der Anmeldung: sie hat ihr eigenes Token und keinen Browser.
   if (p === '/ingest') return handleIngest(req, res);
-  if (auth.isConfigured()) {
+  // v0.72: Der Riegel rastet EIN. Sobald es irgendwann ein Passwort gab, bleibt die Anmeldung
+  //   Pflicht — auch wenn die Konfiguration spaeter nicht mehr lesbar ist. Ohne das haette
+  //   ein Ausfall der Quelle genau die falsche Richtung: das oeffentliche Cockpit stuende
+  //   ohne Anmeldung offen, samt /passwort. Die Pruefung ist nur einseitig, damit der erste
+  //   Start ohne Passwort weiter funktioniert und ein frisch gesetztes sofort greift.
+  if (auth.isConfigured()) authLatched = true;
+  if (authLatched) {
     if (p === '/login')  return handleLogin(req, res);
     if (p === '/logout') return handleLogout(req, res);
     if (!auth.validSession(auth.parseCookies(req)['mamal_sess'])) {
@@ -1038,12 +1098,12 @@ function handler(req, res) {
   // Content is BOM-free ASCII (latin1) — the EA prefix check "endday" relies on that.
   if (p === '/cmd/endday') {
     if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
-    // v0.39-fix (Verify): CSRF — a cross-site form POST carries Host: localhost:8730 and passes hostAllowed.
-    // Check Origin: if absent (curl/CLI) -> ok; if set, it must come from localhost.
-    const orig = req.headers.origin;
-    if (orig && !new RegExp('^http://(localhost|127\\.0\\.0\\.1):' + PORT + '$', 'i').test(orig)) {
-      res.writeHead(403); return res.end('Cross-Site verboten');
-    }
+    // v0.72: Die zweite, auf localhost festgenagelte Origin-Pruefung ist hier RAUS. Sie war
+    //   seit v0.70 doppelt — der allgemeine Riegel weiter oben prueft den Origin fuer jeden
+    //   nicht-lesenden Aufruf gegen MAMAL_HOSTS — und auf einer gehosteten Instanz war sie
+    //   schlicht falsch: dort lautet der Origin https://<dienst>.up.railway.app, nie
+    //   http://localhost:8730. Ergebnis war ein Knopf "Tag beenden", der am Telefon
+    //   stillschweigend nichts tat.
     // v0.39-fix (Verify): account mandatory — otherwise the lock could land in the WRONG account with 2 live
     // writing terminals (the currentFiles fallback flips between polls).
     if (!acct) { res.writeHead(400); return res.end('acct erforderlich'); }
@@ -1062,7 +1122,9 @@ function handler(req, res) {
     if (!dir) { res.writeHead(404); return res.end('kein Ordner'); }
     return fs.readFile(path.join(dir, name), (err, buf) => {
       if (err) { res.writeHead(404); return res.end('Bild fehlt'); }
-      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=86400' });
+      // private: der Inhalt liegt hinter der Anmeldung und darf nur im Browser des
+      //   Angemeldeten liegen, nicht in einem geteilten Zwischenspeicher unterwegs.
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' });
       res.end(buf);
     });
   }

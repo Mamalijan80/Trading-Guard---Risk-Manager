@@ -51,9 +51,35 @@ const SESSION_HOURS = 24 * 14;   // a phone should not have to log in every morn
 // dass es gilt. In der umgekehrten Reihenfolge gewaenne der alte Hash aus der Variablenliste,
 // und die Aenderung waere wirkungslos — ohne jede Fehlermeldung. Genau die Art stiller
 // Fehlanzeige, die hier schon Abende gekostet hat.
+// Eine unlesbare Datei faellt auf die Variablen zurueck — und damit auf das ALTE Passwort.
+// Das darf passieren, aber nicht stumm: sonst sucht man den Grund beim Passwort, waehrend er
+// auf der Platte liegt. Einmal je Zustand melden, nicht bei jedem Aufruf: readConfig() laeuft
+// bei jeder einzelnen Anfrage.
+let fileComplaint = '';
 function readConfigFile() {
-  try { return JSON.parse(fs.readFileSync(CONFIG, 'utf8')); }
-  catch (err) { return null; }
+  let raw;
+  try { raw = fs.readFileSync(CONFIG, 'utf8'); }
+  catch (err) {
+    // ENOENT ist der Normalfall (noch kein Passwort gesetzt, oder reiner Variablen-Betrieb).
+    //   Alles andere — keine Rechte, Ein-/Ausgabefehler, Verzeichnis statt Datei — ist ein
+    //   Ausfall und fuehrt stumm zum ALTEN Passwort. Genau das darf nicht stumm sein.
+    if (err.code !== 'ENOENT') {
+      const m = 'Die Passwortdatei ' + CONFIG + ' ist nicht lesbar (' + err.code + ').'
+              + ' Es gelten die MAMAL_PASS_*-Variablen, also das vorige Passwort.';
+      if (fileComplaint !== m) { fileComplaint = m; console.error('  WARNUNG: ' + m); }
+    } else { fileComplaint = ''; }
+    return null;
+  }
+  try {
+    const cfg = JSON.parse(raw);
+    fileComplaint = '';
+    return cfg;
+  } catch (err) {
+    const msg = 'Die Passwortdatei ' + CONFIG + ' ist unlesbar (' + err.message + ').'
+              + ' Es gelten die MAMAL_PASS_*-Variablen, also das vorige Passwort.';
+    if (fileComplaint !== msg) { fileComplaint = msg; console.error('  WARNUNG: ' + msg); }
+    return null;
+  }
 }
 
 // scrypt kostet 60-100 ms. readConfig() laeuft bei JEDEM Aufruf (das Dashboard fragt alle
@@ -112,16 +138,74 @@ function readConfig() {
 // selbst schreiben? Ohne haltbaren Ort darf er es NICHT — sonst gilt das neue Passwort bis
 // zum naechsten Deploy und danach wieder das alte, ohne dass irgendwo etwas davon steht.
 function configSource() {
-  if (configFromPlain())  return { kind: 'plain', canWrite: CONFIG_EXPLICIT, path: CONFIG };
-  if (readConfigFile())   return { kind: 'file',  canWrite: true,            path: CONFIG };
-  if (configFromEnv())    return { kind: 'env',   canWrite: CONFIG_EXPLICIT, path: CONFIG };
-  return { kind: 'none', canWrite: true, path: CONFIG };
+  // canWrite haengt nicht nur daran, DASS MAMAL_CONFIG gesetzt ist, sondern auch daran, dass
+  //   das Verzeichnis wirklich da ist. Sonst meldet die Seite "ueberlebt Neustart und Deploy",
+  //   waehrend der Datentraeger gar nicht eingehaengt ist — eine Zusage, die erst beim
+  //   Speichern zusammenbricht. Lieber vorher ehrlich sein.
+  const dir = path.dirname(CONFIG);
+  let dirOk = false;
+  try { dirOk = fs.existsSync(dir); } catch (e) { dirOk = false; }
+  // Der haeufigste Grund, warum MAMAL_CONFIG gesetzt ist und trotzdem nichts gespeichert
+  //   werden kann: der Datentraeger haengt nicht da, wo die Variable hinzeigt. Das gehoert
+  //   gesagt, sonst sucht man den Fehler beim Passwort.
+  const why = (CONFIG_EXPLICIT && !dirOk) ? dir : '';
+  if (configFromPlain())  return { kind: 'plain', canWrite: CONFIG_EXPLICIT && dirOk, path: CONFIG, missingDir: why };
+  if (readConfigFile())   return { kind: 'file',  canWrite: dirOk,                    path: CONFIG, missingDir: why };
+  if (configFromEnv())    return { kind: 'env',   canWrite: CONFIG_EXPLICIT && dirOk, path: CONFIG, missingDir: why };
+  return { kind: 'none', canWrite: dirOk, path: CONFIG, missingDir: why };
 }
 
+// Ganz oder gar nicht: erst daneben schreiben, dann umbenennen. rename() ist innerhalb
+// desselben Dateisystems unteilbar — es gibt also keinen Moment, in dem an CONFIG eine halbe
+// Datei steht.
+//
+// WARUM DAS HIER ZAEHLT: auf einem Datentraeger ueberlebt diese Datei den Container, und ein
+// Deploy beendet den Container jederzeit. Ohne das Umbenennen koennte genau dazwischen ein
+// abgeschnittenes JSON zurueckbleiben. Das Passwort waere dann nicht kaputt, sondern WEG —
+// readConfig() faellt auf die Variablen zurueck, und es gilt wieder das alte Passwort, ohne
+// dass irgendwo stuende warum.
 function writeConfig(cfg) {
+  const dir = path.dirname(CONFIG);
+
+  // BEWUSST KEIN mkdir. Ein selbst angelegtes Verzeichnis sieht aus wie ein eingehaengter
+  // Datentraeger und ist keiner: das Passwort liesse sich speichern, waere nach dem naechsten
+  // Deploy weg, und es gaelte wieder das alte — stumm. Genau der Fall, den diese ganze Seite
+  // verhindern soll. Fehlt das Verzeichnis, ist das die Antwort, nicht der Anfang einer
+  // Rettung. Bei einem Hoster heisst es fast immer: MAMAL_CONFIG gesetzt, Volume nicht
+  // eingehaengt (oder an einem anderen Pfad).
+  if (!fs.existsSync(dir)) {
+    throw new Error('Das Verzeichnis ' + dir + ' gibt es nicht. Bei einem Hoster bedeutet das'
+      + ' meistens, dass der Datentraeger nicht (oder woanders) eingehaengt ist. Erst'
+      + ' einhaengen, dann MAMAL_CONFIG dorthin zeigen lassen.');
+  }
+
+  // Eindeutiger Zwischenname: der Server und ein gleichzeitiges `--set-password` auf derselben
+  //   Maschine teilten sich sonst eine Datei, und wessen rename() zuletzt kommt, dessen
+  //   Passwort gilt — mit dem anderen Hash im selben Atemzug ueberschrieben.
+  const tmp = CONFIG + '.neu.' + process.pid;
+  const buf = Buffer.from(JSON.stringify(cfg, null, 2), 'utf8');
+
   // mode 0600: on Linux/macOS the file is then unreadable for other accounts on the VPS.
   //   Windows ignores the mode — there the folder ACL has to do it. Documented, not pretended.
-  fs.writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  //
+  // fsync vor dem Umbenennen: rename() ist unteilbar, aber das sagt nur, dass der NAME in
+  //   einem Zug wechselt — die Daten dahinter stehen bis dahin bloss im Seitenpuffer. Ein
+  //   Deploy ist damit harmlos, ein Absturz des Wirts oder ein hart abgetrennter Datentraeger
+  //   kurz nach dem rename nicht: zurueck bliebe ein leerer Eintrag unter dem richtigen Namen.
+  const fd = fs.openSync(tmp, 'w', 0o600);
+  try {
+    let off = 0;
+    while (off < buf.length) off += fs.writeSync(fd, buf, off, buf.length - off);
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, CONFIG);
+
+  // Und der Verzeichniseintrag selbst. Auf Windows laesst sich ein Verzeichnis nicht oeffnen;
+  //   dort ist es auch nicht noetig, weil dieser Pfad nur auf einem Datentraeger zaehlt.
+  try {
+    const dfd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
+  } catch (e) { /* Windows, oder ein Dateisystem ohne Verzeichnis-fsync */ }
 }
 
 function hashPassword(password, salt) {
@@ -254,21 +338,45 @@ const MAX_TRIES = 5;
 // Hinter einem Anbieter, der TLS beendet (Railway, Fly, nginx), ist remoteAddress die Adresse
 // des PROXYS — bei jedem Besucher dieselbe. Die Sperre haette dann einen einzigen Topf fuer
 // alle: ein Bot, der die Anmeldung abklopft, sperrt den Eigentuemer aus seinem eigenen
-// Cockpit aus. Mit MAMAL_TRUST_PROXY zaehlt deshalb die vorderste Adresse aus X-Forwarded-For.
+// Cockpit aus.
 //
-// Die ist faelschbar, und das ist hier das kleinere Uebel: wer sie faelscht, umgeht seine
-// eigene Bremse — gegen das Passwort selbst steht weiter scrypt mit 60-100 ms je Versuch.
-// Ohne die Aenderung trifft es garantiert den Falschen.
+// Mit MAMAL_TRUST_PROXY zaehlt deshalb X-Forwarded-For — und zwar der LETZTE Eintrag, nicht
+// der erste. Das ist der Unterschied zwischen faelschbar und nicht faelschbar: schickt ein
+// Angreifer eine eigene Kopfzeile mit, haengt der vorgelagerte Dienst die Adresse, die er
+// wirklich sieht, HINTEN an. Der erste Eintrag ist dann die Erfindung des Angreifers, der
+// letzte die Wahrheit. MAMAL_PROXY_HOPS sagt, wie viele vertrauenswuerdige Stationen davor
+// liegen, falls es einmal mehr als eine ist.
 const TRUST_PROXY_HDR = /^(1|true|yes)$/i.test(process.env.MAMAL_TRUST_PROXY || '');
+const PROXY_HOPS = Math.max(1, Number(process.env.MAMAL_PROXY_HOPS || 1) || 1);
 function clientKey(req) {
   if (TRUST_PROXY_HDR) {
     const xff = req.headers && req.headers['x-forwarded-for'];
     if (xff) {
-      const first = String(xff).split(',')[0].trim();
-      if (first) return first.slice(0, 64);
+      const parts = String(xff).split(',').map(x => x.trim()).filter(Boolean);
+      const pick = parts[parts.length - PROXY_HOPS];
+      if (pick) return pick.slice(0, 64);
     }
   }
   return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+// Selbst mit dem letzten Eintrag bleibt ein Rest: liegen mehrere Stationen davor, landen
+// wieder alle im selben Topf. Deshalb ist die Sperre so gebaut, dass sie den Eigentuemer auch
+// dann nicht aussperren KANN — siehe allowTryWhileLocked() weiter unten.
+
+// Die Karte darf nicht unbegrenzt wachsen. Ein Angreifer, der je Anfrage eine andere Adresse
+// vortaeuscht, legte sonst je Versuch einen Eintrag an, bis der Speicher voll ist.
+const FORGET_MS = 15 * 60 * 1000;   // so lange erinnert sich die Bremse an eine Adresse
+const MAX_KEYS  = 5000;
+function sweepFails() {
+  const now = Date.now();
+  for (const [k, f] of fails) if (now - (f.seen || 0) > FORGET_MS) fails.delete(k);
+  if (fails.size <= MAX_KEYS) return;
+  // Immer noch zu viele: die aeltesten zuerst. Map haelt die Einfuegereihenfolge, und ein
+  //   neuer Fehlversuch setzt den Eintrag neu (delete + set), also steht vorne das Aelteste.
+  const over = fails.size - MAX_KEYS;
+  let i = 0;
+  for (const k of fails.keys()) { if (i++ >= over) break; fails.delete(k); }
 }
 
 function lockedFor(req) {
@@ -280,21 +388,63 @@ function lockedFor(req) {
 
 function noteFailure(req) {
   const k = clientKey(req);
-  const f = fails.get(k) || { n: 0, until: 0 };
+  const now = Date.now();
+  const f = fails.get(k) || { n: 0, until: 0, seen: 0, lastTry: 0 };
+  // Nach langer Ruhe wieder bei null anfangen. Ohne das bliebe jemand, der sich vor Stunden
+  //   fuenfmal vertippt hat, fuer die ganze Laufzeit des Prozesses bei einem Versuch je
+  //   Viertelstunde — die Strafe fuer einen Tippfehler waere unbefristet.
+  if (f.seen && now - f.seen > FORGET_MS) { f.n = 0; f.until = 0; }
   f.n++;
+  f.seen = now;
+  f.lastTry = now;   // ab hier laeuft die 10-Sekunden-Uhr aus allowTryWhileLocked()
   if (f.n >= MAX_TRIES) {
     const steps = f.n - MAX_TRIES;
-    f.until = Date.now() + Math.min(900, 60 * Math.pow(2, steps)) * 1000;
+    f.until = now + Math.min(900, 60 * Math.pow(2, steps)) * 1000;
   }
-  fails.set(k, f);
+  fails.delete(k); fails.set(k, f);   // ans Ende: siehe sweepFails()
+  if (fails.size > MAX_KEYS) sweepFails();
 }
 
 function noteSuccess(req) { fails.delete(clientKey(req)); }
+
+// Darf waehrend einer laufenden Sperre trotzdem geprueft werden?
+//
+// WARUM ES DAS GIBT: eine Sperre, die ein richtiges Passwort abweist, ist eine Waffe. Wer den
+// Schluessel treffen kann — und sei es nur, weil alle Besucher hinter mehreren Stationen im
+// selben Topf landen — sperrt damit den Eigentuemer aus seinem eigenen Cockpit aus, fuenfzehn
+// Minuten lang, beliebig oft wiederholbar. Deshalb wird auch waehrend der Sperre geprueft,
+// nur eben gedrosselt: ein Versuch alle 10 Sekunden. Wer das richtige Passwort hat, wartet
+// hoechstens zehn Sekunden; wer raet, kommt von 60-100 ms je Versuch auf 10 s herunter, also
+// deutlich schlechter als ohne Sperre.
+const RETRY_MS = 10 * 1000;
+function allowTryWhileLocked(req) {
+  const k = clientKey(req);
+  const f = fails.get(k);
+  if (!f) return true;
+  const now = Date.now();
+  if (now - (f.lastTry || 0) < RETRY_MS) return false;
+  f.lastTry = now;
+  return true;
+}
+
+// Letzter Riegel, ueber alle Adressen hinweg: scryptSync kostet 60-100 ms und blockiert dabei
+// die Ereignisschleife. Ohne eine globale Grenze legt eine Flut von Anmeldeversuchen das
+// ganze Cockpit lahm, auch das Lesen der Kontodaten. 30 Pruefungen je 10 s sind fuer einen
+// Menschen unerreichbar viel und fuer eine Maschine nichts.
+const BUDGET_MAX = 30, BUDGET_MS = 10 * 1000;
+let budgetLeft = BUDGET_MAX, budgetAt = 0;
+function hashBudgetOk() {
+  const now = Date.now();
+  if (now - budgetAt > BUDGET_MS) { budgetAt = now; budgetLeft = BUDGET_MAX; }
+  if (budgetLeft <= 0) return false;
+  budgetLeft--;
+  return true;
+}
 
 module.exports = {
   CONFIG, CONFIG_EXPLICIT, SESSION_HOURS,
   isConfigured, setPassword, envForPassword, verifyPassword, matchesHash, readConfig,
   configSource, plainProblem,
   makeSession, validSession, logoutEverywhere,
-  parseCookies, lockedFor, noteFailure, noteSuccess,
+  parseCookies, lockedFor, noteFailure, noteSuccess, allowTryWhileLocked, hashBudgetOk,
 };

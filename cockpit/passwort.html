@@ -74,6 +74,8 @@
     <h2>Neues Passwort setzen</h2>
     <form method="POST" action="/passwort" autocomplete="off">
       <input type="hidden" name="action" value="set">
+      <label for="cur">Bisheriges Passwort</label>
+      <input id="cur" name="cur" type="password" autocomplete="current-password">
       <label for="p1">Neues Passwort (min. 10 Zeichen)</label>
       <input id="p1" name="p1" type="password" autocomplete="new-password" required minlength="10">
       <label for="p2">Wiederholen</label>
