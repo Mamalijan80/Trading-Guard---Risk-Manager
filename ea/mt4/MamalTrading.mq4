@@ -99,6 +99,15 @@ extern double InpDeRiskFactor       = 1.0;   // R19 de-risk ladder OFF (v0.20, o
 extern bool   InpFomoGate           = false; // R9
 extern int    InpFomoSeconds        = 7;     // R9
 extern bool   InpJournal            = true;  // R11
+// ── v0.69 Sichtbarkeit ────────────────────────────────────────────────────────────────────
+//   Alert() ist modal und erscheint auf GENAU DEM Rechner, auf dem der Schutz gerade
+//   abgeschaltet wurde. Dort sieht es niemand, der es aufhalten wuerde. Push geht ans Handy.
+//   Einmalige Einrichtung: MT4 > Extras > Optionen > Benachrichtigungen > MetaQuotes-ID.
+//   Kein DLL, kein Server, kein Drittzugriff aufs Konto. Auch ein Partner, der die Mail
+//   mitbekommt, sieht nur eine Nachricht und nie das Konto — unter FTMO-Klausel 7.2 zulaessig.
+extern bool   InpPushAlerts         = true;  // v0.69: Push an die MT4-App bei Schutz aus/an und bei Sperren
+extern bool   InpPushMail           = false; // v0.69: zusaetzlich per E-Mail (MT4 > Extras > Optionen > E-Mail)
+extern int    InpGapAlertMin        = 5;     // v0.69: Luecke ohne laufenden Waechter ab X Minuten protokollieren (0 = aus)
 extern bool   InpHistoryBackfill    = true;  // v0.66: ONE-TIME backfill of closed trades from the account history into the journal
                                              //   (ticket + net), so the trade file can assign old positions.
                                              //   Set the History tab to "Gesamte Historie" (all history) BEFORE attaching: the EA only ever
@@ -205,6 +214,8 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
                                              //   honoured once, for migration. v0.68 also sets it after EVERY completed pass,
                                              //   not only on hits: treating a no-op as "unfinished" looped forever on a fresh
                                              //   account. Do not restore the old cnt>0 condition — see BackfillHistory().
+#define GV_HEARTBEAT     "RG_HB"             // v0.69: letzter Master-Zyklus (Serverzeit) -> beim Start sichtbar, wie lange kein Waechter lief
+#define GV_GAP_DONE      "RG_GAP_DONE"       // v0.70: welche Start-Luecke schon gemeldet ist (Schluessel = der alte Herzschlag). GETEILT, weil jede der sechs Instanzen dieselbe Luecke misst
 #define GV_LS_SEEN       "RG_LS_SEEN"        // v0.63: the lockstate file has existed on this account before -> from then on its ABSENCE is tampering, not a first start
 // §06-fix (medium): extend tighten-only to ALL lock-relevant inputs (so far only Daily/MaxLoss).
 #define GV_TIGHT_LATCH   "RG_TIGHT_LATCH"    // self-lock was active today -> InpTightenOnly cannot be switched off intraday
@@ -223,11 +234,17 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
 #define GV_EFF_REQSL     "RG_EFF_REQSL"      // R7 SL mandatory (once on -> cannot be switched off intraday)
 #define GV_EFF_REQTP     "RG_EFF_REQTP"      // R7 TP-Pflicht
 #define GV_EFF_CORR      "RG_EFF_CORR"       // R17 correlation cap on/off
-#define EA_VER           "0.68"             // ONE version source (log print + cockpit JSON) — increment here
+#define EA_VER           "0.70"             // ONE version source (log print + cockpit JSON) — increment here
 #define PFX              "MMT_"
 #define SLLINE           "MMT_slline"
 #define TPLINE           "MMT_tpline"      // v0.46: optional, draggable TP line (InpTpLine); otherwise auto TP from InpRR
 #define JOURNAL          "MamalTrading_Journal.csv"
+// v0.69: Abdeckungs-Protokoll. GV_PROTOFF ist ein TAGESzaehler und wird um Mitternacht
+//   genullt — danach ist nicht mehr nachvollziehbar, wie oft und wie lange der Waechter
+//   blind war. Genau diese Spur ist aber der einzige Hebel, der bleibt, wenn technischer
+//   Zwang ausscheidet (siehe docs/VPS-NO-OVERRIDE-PLAN.md): Abschalten wird nicht
+//   verhindert, aber es bleibt stehen. Nur anhaengen, nie umschreiben.
+#define COVERAGE         "MamalTrading_Coverage.csv"
 #define LOCKFILE         "MamalTrading_Lockstate.dat"   // Lockstate-Spiegel (fail-closed/Tamper)
 #define COCKPIT_FILE     "mamal_cockpit.json"           // v0.26: live state for the localhost cockpit (DLL-free file bridge)
 #define COCKPIT_TMP      "mamal_cockpit.tmp"            // atomic: write tmp first, then FileMove -> no torn read
@@ -245,6 +262,9 @@ string g_panelSig       = "";
 int    g_armed          = 0;
 uint   g_armMs          = 0;
 int    g_slClicks       = 0;    // v0.21: click counter for 3-click SL setting
+int    g_startGapSecs   = 0;    // v0.69: beim Start gemessene Luecke ohne Waechter — gemeldet wird sie erst im ersten Master-Zyklus (OnInit ist noch kein Master, Push wuerde verpuffen)
+uint   g_startGapMs     = 0;    // v0.69: wann gemessen. Jede der sechs Instanzen misst beim Start; wird eine davon STUNDEN spaeter Master, waere ihr Wert alte Nachricht — in der Zwischenzeit lief ja ein Master. Nur frisch gemessene Luecken werden gemeldet.
+datetime g_hbAtInit     = 0;    // v0.70: der Herzschlag, wie er beim Start DIESER Instanz dastand — gesetzt nur, wenn wirklich eine meldepflichtige Luecke gemessen wurde. Dient zweierlei: stabiler Schluessel fuer GV_GAP_DONE (alle Instanzen lesen denselben Wert) und Grenze, bis zu der die "Terminal aus"-Zeile die Zeit schon abdeckt.
 double g_slClickPrice   = 0;    // Zonen-Anker-Preis
 uint   g_slClickMs      = 0;    // time of the last zone click
 string g_flash          = "";   // v0.21: show the last message (e.g. rejection reason) directly in the panel
@@ -616,6 +636,15 @@ int OnInit()
    // v0.42: Boot-Diagnose — Ground Truth ins Journal (jede Instanz; klaert Registry/Floor/History/Kontext)
    // v0.66: write the backfill state in as well. The backfill ran into the void once, and from the outside it was
    //   impossible to tell whether the switch was even on — diagnosis by guesswork instead of by evidence.
+   // v0.69: Wie lange lief ueberhaupt kein Waechter? Der Herzschlag des letzten Masters steht
+   //   noch in der globalen Variablen, die Differenz ist die Luecke. Das ist der Fall, den
+   //   GV_PROTOFF nicht sehen kann, weil dafuer eine Instanz laufen muesste. Gemeldet wird erst
+   //   im ersten Master-Zyklus: hier ist noch niemand Master, ein Push ginge ins Leere.
+   if(InpGapAlertMin>0 && GlobalVariableCheck(GV_HEARTBEAT))
+   {
+      int gap=(int)(SrvTime()-(datetime)GlobalVariableGet(GV_HEARTBEAT));
+      if(gap >= InpGapAlertMin*60){ g_startGapSecs=gap; g_startGapMs=GetTickCount(); g_hbAtInit=(datetime)GlobalVariableGet(GV_HEARTBEAT); }
+   }
    Journal("INFO",Symbol(),"-",0,0,0,0,0,StringFormat("BootDiag v%s: RGOPN=%d HistTotal=%d Floor=%s Ctx=%s Magic=%d Backfill=%s MasterSlot=%s",EA_VER,CountOpn(),OrdersHistoryTotal(),TimeToString((datetime)GlobalVariableGet(GV_LAST_CLOSE)),IsTradeContextBusy()?"BUSY":"frei",InpMagic,(!InpHistoryBackfill?"aus":(!InpJournal?"aus (InpJournal=false)":(GlobalVariableCheck(BackfillGV())?"erledigt":"an"))),GlobalVariableCheck(GV_MASTER)?"da":"FEHLT"));
    ReconcileDayRisk();     // R3: restore the daily budget from broker data after a crash/restart
    ChartSetInteger(0,CHART_FOREGROUND,false);
@@ -954,6 +983,55 @@ void Notify(string m, bool info=false, bool loud=false)   // v0.37: info=true ->
    g_flash=fm; g_flashMs=GetTickCount(); g_flashInfo=info;                      // show reason/message in the panel for 6s
    if(ObjectFind(0,PFX+"prev")>=0){ ObjectSetString(0,PFX+"prev",OBJPROP_TEXT,Clip(fm,42)); ObjectSetInteger(0,PFX+"prev",OBJPROP_COLOR,info?C'150,200,255':C'255,140,60'); ChartRedraw(0); }   // immediate first line; the rest follows at the next DrawPanel
    g_panelSig="";                                                               // forces a redraw at the next DrawPanel
+}
+
+//+------------------------------------------------------------------+
+//| v0.69: Meldung nach AUSSEN. Bewusst nicht in Notify() eingehaengt |
+//| — Notify laeuft bei jeder Panel-Meldung, und ein Alarm, der staen-|
+//| dig kommt, wird nach drei Tagen weggewischt. Es rufen nur die paar |
+//| Stellen auf, die wirklich zaehlen: Schutz aus/an, Sperren, Tamper. |
+//+------------------------------------------------------------------+
+void PushAlert(string m)
+{
+   if(!InpPushAlerts && !InpPushMail) return;
+   if(g_masterStreak < 2) return;   // sonst schickt jeder der sechs Charts dieselbe Meldung
+   // Doppelte unterdruecken: dieselbe Meldung nicht zweimal in 5 Minuten.
+   static string s_last=""; static uint s_lastMs=0;
+   uint nowMs=GetTickCount();
+   if(m==s_last && nowMs-s_lastMs < 300000) return;
+   // Stundendeckel. Kein Spam-Schutz um des Schutzes willen, sondern die Lehre aus dem
+   //   Backfill-Fehler in v0.68: eine Schleife, die alle zwei Sekunden meldet, darf nie
+   //   wieder bis zum Nutzer durchschlagen. Darueber hinaus nur noch ins Log.
+   static int s_hourCount=0; static datetime s_hourStart=0;
+   datetime nowS=SrvTime();
+   if(s_hourStart==0 || nowS-s_hourStart>=3600){ s_hourStart=nowS; s_hourCount=0; }
+   if(s_hourCount>=20){ Print("Mamal: Push-Deckel 20/h erreicht, nur Log: ",m); return; }
+   s_hourCount++; s_last=m; s_lastMs=nowMs;
+
+   string body="["+IntegerToString(AccountNumber())+"] "+m;
+   if(InpPushAlerts && !SendNotification(body))
+      PrintFormat("Mamal: SendNotification fehlgeschlagen (%d) — MetaQuotes-ID unter Extras > Optionen > Benachrichtigungen gesetzt?",GetLastError());
+   if(InpPushMail && !SendMail("TradingGuard "+IntegerToString(AccountNumber()),body))
+      PrintFormat("Mamal: SendMail fehlgeschlagen (%d) — SMTP unter Extras > Optionen > E-Mail gesetzt?",GetLastError());
+}
+
+//+------------------------------------------------------------------+
+//| v0.69: eine Zeile pro Phase ohne Waechter. Anhaengen, nie aendern.|
+//+------------------------------------------------------------------+
+void CoverageRow(datetime from, datetime to, int secs, string reason)
+{
+   int h=INVALID_HANDLE;
+   for(int a=0;a<3 && h==INVALID_HANDLE;a++)
+   { h=FileOpen(COVERAGE,FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE,';');
+     if(h==INVALID_HANDLE) Sleep(15); }
+   if(h==INVALID_HANDLE){ PrintFormat("Mamal: Abdeckungs-Log nicht schreibbar (%d) — Zeile verloren: %s",GetLastError(),reason); return; }
+   if(FileSize(h)==0) FileWrite(h,"account","from","to","seconds","reason");
+   FileSeek(h,0,SEEK_END);
+   FileWrite(h,IntegerToString(AccountNumber()),
+             TimeToString(from,TIME_DATE|TIME_SECONDS),
+             (to>0?TimeToString(to,TIME_DATE|TIME_SECONDS):""),
+             IntegerToString(secs),reason);
+   FileClose(h);
 }
 
 // §05-fix (high): can also be evaluated for an ARBITRARY point in time (t) -> "was the position opened DURING a lock?"
@@ -2260,6 +2338,35 @@ void Cycle()
    // (journal/lockstate/cockpit/flush). Prevents file collisions when the EA runs on several charts (= Wine crash when moving TP/SL)
    // AND startup/race-claim bursts. Passive instances only show their panel; BUY/SELL works on any chart (click path).
    g_masterStreak = ClaimMaster() ? (g_masterStreak+1) : 0;
+   if(g_masterStreak >= 2)
+   {
+      // v0.69: Herzschlag. Solange ein Master laeuft, steht hier die Serverzeit. Beim naechsten
+      //   Start zeigt die Differenz, wie lange gar kein Waechter lief — das ist der Fall, den
+      //   GV_PROTOFF NICHT sieht: EA vom Chart genommen, MT4 zu, Rechner aus. Genau die Luecke,
+      //   die ein Dauerbetrieb auf dem VPS schliesst.
+      GlobalVariableSet(GV_HEARTBEAT,(double)SrvTime());
+      if(g_startGapSecs>0 && GetTickCount()-g_startGapMs > 120000) g_startGapSecs=0;   // veraltet: ein anderer Master hat die Zeit abgedeckt
+      if(g_startGapSecs>0)
+      {
+         int gs=g_startGapSecs; g_startGapSecs=0;   // nur einmal melden
+         // v0.70: und zwar instanzUEBERGREIFEND nur einmal. g_startGapSecs ist instanzlokal, alle sechs
+         //   Instanzen messen beim Start dieselbe Luecke, und die 120-s-Frist oben ist genau das Fenster,
+         //   in dem ein Master-Wechsel wahrscheinlich ist (Backfill/Bootarbeit blockiert die erste Instanz
+         //   ueber die 10-s-Schwelle von ClaimMaster hinaus). Dann meldet die zweite dieselbe Luecke erneut
+         //   — auch der 5-Minuten-Dedup in PushAlert() haelt das nicht auf, der ist ebenfalls instanzlokal.
+         //   Derselbe Gedanke wie bei GV_PROT_LATCH: ein GETEILTER Riegel. Schluessel ist der alte Herz-
+         //   schlag, weil ihn jede Instanz identisch gelesen hat (SrvTime()-gs waere je nach Meldezeitpunkt
+         //   um Sekunden verschoben und wuerde nicht matchen).
+         if(g_hbAtInit>0 && GlobalVariableGet(GV_GAP_DONE)!=(double)g_hbAtInit)
+         {
+         GlobalVariableSet(GV_GAP_DONE,(double)g_hbAtInit); GlobalVariablesFlush();
+         CoverageRow(g_hbAtInit,(datetime)(g_hbAtInit+gs),gs,"kein Waechter (EA/Terminal aus)");
+         string mGap=TF("watchdog.gap",IntegerToString(gs/60));
+         Notify(mGap,true); PushAlert(mGap);
+         Journal("PROTECT_OFF","-","-",0,0,0,0,0,StringFormat("Luecke ohne Waechter: %d min (EA/Terminal war aus)",gs/60));
+         }
+      }
+   }
    if(g_masterStreak < 2)
    {
       // v0.38 (verify): a differing InpMagic on a passive chart = its panel trades would be
@@ -2329,6 +2436,18 @@ void Cycle()
      GlobalVariableSet(GV_EFF_REQTP,  InpRequireTP?1:0);
      GlobalVariableSet(GV_EFF_CORR,   InpUseCorrCap?1:0);
      GlobalVariableSet(GV_TIGHT_LATCH,InpTightenOnly?1:0);   // re-set the latch only here -> cannot be switched off intraday
+     // v0.70: Der Tageswechsel loest die laufende Schutz-aus-Episode ab — GV_PROTOFF ist ein TAGES-
+     //   zaehler, und der neue Tag soll sie erneut zaehlen. Die Luecke selbst endet damit aber nicht.
+     //   Vorher stand hier nur der Riegel-Reset: GV_PROT_SINCE blieb stehen, die OFF-Verzweigung weiter
+     //   unten im SELBEN Durchlauf ueberschrieb es mit der Rollover-Zeit, und alles davor fiel aus dem
+     //   Abdeckungs-Log heraus. Eine Nacht mit AutoTrading aus von 18:00 bis 10:00 haette sich hinterher
+     //   als 10-Stunden-Luecke gelesen statt als 16. Also hier abschliessen und dokumentieren.
+     //   (Was die ON-Verzweigung dadurch nicht mehr verlaengern kann, ist der Teil VOR dem Rollover —
+     //    die Tagessperre faellt dort ohnehin, und Cooldown/Revenge sind laengst abgelaufen.)
+     if(GlobalVariableGet(GV_PROT_LATCH)>0.5)
+     { datetime pss=(datetime)GlobalVariableGet(GV_PROT_SINCE);
+       if(pss>0 && SrvTime()>pss) CoverageRow(pss,SrvTime(),(int)(SrvTime()-pss),"AutoTrading aus (bis Tageswechsel)");
+       GlobalVariableSet(GV_PROT_SINCE,(double)SrvTime()); }
      GlobalVariableSet(GV_PROTOFF,0); GlobalVariableSet(GV_PROT_LATCH,0);
      GlobalVariableSet(GV_BLOCKS,0); GlobalVariableSet(GV_FILLS,0); GlobalVariableSet(GV_BLK_BURST,0);   // v0.32: Versuche-Zaehler taeglich zuruecksetzen
      g_gvDirty=true; }
@@ -2407,7 +2526,9 @@ void Cycle()
    if(tradingDisabled && !protLatch)
    { double poc=GlobalVariableGet(GV_PROTOFF)+1; GlobalVariableSet(GV_PROTOFF,poc); GlobalVariableSet(GV_PROT_LATCH,1);
      GlobalVariableSet(GV_PROT_SINCE,(double)SrvTime()); PersistLatch();   // §07-fix: remember the start of the protection-off phase
-     Notify(TF("watchdog.autoTradingOff",IntegerToString((int)poc))); Journal("PROTECT_OFF","-","-",0,0,0,0,0,StringFormat("AutoTrading AUS — Watchdog kann NICHT schliessen (heute #%d)",(int)poc)); }
+     string mOff=TF("watchdog.autoTradingOff",IntegerToString((int)poc));
+     Notify(mOff); PushAlert(mOff);   // v0.69: der Moment, in dem die Meldung den Rechner verlassen muss
+     Journal("PROTECT_OFF","-","-",0,0,0,0,0,StringFormat("AutoTrading AUS — Watchdog kann NICHT schliessen (heute #%d)",(int)poc)); }
    if(!tradingDisabled && protLatch)
    {
       // §07-fix: The AutoTrading switch is the cheapest one-click bypass — enforcement stands still while the
@@ -2415,6 +2536,7 @@ void Cycle()
       //   off. Now: the downtime is added onto all deadlines that are still ACTIVE.
       datetime ps=(datetime)GlobalVariableGet(GV_PROT_SINCE);
       int off=(ps>0)?(int)(SrvTime()-ps):0; if(off<0) off=0; if(off>86400) off=86400;   // Deckel: max 1 Tag
+      bool extended=false;
       if(off>5)
       {
          datetime cd=(datetime)GlobalVariableGet(GV_COOLDOWN);
@@ -2424,17 +2546,40 @@ void Cycle()
          for(int r=GlobalVariablesTotal()-1;r>=0;r--)   // R25-Fenster mitziehen
          { string rn=GlobalVariableName(r);
            if(StringFind(rn,"RG_REVU_")==0 && (datetime)GlobalVariableGet(rn)>SrvTime()) GlobalVariableSet(rn,GlobalVariableGet(rn)+off); }
-         Notify(TF("watchdog.autoTradingOn",IntegerToString(off)));
-         Journal("PROTECT_ON","-","-",0,0,0,0,0,StringFormat("AutoTrading wieder AN nach %d s — Cooldown/Sperre/Revenge um diese Zeit verlaengert",off));
+         extended=true;
       }
-      else Journal("PROTECT_ON","-","-",0,0,0,0,0,"AutoTrading wieder AN — Watchdog aktiv");
+      // v0.70: Die Entwarnung geht IMMER raus. Das "AUS" meldet sich ungefiltert ans Handy — haengt
+      //   das "AN" dagegen an der 5-Sekunden-Schwelle, bleibt der Nutzer im Alarm sitzen und haelt ein
+      //   stummes Telefon fuer einen stummen Ausfall. Die Schwelle gehoert zur Fristverlaengerung,
+      //   nicht zur Meldung. (Gefunden im ersten echten Test: Schalter 2 s aus -> nie eine Entwarnung.)
+      string mOn = (ps<=0)  ? TF("watchdog.autoTradingOnPlain")
+                 : extended ? TF("watchdog.autoTradingOn",IntegerToString(off))
+                            : TF("watchdog.autoTradingOnShort",IntegerToString(off));
+      Notify(mOn); PushAlert(mOn);
+      Journal("PROTECT_ON","-","-",0,0,0,0,0, extended
+              ? StringFormat("AutoTrading wieder AN nach %d s — Cooldown/Sperre/Revenge um diese Zeit verlaengert",off)
+              : StringFormat("AutoTrading wieder AN nach %d s — Watchdog aktiv (keine laufende Frist zu verlaengern)",off));
+      // v0.70: Auch die kurze Luecke kommt ins Abdeckungs-Log. Wer den Schalter mehrmals kurz antippt,
+      //   erzeugt genau das Muster, das man spaeter nachlesen koennen muss — eine 5-s-Schwelle wuerde
+      //   ausgerechnet die absichtlich kurzen Antipper unsichtbar machen.
+      //   v0.70: ps kann aus einer TOTEN Sitzung stammen — GV_PROT_SINCE ist persistent und wird beim
+      //   Start nirgends geraeumt. War das Terminal zwischendurch aus, hat die Herzschlag-Verzweigung
+      //   oben fuer genau diese Zeit schon eine Zeile "kein Waechter (EA/Terminal aus)" geschrieben.
+      //   Ohne Begrenzung stuenden dieselben Stunden zweimal im Log, einmal mit falscher Ursache, und
+      //   wer die Sekundenspalte summiert, zaehlt doppelt. Also hier nur bis zum alten Herzschlag: das
+      //   ist der Abschnitt, in dem das Terminal LIEF und nur AutoTrading aus war.
+      datetime segEnd=SrvTime();
+      if(g_hbAtInit>0 && ps<g_hbAtInit) segEnd=g_hbAtInit;
+      if(ps>0 && segEnd>ps) CoverageRow(ps,segEnd,(int)(segEnd-ps),"AutoTrading aus");
       GlobalVariableSet(GV_PROT_LATCH,0); GlobalVariableSet(GV_PROT_SINCE,0); PersistLatch();
    }
 
    if(!IsHardLocked() && totalDDpct>=EffMaxLoss())
-   { GlobalVariableSet(GV_HARD_LOCK,1); GlobalVariableSet(GV_LOCK_WHY,8); PersistLatch(); WriteLockstate(); Notify(TF("lock.maxLoss",DoubleToString(totalDDpct,2))); }   // §07-fix: sofort persistieren (GV + signierte Datei)
+   { GlobalVariableSet(GV_HARD_LOCK,1); GlobalVariableSet(GV_LOCK_WHY,8); PersistLatch(); WriteLockstate();
+     string mHard=TF("lock.maxLoss",DoubleToString(totalDDpct,2)); Notify(mHard); PushAlert(mHard); }   // §07-fix: sofort persistieren (GV + signierte Datei)
    if(!IsDayLocked() && !IsHardLocked() && dailyDDpct>=EffDailyLoss())
-   { GlobalVariableSet(GV_LOCK_UNTIL,(double)NextServerMidnight()); GlobalVariableSet(GV_LOCK_WHY,1); PersistLatch(); WriteLockstate(); Notify(TF("lock.dailyLoss",DoubleToString(dailyDDpct,2))); }
+   { GlobalVariableSet(GV_LOCK_UNTIL,(double)NextServerMidnight()); GlobalVariableSet(GV_LOCK_WHY,1); PersistLatch(); WriteLockstate();
+     string mDay=TF("lock.dailyLoss",DoubleToString(dailyDDpct,2)); Notify(mDay); PushAlert(mDay); }
 
    // §05-fix (high): reconcile locks periodically (5s) against the signed lockstate file. Catches intraday deletion
    //   of the RG_* GlobalVariables via F3 -> an active lock is restored from the file (not overwritten by the EA).
@@ -3156,6 +3301,9 @@ string T(string k)
    if(k=="watchdog.autoTradingOff") return en?"Mamal: WARNING — AutoTrading OFF! Protection inactive ({0}. time today). Lock periods are EXTENDED by this downtime.":"Mamal: WARNUNG — AutoTrading AUS! Schutz inaktiv (heute {0}.-mal). Sperrfristen werden um diese Zeit VERLAENGERT.";
    if(k=="misc.fragmentJournalArgs") return en?",0,0,0,0,0,StringFormat(":",0,0,0,0,0,StringFormat(";
    if(k=="watchdog.autoTradingOn") return en?"Mamal: AutoTrading back ON — lock periods extended by {0} s (protection downtime).":"Mamal: AutoTrading wieder AN — Sperrfristen um {0} s verlaengert (Ausfallzeit des Schutzes).";
+   if(k=="watchdog.autoTradingOnShort") return en?"Mamal: AutoTrading back ON after {0} s — watchdog is guarding again. Too short to extend a lock period; the gap is in the coverage log.":"Mamal: AutoTrading wieder AN nach {0} s — Waechter bewacht wieder. Zu kurz, um eine Sperrfrist zu verlaengern; die Luecke steht im Abdeckungs-Log.";
+   if(k=="watchdog.autoTradingOnPlain") return en?"Mamal: AutoTrading back ON — watchdog is guarding again (length of the gap unknown).":"Mamal: AutoTrading wieder AN — Waechter bewacht wieder (Dauer der Luecke unbekannt).";
+   if(k=="watchdog.gap") return en?"Mamal: no watchdog was running for {0} min — anything traded in that window was unguarded. Recorded in the coverage log.":"Mamal: {0} min lang lief kein Waechter — was in dieser Zeit gehandelt wurde, war ungeschuetzt. Steht im Abdeckungs-Log.";
    if(k=="watchdog.historyTradeMissing") return en?"Mamal: WARNING — a closed trade is NOT visible in the account history (History tab filtered?). Loss streak/daily budget cannot be counted -> FAIL-CLOSED. Set the account history to 'All History'.":"Mamal: WARNUNG — ein geschlossener Trade ist in der Kontohistorie NICHT sichtbar (History-Tab gefiltert?). Verlustserie/Tagesbudget koennen nicht zaehlen -> FAIL-CLOSED. Kontohistorie auf 'Gesamte Historie' stellen.";
    if(k=="watchdog.foreignPositionsWhileLocked") return en?"Mamal: WARNING locked, but {0} foreign/manual position(s) open — the Watchdog does NOT close them (Scope={1})! Close them manually, otherwise they keep breaching the limit.":"Mamal: WARNUNG gesperrt, aber {0} fremde/manuelle Position(en) offen — Watchdog schliesst sie NICHT (Scope={1})! Manuell schliessen, sonst reissen sie das Limit weiter.";
    if(k=="time.rolloverNotConfirmed") return en?"Mamal: {0} per PC clock, but BROKER time does NOT confirm it — no reset. (PC clock changed or no fresh ticks.) State is preserved.":"Mamal: {0} laut PC-Uhr, aber die BROKER-Zeit bestaetigt ihn NICHT — kein Reset. (PC-Uhr verstellt oder keine frischen Ticks.) Zustand bleibt erhalten.";
