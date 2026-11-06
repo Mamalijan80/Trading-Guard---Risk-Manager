@@ -1171,6 +1171,15 @@ function handler(req, res) {
 
   if (p === '/cmd/endday') {
     if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
+    // v0.72: Im Relay-Modus landet die Befehlsdatei in einem Container, in den kein
+    //   MetaTrader hineinsieht — der Agent neben MT4 sendet ausschliesslich nach oben und
+    //   holt nichts ab. Bis es einen Rueckweg gibt, ist das hier wirkungslos, und frueher
+    //   meldete das Dashboard darauf trotzdem Erfolg: man hielt sich fuer gesperrt und war
+    //   es nicht. Von allen Fehlern in einem Risikowerkzeug ist das der schlimmste.
+    if (RELAY_ROOT) return sendJson(res, { ok: false, error:
+      'Diese Instanz ist ein Relay: der Befehl kaeme in einem Container an, den kein MetaTrader'
+      + ' liest. Die Selbstsperre bitte am Cockpit neben MT4 setzen oder im Panel. Sobald der'
+      + ' Rueckweg mit Quittung steht, geht es auch von hier.' });
     // v0.72: Die zweite, auf localhost festgenagelte Origin-Pruefung ist hier RAUS. Sie war
     //   seit v0.70 doppelt — der allgemeine Riegel weiter oben prueft den Origin fuer jeden
     //   nicht-lesenden Aufruf gegen MAMAL_HOSTS — und auf einer gehosteten Instanz war sie
