@@ -137,6 +137,39 @@ if (process.argv.includes('--set-password')) {
   return;   // CommonJS: Modul laeuft in einer Funktion, top-level return ist zulaessig
 }
 
+// Passwort pruefen: `node server.js --check-password [--hash <h> --salt <s>]`
+//
+// WARUM DAS EXISTIERT: ein 401 vom Hoster hat zwei voellig verschiedene Ursachen — das Passwort
+// ist ein anderes, ODER Hash/Salt sind auf dem Weg in die Weboberflaeche verbogen worden. Von
+// aussen sehen beide identisch aus, und ohne dieses Kommando kann man sie nur auseinanderhalten,
+// indem man das Passwort irgendwo hinschreibt. Hier wird es verdeckt abgefragt, einmal gerechnet
+// und nur Ja oder Nein ausgegeben. Hash und Salt duerfen als Argument kommen: sie sind Pruefwerte,
+// kein Passwort, und stehen beim Hoster ohnehin offen in der Variablenliste.
+if (process.argv.includes('--check-password')) {
+  const argv = process.argv;
+  const pick = (n) => { const i = argv.indexOf(n); const v = i >= 0 ? argv[i + 1] : ''; return (v && !v.startsWith('--')) ? v : ''; };
+  let hash = pick('--hash'), salt = pick('--salt'), src = 'Argument';
+  if (!hash || !salt) {
+    const c = auth.readConfig();
+    if (!c || !c.passHash || !c.passSalt) {
+      console.error('\n  Kein Hash zum Vergleichen. Entweder --hash <h> --salt <s> mitgeben');
+      console.error('  (beides steht beim Hoster als MAMAL_PASS_HASH / MAMAL_PASS_SALT),');
+      console.error('  oder hier lokal erst `node server.js --set-password` laufen lassen.\n');
+      process.exit(1);
+    }
+    hash = c.passHash; salt = c.passSalt; src = c.fromEnv ? 'Umgebungsvariablen' : auth.CONFIG;
+  }
+  (async () => {
+    const pw = await askHidden('Passwort zum Pruefen: ');
+    const ok = auth.matchesHash(pw, hash, salt);
+    console.log('\n  Geprueft gegen: ' + src);
+    if (ok) console.log('  PASST. Dieses Passwort gehoert zu diesem Hash.\n');
+    else    console.log('  PASST NICHT. Dieser Hash gehoert zu einem anderen Passwort.\n');
+    process.exit(ok ? 0 : 2);
+  })();
+  return;
+}
+
 // §07-fix: the default path was hard-wired to macOS/Wine (and used $HOME, which does not exist that way on Windows).
 // v0.37-fix: determine the folder DYNAMICALLY instead of once at startup (otherwise the server points
 // permanently at a wrong/empty folder when node starts before the EA or several terminals are running).

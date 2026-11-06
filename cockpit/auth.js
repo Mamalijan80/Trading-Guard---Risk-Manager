@@ -99,14 +99,28 @@ function envForPassword(password) {
   ];
 }
 
+// Gehoert dieses Passwort zu diesem Hash? Getrennt von verifyPassword(), damit `--check-password`
+// gegen einen Hash pruefen kann, der gar nicht in dieser Installation steht — und zwar mit
+// DERSELBEN Rechnung, statt mit einer zweiten, schwaecheren Zweitfassung daneben.
+//
+// Das .trim() ist kein Schoenheitsfehler-Fang: Hash und Salt reisen als Umgebungsvariable durch
+// eine Weboberflaeche, und ein mitkopiertes Leerzeichen oder Zeilenende laesst Buffer.from(...,'hex')
+// still frueher abbrechen. Das Ergebnis waere ein kuerzerer Puffer, ein Laengenunterschied und
+// damit ein dauerhaftes "falsches Passwort" bei voellig richtigem Passwort — eine Stunde Suche,
+// die niemand beim Hash vermutet. Beim Salt dasselbe: er geht als String in scrypt, ein
+// angehaengtes Leerzeichen ergibt einen anderen Schluessel.
+function matchesHash(password, passHash, passSalt) {
+  if (!passHash || !passSalt) return false;
+  const got  = Buffer.from(hashPassword(String(password), String(passSalt).trim()), 'hex');
+  const want = Buffer.from(String(passHash).trim(), 'hex');
+  // Equal length by construction, but timingSafeEqual throws on a mismatch, so check first.
+  if (got.length === 0 || got.length !== want.length) return false;
+  return crypto.timingSafeEqual(got, want);
+}
+
 function verifyPassword(password) {
   const c = readConfig();
-  if (!c || !c.passHash || !c.passSalt) return false;
-  const got = Buffer.from(hashPassword(String(password), c.passSalt), 'hex');
-  const want = Buffer.from(c.passHash, 'hex');
-  // Equal length by construction, but timingSafeEqual throws on a mismatch, so check first.
-  if (got.length !== want.length) return false;
-  return crypto.timingSafeEqual(got, want);
+  return c ? matchesHash(password, c.passHash, c.passSalt) : false;
 }
 
 // ── Sessions ────────────────────────────────────────────────────────────────────────────
@@ -194,7 +208,7 @@ function noteSuccess(req) { fails.delete(clientKey(req)); }
 
 module.exports = {
   CONFIG, SESSION_HOURS,
-  isConfigured, setPassword, envForPassword, verifyPassword,
+  isConfigured, setPassword, envForPassword, verifyPassword, matchesHash, readConfig,
   makeSession, validSession, logoutEverywhere,
   parseCookies, lockedFor, noteFailure, noteSuccess,
 };

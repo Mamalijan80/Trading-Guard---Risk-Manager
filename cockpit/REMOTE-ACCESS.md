@@ -129,6 +129,27 @@ live. The new session secret logs out every open session, which is the point —
 throw out a cookie you think went astray. Nothing else is affected: the ingest token is separate,
 so the agent beside MT4 keeps pushing throughout.
 
+### Is it the password, or is it the hash?
+
+A 401 from the host looks the same either way, and guessing costs an evening. Ask instead — copy
+`MAMAL_PASS_HASH` and `MAMAL_PASS_SALT` out of the host's variable list and check a password
+against them on your own machine:
+
+```bash
+node server.js --check-password --hash <MAMAL_PASS_HASH> --salt <MAMAL_PASS_SALT>
+```
+
+The password is asked for hidden and never written anywhere; the answer is just *passt* or *passt
+nicht*. Hash and salt are verifiers, not secrets of the same rank — they already sit in plain view
+in that variable list. Without `--hash`/`--salt` it checks against this installation's own config.
+
+*Passt nicht* means the password is simply a different one — reset it as above. *Passt*, while the
+host still answers 401, means the two sides do not hold the same hash: compare the variables
+character by character, and look for a trailing space or line break from pasting.
+
+Five wrong attempts start a doubling lockout per client address, up to 15 minutes. It lives in
+memory, so replacing the variables clears it along with the restart.
+
 ## The agent (where MT4 runs)
 
 ```bash
