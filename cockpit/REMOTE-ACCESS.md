@@ -113,6 +113,22 @@ not MQL4.
 
 `PORT` is supplied by the platform and is picked up automatically.
 
+### Locked out of the hosted cockpit
+
+There is no `--set-password` to run over there: the container's filesystem is thrown away on every
+deploy, which is why the hash lives in the environment in the first place. So the password is reset
+from your own machine and carried across:
+
+```bash
+node server.js --set-password --env
+```
+
+It prints `MAMAL_PASS_HASH`, `MAMAL_PASS_SALT`, `MAMAL_SESSION_SECRET` and `MAMAL_SESSION_EPOCH`
+and writes nothing. Replace those four variables at the host; it restarts and the new password is
+live. The new session secret logs out every open session, which is the point — it is also how you
+throw out a cookie you think went astray. Nothing else is affected: the ingest token is separate,
+so the agent beside MT4 keeps pushing throughout.
+
 ## The agent (where MT4 runs)
 
 ```bash
