@@ -234,7 +234,7 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
 #define GV_EFF_REQSL     "RG_EFF_REQSL"      // R7 SL mandatory (once on -> cannot be switched off intraday)
 #define GV_EFF_REQTP     "RG_EFF_REQTP"      // R7 TP-Pflicht
 #define GV_EFF_CORR      "RG_EFF_CORR"       // R17 correlation cap on/off
-#define EA_VER           "0.70"             // ONE version source (log print + cockpit JSON) — increment here
+#define EA_VER           "0.73"             // ONE version source (log print + cockpit JSON) — increment here
 #define PFX              "MMT_"
 #define SLLINE           "MMT_slline"
 #define TPLINE           "MMT_tpline"      // v0.46: optional, draggable TP line (InpTpLine); otherwise auto TP from InpRR
@@ -1323,6 +1323,58 @@ void WriteCockpit()
    if(!InpCloseManualTrades) dis=dis+"\"R22\",";   // R22: panel-only trades switched off
    if(StringLen(dis)>0) dis=StringSubstr(dis,0,StringLen(dis)-1);
 
+   // v0.73: OFFENE POSITIONEN UND KURSE.
+   //
+   // WARUM DAS HIER DAZUKOMMT: in dieser Datei standen 58 Risikowerte und kein einziger Kurs,
+   // keine einzige Position. Eine Bedienoberflaeche, die nicht am Chart haengt, kann damit
+   // nichts anzeigen und nichts schliessen — ihr fehlt der ganze Gegenstand. Das ist die
+   // Voraussetzung fuer alles, was aus dem Browser kommen soll, und sie ist fuer sich allein
+   // schon nuetzlich: das Cockpit kann endlich zeigen, was wirklich offen ist.
+   //
+   // Kontoweit aufgezaehlt, nicht chartweise: WriteCockpit laeuft nur in der Master-Instanz,
+   // und die sieht ueber OrdersTotal() alle Symbole, nicht nur ihr eigenes. InpWatchScope
+   // begrenzt das ERZWINGEN, nicht das Anzeigen — sonst saehe man im Cockpit weniger, als
+   // auf dem Konto steht, und das waere die gefaehrlichere Halbwahrheit.
+   string pos=""; int npos=0;
+   for(int oi=OrdersTotal()-1; oi>=0; oi--)
+   {
+      if(!OrderSelect(oi,SELECT_BY_POS,MODE_TRADES)) continue;
+      if(OrderType()>OP_SELL) continue;                      // nur Markt-Positionen, keine Pendings
+      if(npos>=60) break;                                    // Deckel: die Datei entsteht alle 2 s neu
+      string osym=OrderSymbol();
+      int    odg=(int)MarketInfo(osym,MODE_DIGITS); if(odg<=0) odg=5;
+      double obid=MarketInfo(osym,MODE_BID), oask=MarketInfo(osym,MODE_ASK);
+      if(npos>0) pos=pos+",";
+      pos=pos+StringFormat("{\"t\":%d,\"sym\":\"%s\",\"typ\":%d,\"lots\":%s,\"open\":%s,\"sl\":%s,\"tp\":%s,\"pl\":%s,\"bid\":%s,\"ask\":%s,\"magic\":%d,\"otime\":\"%s\"}",
+                OrderTicket(), osym, OrderType(), DoubleToString(OrderLots(),2),
+                DoubleToString(OrderOpenPrice(),odg), DoubleToString(OrderStopLoss(),odg),
+                DoubleToString(OrderTakeProfit(),odg),
+                DoubleToString(OrderProfit()+OrderSwap()+OrderCommission(),2),
+                DoubleToString(obid,odg), DoubleToString(oask,odg),
+                (int)OrderMagicNumber(), TimeToString(OrderOpenTime(),TIME_DATE|TIME_MINUTES));
+      npos++;
+   }
+
+   // Kurse der Symbole in der Marktuebersicht. Mitgegeben werden nur die Groessen, die eine
+   // Oberflaeche zum PRUEFEN einer Eingabe braucht — Nachkommastellen, Punktgroesse und der
+   // Mindestabstand des Stops. Die LOTGROESSE steht bewusst NICHT dabei: die rechnet CalcLot()
+   // hier im EA aus Risiko und Stopabstand, und sie an zwei Stellen zu rechnen hiesse, sie
+   // frueher oder spaeter an zwei Stellen verschieden zu rechnen.
+   string qts=""; int nq=0;
+   int stot=SymbolsTotal(true);
+   for(int si=0; si<stot && nq<40; si++)
+   {
+      string sy=SymbolName(si,true);
+      double qb=MarketInfo(sy,MODE_BID), qa=MarketInfo(sy,MODE_ASK);
+      if(qb<=0 || qa<=0) continue;                           // nicht abonniert oder kein Kurs
+      int qdg=(int)MarketInfo(sy,MODE_DIGITS); if(qdg<=0) qdg=5;
+      if(nq>0) qts=qts+",";
+      qts=qts+StringFormat("\"%s\":{\"bid\":%s,\"ask\":%s,\"dg\":%d,\"pt\":%s,\"stp\":%d}",
+               sy, DoubleToString(qb,qdg), DoubleToString(qa,qdg), qdg,
+               DoubleToString(MarketInfo(sy,MODE_POINT),8), (int)MarketInfo(sy,MODE_STOPLEVEL));
+      nq++;
+   }
+
    string j="{";
    j=j+StringFormat("\"v\":\"%s\",\"srvtime\":\"%s\",", EA_VER, TimeToString(SrvTime(),TIME_DATE|TIME_MINUTES|TIME_SECONDS));
    j=j+StringFormat("\"account\":\"%s\",\"symbol\":\"%s\",\"tf\":\"%s\",\"port\":%d,\"profile\":\"%s\",\"funded\":%s,", IntegerToString(AccountNumber()), Symbol(), PeriodStr(), InpCockpitPort, PropFirmName(InpPropFirm), JB(InpFundedMode));   // v0.37: Kontonummer (String, ueberlauf-sicher) -> Dashboard zeigt, WELCHES Konto (bei mehreren Terminals)
@@ -1339,7 +1391,10 @@ void WriteCockpit()
    j=j+StringFormat("\"dayLock\":%s,\"hardLock\":%s,\"weekLock\":%s,\"targetHit\":%s,\"baseWarn\":%s,\"cooldown\":%s,\"offSession\":%s,\"maxWarn\":%s,\"weekRiskPending\":%s,\"lockWhy\":%d,", JB(IsDayLocked()), JB(IsHardLocked()), JB(IsWeekLocked()), JB(TargetHit()), JB(BaseWarn()), JB(CooldownActive()), JB(OffSession()), JB(maxw), JB(WeekRiskPending()), (IsLocked() && GlobalVariableCheck(GV_LOCK_WHY)) ? (int)GlobalVariableGet(GV_LOCK_WHY) : 0);   // §06-fix: maxWarn as its own flag — otherwise the dashboard showed green "Alles frei" (all clear) while the EA blocked every trade; v0.62: weekRiskPending (R23) likewise
    j=j+StringFormat("\"minStopPips\":%s,\"rr\":%s,\"scope\":%d,", DoubleToString(InpMinStopPips,0), DoubleToString(InpRR,1), (int)InpWatchScope);
    j=j+StringFormat("\"fills\":%d,\"blocks\":%d,\"riskEstimate\":%s,", (int)GlobalVariableGet(GV_FILLS), (int)GlobalVariableGet(GV_BLOCKS), JB(g_tvEstimate));   // §07-fix: GV_FILLS was maintained but read nowhere; riskEstimate makes the TickValue estimate visible
-   j=j+StringFormat("\"disabled\":[%s]", dis);
+   j=j+StringFormat("\"disabled\":[%s],", dis);
+   // Zuletzt, weil es die beiden laengsten Felder sind: wer die Datei von Hand liest, hat die
+   //   Risikowerte dann schon vor Augen.
+   j=j+StringFormat("\"posCount\":%d,\"pos\":[%s],\"quotes\":{%s}", npos, pos, qts);
    j=j+"}";
 
    int h=FileOpen(COCKPIT_TMP,FILE_WRITE|FILE_TXT|FILE_ANSI);
