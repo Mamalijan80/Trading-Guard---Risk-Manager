@@ -745,6 +745,13 @@ function loginPage(res, errorMsg, status) {
   fs.readFile(path.join(__dirname, 'login.html'), 'utf8', (err, html) => {
     if (err) { res.writeHead(500); return res.end('login.html fehlt'); }
     if (errorMsg) html = html.replace('<!--ERRORBOX-->', '<div class="err">' + escHtml(errorMsg) + '</div>');
+    // Der Hinweis muss zu DIESER Instanz passen. Auf dem Hoster laeuft kein `node server.js`
+    //   zum Anfassen, und sein Dateisystem ist fluechtig — dort fuehrt der Weg ueber die
+    //   Umgebungsvariablen. Stand vorher pauschal der lokale Befehl da: eine Sackgasse.
+    html = html.replace('<!--HINT-->', process.env.MAMAL_PASS_HASH
+      ? 'Passwort vergessen oder aendern: lokal <code>node server.js --set-password --env</code>' +
+        ' aufrufen und die ausgegebenen <code>MAMAL_*</code>-Variablen beim Hoster ersetzen.'
+      : 'Passwort setzen oder aendern:<br><code>node server.js --set-password</code>');
     res.writeHead(status || 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(html);
   });
