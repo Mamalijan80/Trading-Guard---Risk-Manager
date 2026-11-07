@@ -52,6 +52,12 @@ RULE_IDS = ['R1', 'R2', 'R3', 'R4', 'R4b', 'R5', 'R6', 'R7', 'R8', 'R9',
 BUILT = ['rules.%s.name' % i for i in RULE_IDS] \
       + ['rules.%s.sub' % i for i in RULE_IDS]
 
+# Die elf Karten unter "Wo stehe ich" holen ihre Erklaerung ueber
+#   'rule.'+id+'.desc'. Fehlt eine, steht die Karte ohne Erklaerung da --
+#   im Browser sieht das nach Absicht aus.
+CARD_IDS = ['R1', 'R2', 'R3', 'R4', 'R4b', 'R5', 'R6', 'R7', 'R12', 'R13', 'R18']
+BUILT += ['rule.%s.desc' % i for i in CARD_IDS]
+
 # insight.<id> gibt es absichtlich nur fuer einen Teil der Regeln: wo keine
 #   Einsicht hinterlegt ist, zeigt die Seite zu Recht nichts. Geprueft wird
 #   darum nur, dass eine vorhandene deutsche Einsicht auch en/fa hat.

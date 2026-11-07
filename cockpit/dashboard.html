@@ -597,9 +597,9 @@ function lossCls(f){ return f>=1?'r':f>=0.8?'a':f>=0.5?'a':'g'; }
 function lossBg(f){ return f>=1?'bg-r':f>=0.8?'bg-a':f>=0.5?'bg-a':'bg-g'; }
 function meter(id,name,ex,cur,lim,unit,opts){
   opts=opts||{}; const f=lim>0?cur/lim:0; let col=lossCls(f),bg=lossBg(f),status;
-  if(opts.locked){col='r';bg='bg-r';status='GESPERRT';}
-  else if(f>=1)status='Grenze erreicht'; else if(f>=0.8)status='fast am Limit';
-  else if(f>=0.5)status='im Blick'; else status='viel Luft';
+  if(opts.locked){col='r';bg='bg-r';status=t('meter.status.locked');}
+  else if(f>=1)status=t('meter.status.limitReached'); else if(f>=0.8)status=t('meter.status.nearLimit');
+  else if(f>=0.5)status=t('meter.status.watch'); else status=t('meter.status.room');
   const mk=opts.warnAt&&lim>0?clamp(opts.warnAt/lim)*100:null;
   const v=opts.count?`<b>${cur}</b><span class="lim"> / ${lim}</span>`
     :`<b>${de(cur)}${unit}</b><span class="lim"> / ${de(lim)}${unit}</span>`;
@@ -609,7 +609,7 @@ function meter(id,name,ex,cur,lim,unit,opts){
     <div class="bar">${mk!=null?`<span class="mark" style="left:${mk}%"></span>`:''}<i class="${bg}" style="width:${clamp(f)*100}%"></i></div></div>`;
 }
 function progress(id,name,ex,cur,lim,unit,done){
-  const f=lim>0?clamp(cur/lim):0; const status=done?'erreicht ✓':cur<0?'im Minus':'unterwegs';
+  const f=lim>0?clamp(cur/lim):0; const status=done?t('progress.status.done'):cur<0?t('progress.status.negative'):t('progress.status.running');
   return `<div class="rc"><div class="top"><span class="rid">${id}</span><span class="rn">${name}</span>
     <span class="rs ${done?'g':'b'}">${status}</span></div><div class="ex">${ex}</div>
     <div class="val ${done?'g':'b'}"><b>${cur>=0?'+':''}${de(cur)}${unit}</b><span class="lim"> / +${de(lim)}${unit}</span></div>
@@ -617,14 +617,14 @@ function progress(id,name,ex,cur,lim,unit,done){
 }
 function info(id,name,ex,val){
   return `<div class="rc"><div class="top"><span class="rid">${id}</span><span class="rn">${name}</span>
-    <span class="rs g">aktiv</span></div><div class="ex">${ex}</div><div class="val"><b>${val}</b></div></div>`;
+    <span class="rs g">${esc(t('info.status.active'))}</span></div><div class="ex">${ex}</div><div class="val"><b>${val}</b></div></div>`;
 }
 function cooldownCard(s){
   const a=s.cooldownSec>0, mm=String(Math.floor(s.cooldownSec/60)).padStart(2,'0'), ss=String(s.cooldownSec%60).padStart(2,'0');
-  return `<div class="rc"><div class="top"><span class="rid">R5</span><span class="rn">Cooldown</span>
-    <span class="rs ${a?'a':'g'}">${a?'pause running':'ready'}</span></div>
-    <div class="ex">Nach ${esc(s.cooldownAfter)} Verlusten in Folge eine Zwangspause von ${esc(s.cooldownMin)} Min.</div>
-    <div class="val ${a?'a':'g'}"><b>${a?mm+':'+ss:'—'}</b><span class="lim">${a?' bis wieder frei':' keine Pause aktiv'}</span></div>
+  return `<div class="rc"><div class="top"><span class="rid">R5</span><span class="rn">${esc(ruleMeta('R5')[0])}</span>
+    <span class="rs ${a?'a':'g'}">${esc(t(a?'cooldown.status.running':'cooldown.status.ready'))}</span></div>
+    <div class="ex">${esc(t('rule.R5.desc',{n:s.cooldownAfter,min:s.cooldownMin}))}</div>
+    <div class="val ${a?'a':'g'}"><b>${a?mm+':'+ss:'—'}</b><span class="lim">${esc(t(a?'cooldown.untilFree':'cooldown.noBreak'))}</span></div>
     <div class="bar"><i class="${a?'bg-a':'bg-g'}" style="width:${a?clamp(s.cooldownSec/(s.cooldownMin*60))*100:0}%"></i></div></div>`;
 }
 function pillStyle(c){
@@ -660,57 +660,69 @@ function renderState(s,ageMs){
   const [bg,bd,fg]=pillStyle(s.statusColor);
   const pill=$('pill'); pill.style.background=bg; pill.style.borderColor=bd; pill.style.color=fg;
   pill.querySelector('.dot').style.background=fg; $('pillTx').textContent=s.status;
-  $('chip').textContent=(s.account?('Konto '+s.account+' · '):'')+s.symbol+' · '+s.tf; $('equity').textContent=money(s.equity,s.ccy);   // v0.37: Kontonummer zeigen (bei mehreren Terminals)
+  $('chip').textContent=(s.account?t('acct.chip',{0:s.account}):'')+s.symbol+' · '+s.tf; $('equity').textContent=money(s.equity,s.ccy);   // v0.37: Kontonummer zeigen (bei mehreren Terminals)
   const r=blockReason(s), bn=$('banner'); bn.style.display='block';
   const stale = ageMs!=null && ageMs>20000;   // MT4/EA no longer writes -> state no longer trustworthy
-  if(r){ bn.className='banner '+(s.statusColor==='red'?'red':'amber'); bn.textContent='Aktuell keine neuen Trades: '+r; }
-  else if(stale){ bn.className='banner amber'; bn.textContent='Data stale — check MT4/EA.'; }
-  else { bn.className='banner green'; bn.textContent='Alles frei — du kannst nach Plan handeln.'; }
+  if(r){ bn.className='banner '+(s.statusColor==='red'?'red':'amber'); bn.textContent=t('banner.blocked',{0:r}); }
+  else if(stale){ bn.className='banner amber'; bn.textContent=t('banner.stale'); }
+  else { bn.className='banner green'; bn.textContent=t('banner.free'); }
 
   const c=[];
-  c.push(meter('R4','Tagesverlust','Mehr Verlust am Tag als das Limit → gesperrt bis morgen.',s.dailyDD,s.dailyLimit,'%',{locked:s.dayLock}));
-  c.push(meter('R4b','Max-Verlust','Gesamtverlust seit Kontostart. Markierung = Warnpuffer.',s.totalDD,s.maxLoss,'%',{locked:s.hardLock,warnAt:s.maxLossWarn}));
-  c.push(meter('R3','Tagesbudget','This much risk you may open per day.',s.dayRisk,s.dayBudget,'%',{extra:'noch '+de(Math.max(0,s.dayBudget-s.dayRisk))+'% frei'}));
-  c.push(meter('R12','Gesamtrisiko','Risiko aller offenen Trades zusammen.',s.heat,s.heatCap,'%',{}));
-  c.push(meter('R6','Verlustserie','Nach so vielen Verlusten in Folge sperrt der Tag.',s.consec,s.lockAfter,'',{count:true,locked:s.consec>=s.lockAfter}));
+  // Name und Erklaerung jeder Karte kommen jetzt aus der Tabelle. Vorher stand
+  //   die Haelfte der Erklaerungen englisch da (R3, R18, R2) -- mitten in den
+  //   deutschen uebrigen.
+  const card=(id,fn,...rest)=>fn(id,ruleMeta(id)[0],esc(t('rule.'+id+'.desc')),...rest);
+  c.push(card('R4',meter,s.dailyDD,s.dailyLimit,'%',{locked:s.dayLock}));
+  c.push(card('R4b',meter,s.totalDD,s.maxLoss,'%',{locked:s.hardLock,warnAt:s.maxLossWarn}));
+  c.push(card('R3',meter,s.dayRisk,s.dayBudget,'%',{extra:t('rule.R3.extra',{x:de(Math.max(0,s.dayBudget-s.dayRisk))})}));
+  c.push(card('R12',meter,s.heat,s.heatCap,'%',{}));
+  c.push(card('R6',meter,s.consec,s.lockAfter,'',{count:true,locked:s.consec>=s.lockAfter}));
   c.push(cooldownCard(s));
-  c.push(progress('R13','Tagesziel','Bei diesem Gewinn ist Schluss — Gewinn sichern.',s.profitPct,s.targetPct,'%',s.targetHit));
-  c.push(meter('R18','Wochenlimit','Loss cap for the whole week.',s.weekDD,s.weekLimit,'%',{locked:s.weekLock}));
-  c.push(info('R1','Risiko / Trade','Jeder Trade riskiert genau diesen festen Anteil.',de(s.riskPerTrade)+' %'));
-  c.push(info('R2','Idee-Cap','One idea may risk at most this much in total.',de(s.ideaCap)+' %'));
-  c.push(info('R7','SL/TP-Pflicht','Jeder Trade braucht Stop-Loss und Take-Profit.','immer an'));
+  c.push(card('R13',progress,s.profitPct,s.targetPct,'%',s.targetHit));
+  c.push(card('R18',meter,s.weekDD,s.weekLimit,'%',{locked:s.weekLock}));
+  c.push(card('R1',info,de(s.riskPerTrade)+' %'));
+  c.push(card('R2',info,de(s.ideaCap)+' %'));
+  c.push(card('R7',info,t('rule.R7.value')));
   $('rules').innerHTML=c.join('');
 
   const off=(s.disabled||[]).map(x=>{const k=String(x).replace('R15min','R15'); const nm=ruleMeta(k)[0];
-    return `<span class="off-chip"><b>${esc(String(x).replace('R15min','R15·MinSL'))}</b> ${esc(nm)} — aus</span>`;});
+    return `<span class="off-chip"><b>${esc(String(x).replace('R15min','R15·MinSL'))}</b> ${esc(nm)}${esc(t('off.chip.suffix'))}</span>`;});
   $('off').innerHTML=off.join(''); $('offHead').style.display=off.length?'block':'none';
   $('content').style.display='block'; $('offline').style.display='none';
 }
 
 // ---- Weaknesses ----
 // ---- Coach: Disziplin-Hero + Edge + Stunden ----
+// SESS sind DATENSCHLUESSEL, keine Beschriftungen: e.sess[s] wird damit
+//   nachgesehen, und der EA liefert dort deutsche Namen. Uebersetzt man sie,
+//   findet die Suche nichts mehr und die Edge-Tabelle steht leer da -- ohne
+//   Fehlermeldung, nur leere Zellen. Die Anzeige laeuft darum ueber sessLabel().
 const SESS=['Nacht','Vormittag','Nachmittag'];
+const SESS_KEY={'Nacht':'edge.sess.night','Vormittag':'edge.sess.morning','Nachmittag':'edge.sess.afternoon'};
+const sessLabel=s=>t(SESS_KEY[s]||'')||s;
 function renderCoach(a){
   const d=a.discipline||{fills:0,blocks:0,attempts:0,ratio:0}; const tot=a.totals||{};
   const pct=Math.round((d.ratio||0)*100);
-  $('hero').innerHTML=`<div><div class="lab">Disziplin</div><div class="big">${pct}%</div>
+  $('hero').innerHTML=`<div><div class="lab">${esc(t('hero.discipline'))}</div><div class="big">${pct}%</div>
       <div class="dg"><i style="width:${Math.max(2,pct)}%"></i></div></div>
-    <div class="sub"><b>${d.fills} Trades aus ${d.attempts} Versuchen.</b> ${d.blocks}× hat dich eine Regel gestoppt${pct>0&&pct<30?' — dein Konto lebt gerade von deiner Disziplin, nicht vom P/L.':'.'}
-      ${(tot.manualN||0)?`<div style="color:var(--amber);margin-top:4px">✋ ${tot.manualN} Trade(s) liefen am Panel vorbei (${eur(tot.manualNet||0)}) — im Netto enthalten, aber ohne Regelschutz.</div>`:''}</div>
-    <div class="net"><div class="lab">Netto gesamt</div><div class="v ${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</div>
-      <div class="lab" style="margin-top:4px">${tot.tradesTotal||0} Trades · ${tot.days||0} Tage</div></div>`;
+    <div class="sub"><b>${esc(t('hero.sub.fills',{fills:d.fills,attempts:d.attempts}))}</b> ${esc(t('hero.sub.blocks',{blocks:d.blocks}))}${pct>0&&pct<30?' '+esc(t('hero.sub.lowDiscipline')):'.'}
+      ${(tot.manualN||0)?`<div style="color:var(--amber);margin-top:4px">${esc(t('hero.manualNote',{0:tot.manualN,1:eur(tot.manualNet||0)}))}</div>`:''}</div>
+    <div class="net"><div class="lab">${esc(t('hero.netTotal'))}</div><div class="v ${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</div>
+      <div class="lab" style="margin-top:4px">${esc(t('hero.tradesDays',{0:tot.tradesTotal||0,1:tot.days||0}))}</div></div>`;
 
   const edge=a.edge||[], v=a.verdict||{};
   $('edgeVerdict').innerHTML= edge.length
-    ? `Dein <b>Edge</b>: ${v.best?`${esc(v.best.sym)} ${esc(v.best.s)} (${eur(v.best.net)})`:'—'}. Dein <b>Leck</b>: ${v.worst?`${esc(v.worst.sym)} ${esc(v.worst.s)} (${eur(v.worst.net)})`:'—'}. Trade your window deliberately — stop feeding your leak.`
-    : 'Still too few closed trades for a pattern (numbers get sharper the more you trade).';
-  let rows=`<div class="erow ehead"><div>Symbol</div>${SESS.map(s=>`<div style="text-align:center">${s}</div>`).join('')}<div style="text-align:right">Gesamt</div></div>`;
+    ? t('edge.verdict',{
+        0:(v.best ?`${esc(v.best.sym)} ${esc(sessLabel(v.best.s))} (${eur(v.best.net)})` :'—'),
+        1:(v.worst?`${esc(v.worst.sym)} ${esc(sessLabel(v.worst.s))} (${eur(v.worst.net)})`:'—')})
+    : esc(t('edge.verdict.empty'));
+  let rows=`<div class="erow ehead"><div>${esc(t('edge.head.symbol'))}</div>${SESS.map(s=>`<div style="text-align:center">${esc(sessLabel(s))}</div>`).join('')}<div style="text-align:right">${esc(t('edge.head.total'))}</div></div>`;
   for(const e of edge){
     let cells='';
     for(const s of SESS){ const b=e.sess[s];
       if(!b){ cells+='<div class="ecell empty"></div>'; continue; }
       const cls=b.net>0.5?'pos':b.net<-0.5?'neg':'';
-      cells+=`<div class="ecell ${cls}"><div class="n">${eur(b.net)}</div><div class="c">${b.n}T · ${b.w}/${b.l}</div></div>`;
+      cells+=`<div class="ecell ${cls}"><div class="n">${eur(b.net)}</div><div class="c">${esc(t('edge.cell.sub',{n:b.n,w:b.w,l:b.l}))}</div></div>`;
     }
     rows+=`<div class="erow"><div class="esym">${esc(e.symbol)}</div>${cells}<div class="etot ${e.total.net>=0?'net-pos':'net-neg'}">${eur(e.total.net)}</div></div>`;
   }
@@ -752,10 +764,10 @@ function renderWeak(a){
       <div class="wcnt">${r.count}×</div></div>`;
   }).join('');
   const tot=a.totals||{};
-  $('totrow').innerHTML=`<span>Zeitraum: <b>${esc((a.range&&a.range.first)||'—')} – ${esc((a.range&&a.range.last)||'—')}</b></span>
-    <span>Handelstage: <b>${tot.days||0}</b></span><span>Trades: <b>${tot.tradesTotal||0}</b></span>
-    <span>Regel-Blocks: <b>${tot.blocksTotal||0}</b></span>
-    <span>Netto gesamt: <b class="${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</b></span>`;
+  $('totrow').innerHTML=`<span>${t('totals.range',{0:esc((a.range&&a.range.first)||'—'),1:esc((a.range&&a.range.last)||'—')})}</span>
+    <span>${t('totals.days',{0:tot.days||0})}</span><span>${t('totals.trades',{0:tot.tradesTotal||0})}</span>
+    <span>${t('totals.blocks',{0:tot.blocksTotal||0})}</span>
+    <span>${t('totals.net',{0:`<b class="${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</b>`})}</span>`;
 }
 
 // ---- Kalender ----
