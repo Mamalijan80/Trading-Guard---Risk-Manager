@@ -1510,10 +1510,27 @@ void ProcessCmdQueue()
       if(GlobalVariableCheck(CmdKey(id))) continue;    // schon erledigt
       handled++;
 
-      if(InpCmdMaxAgeSec>0 && issued>0 && SrvTime()-issued>InpCmdMaxAgeSec)
+      // v0.73-fix: GEGEN TimeGMT(), NICHT gegen SrvTime().
+      //
+      // Der Stempel kommt vom Cockpit als echte UTC-Sekunden (Date.now()/1000). SrvTime() ist
+      // dagegen die Wanduhr des BROKERS — in Mitteleuropa zwei Stunden daneben. Der Vergleich
+      // haette jeden einzelnen Befehl sofort verfallen lassen: die Quittung meldete "expired",
+      // ausgefuehrt wurde nie etwas, und der ganze Kanal waere tot gewesen, ohne dass irgendwo
+      // ein Fehler gestanden haette. TimeGMT() ist dieselbe Zeitrechnung, aus der der Stempel
+      // stammt — und Cockpit und Terminal stehen auf derselben Maschine, sonst gaebe es
+      // diesen Weg gar nicht (auf einem Relay wird er verweigert).
+      datetime nowUtc=TimeGMT();
+      int ageSec=(nowUtc>0 && issued>0)?(int)(nowUtc-issued):0;
+      if(InpCmdMaxAgeSec>0 && issued>0 && nowUtc>0 && ageSec>InpCmdMaxAgeSec)
       {
          GlobalVariableSet(CmdKey(id),(double)SrvTime()); g_gvDirty=true;
-         AckCmd(id,"expired",0,0,StringFormat("aelter als %d s — nicht mehr ausgefuehrt",InpCmdMaxAgeSec));
+         AckCmd(id,"expired",0,0,StringFormat("%d s alt, Grenze %d s — nicht mehr ausgefuehrt",ageSec,InpCmdMaxAgeSec));
+         // Einmal laut sagen, wenn ALLES verfaellt: das ist das Zeichen dafuer, dass die beiden
+         //   Uhren nicht zusammenpassen, und ohne diesen Hinweis sucht man den Fehler im EA.
+         static bool ageWarned=false;
+         if(!ageWarned && ageSec>3600)
+         { ageWarned=true; PrintFormat("Mamal: Befehl %s ist %d s alt — stimmen die Uhren? TimeGMT=%s, Stempel=%s",
+             id,ageSec,TimeToString(nowUtc,TIME_DATE|TIME_SECONDS),TimeToString(issued,TIME_DATE|TIME_SECONDS)); }
          continue;
       }
 

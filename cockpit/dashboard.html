@@ -866,7 +866,10 @@ function renderPositions(st){
   let total=0; for(const o of pos) total+=Number(o.pl)||0;
   sum.innerHTML=pos.length+(pos.length===1?' Position':' Positionen')+' · <b class="'+(total>=0?'':'')+'">'
                +esc(fmtMoney(total,ccy))+'</b> schwebend';
-  const html=pos.map(o=>{
+  // Stabile Reihenfolge nach Ticket. Der EA fuellt pos[] in der Reihenfolge des Order-Pools,
+  //   und die kann sich zwischen zwei Abfragen aendern — eine Karte waere dann unter dem
+  //   Finger verrutscht, und der Klick haette eine andere Position getroffen.
+  const html=[...pos].sort((a,b)=>Number(a.t)-Number(b.t)).map(o=>{
     const dg=(q[o.sym]&&q[o.sym].dg)||2;
     const long=Number(o.typ)===0, pl=Number(o.pl)||0;
     return '<div class="pcard '+(long?'long':'short')+'">'
@@ -954,8 +957,13 @@ $('oSell').addEventListener('click',()=>placeOrder(false));
 // einem Risikowerkzeug der schlimmste Fehler, den es gibt.
 let CMDBUSY=false;
 function cmdMsg(kind,text){ $('cmdMsg').innerHTML='<div class="cmsg '+kind+'">'+esc(text)+'</div>'; }
+// Wie lange ein abgesetzter Befehl im EA scharf bleibt (InpCmdMaxAgeSec). Solange wird auf
+// eine Quittung gewartet — NICHT kuerzer. Brach die Anzeige frueher ab, stand dort "keine
+// Rueckmeldung", der Befehl war aber noch gueltig: der naechste Klick haette eine zweite
+// Position eroeffnet, und das Risiko waere doppelt gewesen.
+const CMD_ARMED_SEC=120;
 async function sendCmd(cmd,sym,a1,label){
-  if(CMDBUSY) return;
+  if(CMDBUSY){ cmdMsg('bad',label+' — nicht abgesetzt: ein anderer Befehl wartet noch auf das Terminal.'); return; }
   CMDBUSY=true;
   document.querySelectorAll('.pbtn,.endday,.obtn').forEach(b=>b.disabled=true);
   try{
@@ -966,9 +974,10 @@ async function sendCmd(cmd,sym,a1,label){
     const j=await r.json().catch(()=>({ok:false,error:'Unerwartete Antwort ('+r.status+')'}));
     if(!j.ok){ cmdMsg('bad',label+' — nicht abgesetzt: '+j.error); return; }
     cmdMsg('wait',label+' — abgesetzt, wartet auf das Terminal…');
-    // Der EA arbeitet im Sekundentakt. 45 s sind grosszuegig und begrenzt: ohne Grenze bliebe
-    //   die Anzeige ewig auf "wartet", und man wuesste nie, ob noch etwas kommt.
-    for(let i=0;i<45;i++){
+    for(let i=0;i<CMD_ARMED_SEC+5;i++){
+      if(i===20) cmdMsg('wait',label+' — noch keine Rückmeldung. Läuft MetaTrader, und ist der EA auf dem Chart aktiv?');
+      else if(i>20 && i%10===0) cmdMsg('wait',label+' — wartet weiter; der Befehl bleibt noch '
+        +Math.max(0,CMD_ARMED_SEC-i)+' s gültig. Bitte nicht erneut senden, solange er scharf ist.');
       await new Promise(r2=>setTimeout(r2,1000));
       const sr=await fetch('/cmd/status?acct='+encodeURIComponent(ACCT||'')+'&id='+encodeURIComponent(j.id));
       const sj=await sr.json().catch(()=>null);
@@ -976,15 +985,24 @@ async function sendCmd(cmd,sym,a1,label){
       if(sj.status==='done'){ cmdMsg('good',label+' — erledigt'+(sj.info?': '+sj.info:'')); tick(); return; }
       if(sj.status==='failed'||sj.status==='expired'){ cmdMsg('bad',label+' — abgelehnt'+(sj.info?': '+sj.info:'')); tick(); return; }
     }
-    cmdMsg('bad',label+' — keine Rückmeldung vom Terminal. Läuft MetaTrader, und ist der EA aktiv?');
+    cmdMsg('bad',label+' — nicht ausgeführt. Der Befehl ist inzwischen verfallen und kann nicht '
+          +'mehr auslösen; jetzt ist ein neuer Versuch gefahrlos.');
   }catch(e){ cmdMsg('bad',label+' — Fehler: '+e.message); }
   finally{ CMDBUSY=false; document.querySelectorAll('.pbtn,.endday,.obtn').forEach(b=>b.disabled=false); }
 }
 $('posGrid').addEventListener('click',function(ev){
   const b=ev.target.closest('.pbtn'); if(!b) return;
   const cmd=b.dataset.cmd, sym=b.dataset.sym, a1=b.dataset.a1||'';
+  // WICHTIG: half und be wirken auf ALLE Positionen dieses Symbols, nicht nur auf die Karte,
+  //   auf der sie stehen — PanelClose(true,…) und PanelBreakEven(true) arbeiten chartweit.
+  //   Die Rueckfrage muss das sagen, sonst verspricht die Karte etwas anderes als der EA tut.
+  const frage={
+    close:'Diese Position schließen?\n\n'+sym+', Ticket '+a1+'.',
+    half: 'Von ALLEN Positionen in '+sym+' die Hälfte schließen?\n\nDas gilt symbolweit, nicht nur für diese Karte.',
+    be:   'Bei ALLEN Positionen in '+sym+' den Stop auf Einstand ziehen?\n\nDas gilt symbolweit, nicht nur für diese Karte.'
+  }[cmd];
   const was={close:'Position schließen',half:'Hälfte schließen',be:'Break-even'}[cmd]||cmd;
-  if(cmd==='close' && !confirm(was+' — '+sym+', Ticket '+a1+'?\n\nDer EA führt das aus, sobald er den Befehl sieht.')) return;
+  if(frage && !confirm(frage+'\n\nDer EA führt das aus, sobald er den Befehl sieht.')) return;
   sendCmd(cmd,sym,a1,was+' ('+sym+')');
 });
 $('flatBtn').addEventListener('click',function(){

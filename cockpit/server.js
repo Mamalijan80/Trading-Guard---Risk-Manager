@@ -1252,13 +1252,40 @@ function handler(req, res) {
     const cmd = (u.searchParams.get('cmd') || '').toLowerCase().replace(/[^a-z]/g, '');
     const def = CMDS[cmd];
     if (!def) return sendJson(res, { ok: false, error: 'Unbekannter Befehl.' });
-    // Symbole duerfen Punkte und Rauten tragen (US30.cash, GER40#) — aber nichts, was eine
-    //   Zeile oder ein Feld beenden koennte.
-    const sym = (u.searchParams.get('sym') || '').replace(/[^A-Za-z0-9._#]/g, '').slice(0, 15);
+
+    // Liefert dieses Konto ueberhaupt noch? Ein geschlossenes Terminal laesst seine
+    //   cockpit.json liegen, der Ordner wird also weiter gefunden — der Befehl laege dann bis
+    //   zu einer Viertelstunde scharf in einer Datei, die niemand liest, waehrend die
+    //   Oberflaeche auf eine Quittung wartet, die nie kommt. Dieselbe Messlatte wie beim
+    //   Vergessen eines Kontos, nur strenger: hier geht es um Sekunden, nicht um Tage.
+    const age = stateAgeMs(acct);
+    if (age === null || age > 20000) return sendJson(res, { ok: false, error:
+      'Konto ' + acct + ' meldet sich gerade nicht' + (age === null ? '' : ' (zuletzt vor '
+      + Math.round(age / 1000) + ' s)') + '. Laeuft MetaTrader, und ist der EA auf dem Chart aktiv?' });
+
+    // Symbol: PRUEFEN und ablehnen, nicht zurechtschneiden. Ein stillschweigend veraendertes
+    //   Symbol traefe ein anderes Instrument als gemeint — und das ist der teuerste Fehler,
+    //   den dieser Kanal machen kann.
+    const symRaw = (u.searchParams.get('sym') || '').trim();
+    if (symRaw && !/^[^|\r\n]{1,32}$/.test(symRaw))
+      return sendJson(res, { ok: false, error: 'Dieses Symbol ist nicht verwendbar.' });
+    const sym = symRaw;
     const a1  = (u.searchParams.get('a1')  || '').replace(/[^0-9.\-]/g, '').slice(0, 20);
     const a2  = (u.searchParams.get('a2')  || '').replace(/[^0-9.\-]/g, '').slice(0, 20);
     if (def.sym && !sym) return sendJson(res, { ok: false, error: 'Dieser Befehl braucht ein Symbol.' });
     if (def.arg && !a1)  return sendJson(res, { ok: false, error: 'Dieser Befehl braucht ' + def.arg + '.' });
+
+    // Und kennt der EA dieses Symbol? Er veroeffentlicht die Marktuebersicht; steht es nicht
+    //   darin, wuerde der Befehl in keiner der sechs Instanzen zustaendig sein und bis zum
+    //   Verfall liegenbleiben. Aeltere EA-Staende liefern keine quotes — dann wird nicht
+    //   geprueft, statt alles zu blockieren.
+    if (def.sym) {
+      const st = readState(acct) || {};
+      const q = st.quotes || {};
+      if (Object.keys(q).length && !q[sym])
+        return sendJson(res, { ok: false, error: 'Der EA kennt das Symbol ' + sym
+          + ' nicht (nicht in der Marktuebersicht). Bekannt sind: ' + Object.keys(q).slice(0, 12).join(', ') });
+    }
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     try { appendCmd(dir, id, cmd, def.sym ? sym : '', a1, a2); }
