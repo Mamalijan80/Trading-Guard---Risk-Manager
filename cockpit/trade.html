@@ -65,6 +65,16 @@
   .mono{font-family:var(--mono)}
   .empty{padding:26px;text-align:center;color:var(--txt3)}
   #lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
+  /* v0.73: Schmale Schirme. Gemessen bei 375 px lief jede Seite ueber -
+     auf Deutsch mehr als auf Persisch, es ist also kein RTL-Fehler. Auf
+     Persisch faellt es nur auf, weil dort der Zeilenanfang abgeschnitten
+     wird statt des Endes. Rand und Schriftgrad zurueck, breite Tabellen
+     scrollbar: "einen Wisch entfernt" statt "weg". */
+  @media (max-width:560px){
+    .wrap{padding-left:13px;padding-right:13px}
+    table{font-size:12px}
+    .card{overflow-x:auto}
+  }
   #lb img{max-width:96vw;max-height:94vh}
   /* ==== v0.73: Rechts-nach-links (Persisch) ====
      Diese Seite hatte KEINE einzige RTL-Regel, obwohl applyI18n() ihr

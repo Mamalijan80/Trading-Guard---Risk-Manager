@@ -25,6 +25,16 @@
   .pos{color:var(--green)}.neg{color:var(--red)}
   .note{color:var(--txt2);font-size:13px;background:#f6f8fb;border-radius:9px;padding:12px 15px;margin-top:8px}
   .printbtn{position:fixed;top:16px;right:16px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:9px;padding:9px 16px;font:600 13px/1 inherit}
+  /* v0.73: Schmale Schirme. Gemessen bei 375 px lief jede Seite ueber -
+     auf Deutsch mehr als auf Persisch, es ist also kein RTL-Fehler. Auf
+     Persisch faellt es nur auf, weil dort der Zeilenanfang abgeschnitten
+     wird statt des Endes. Rand und Schriftgrad zurueck, breite Tabellen
+     scrollbar: "einen Wisch entfernt" statt "weg". */
+  @media (max-width:560px){
+    .wrap{padding-left:13px;padding-right:13px}
+    table{font-size:12px}
+    .card{overflow-x:auto}
+  }
   /* ==== v0.73: Rechts-nach-links (Persisch) ====
      Diese Seite hatte KEINE einzige RTL-Regel, obwohl applyI18n() ihr
      dir="rtl" setzt - die Sprache war da, das Layout nicht. Folge: Zahlen
