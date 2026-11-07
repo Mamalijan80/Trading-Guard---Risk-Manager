@@ -1166,6 +1166,7 @@ string RuleIdFromTag(string tag)   // pull the leading "Rxx" out of the tag (emp
 // v0.17: audit-grade journal — context (time/account/balance/equity/magic/DayKey/RuleId) is filled
 // automatically, ticket/net optional. Header on first write. Call sites stay unchanged.
 string g_lastBlockWhy="";   // v0.73: Grund der zuletzt abgelehnten Order (fuer die Quittung ans Cockpit)
+int    g_lastEntryTicket=0;  // v0.73: Ticket der zuletzt EROEFFNETEN Order — das eindeutige Erfolgssignal
 void Journal(string ev,string sym,string dir,double lot,double entry,double sl,double tp,double riskpct,string tag,int ticket=0,double net=0.0)
 {
    // v0.32 Panel-Spiegel: Versuche (BLOCKED) + Trades (OPEN) zaehlen — geteilt (kontoweit), unabhaengig vom CSV-Journal
@@ -1561,11 +1562,10 @@ void ProcessCmdQueue()
             // Erfolg wird am Fuellzaehler abgelesen: Journal("OPEN",...) erhoeht ihn, und das
             //   passiert genau einmal, nach einem erfolgreichen OrderSend. Scheitert es, hat
             //   DoEntry den Grund schon in g_lastBlockWhy hinterlegt.
-            g_lastBlockWhy="";
-            double fillsBefore=GlobalVariableGet(GV_FILLS);
+            g_lastBlockWhy=""; g_lastEntryTicket=0;
             DoEntry(cmd=="buy",sl);
-            if(GlobalVariableGet(GV_FILLS)>fillsBefore)
-               AckCmd(id,"done",0,sl,StringFormat("%s %s eroeffnet, Stop %s",
+            if(g_lastEntryTicket>0)
+               AckCmd(id,"done",g_lastEntryTicket,sl,StringFormat("%s %s eroeffnet, Stop %s",
                       (cmd=="buy"?"Kauf":"Verkauf"),Symbol(),
                       DoubleToString(sl,(int)MarketInfo(Symbol(),MODE_DIGITS))));
             else
@@ -3330,6 +3330,10 @@ void DoEntry(bool isBuy,double slOverride=0)
    if(ticket<0){ int oerr=GetLastError(); Notify(TF("misc.orderSendFailed",IntegerToString(oerr),DoubleToString(lot,2))); Journal("BLOCKED",Symbol(),dir,lot,pxN,slN,tpN,rp,StringFormat("OrderSend fehlgeschlagen err=%d",oerr)); return; }
    GlobalVariableSet(GV_DAY_RISK, dayR+r3rp);   // R3 budget on the day baseline (same unit as the reconstruction)
    GlobalVariableSet(GV_LAST_ENTRY,(double)SrvTime());
+   g_lastEntryTicket=ticket;   // v0.73: eindeutig. Der Fuellzaehler waere es NICHT — er steht in
+                               //   einer GlobalVariable, die alle sechs Instanzen teilen, also
+                               //   haette ein Klick aufs Panel eines anderen Charts im selben
+                               //   Moment eine FEHLGESCHLAGENE Fernorder als erledigt quittiert.
    GlobalVariableSet(OpnKey(ticket),(double)SrvTime());   // v0.40: Panel-Ticket registrieren (Close-Erkennung magic-/tab-unabhaengig)
    GlobalVariablesFlush();
    Journal("OPEN",Symbol(),dir,lot,pxN,slN,tpN,rp,"in-plan "+CandleThirdTag(TimeCurrent()),ticket);   // v0.52: in welchem Kerzendrittel ausgefuehrt
