@@ -266,6 +266,44 @@
     padding:8px 14px;font:600 13px/1 inherit}
   .endday:hover{background:var(--red);color:#fff}
   .gnote{font-size:12.5px;color:var(--txt3)}
+  /* ==== v0.73: Offene Positionen ====
+     Eigene Klassen statt .rc, weil hier etwas anderes passiert: eine Regelkarte zeigt an,
+     eine Positionskarte handelt. Der Unterschied muss man sehen, bevor man klickt. */
+  .phead{display:flex;align-items:baseline;gap:12px;margin:12px 2px 10px;flex-wrap:wrap}
+  .psum{font:600 13px/1 inherit;color:var(--txt2)}
+  .psum b{font-variant-numeric:tabular-nums}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}
+  .pcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:14px 16px;border-left:3px solid var(--line);
+    display:flex;flex-direction:column;gap:10px}
+  .pcard.long{border-left-color:var(--good)}
+  .pcard.short{border-left-color:var(--crit)}
+  .ptop{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .psym{font:650 15px/1.2 inherit;letter-spacing:-.01em}
+  .pdir{font:700 10px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
+    padding:4px 7px;border-radius:5px;background:var(--line2);color:var(--txt2)}
+  .pcard.long .pdir{background:rgba(52,199,89,.14);color:#1d7a33}
+  .pcard.short .pdir{background:rgba(255,59,48,.12);color:#c22219}
+  .ppl{font:650 22px/1 inherit;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .ppl.up{color:var(--good)} .ppl.dn{color:var(--crit)}
+  .pmeta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11.5px;color:var(--txt3)}
+  .pmeta i{display:block;font-style:normal;font-weight:600;color:var(--txt);
+    font-size:12.5px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .pact{display:flex;gap:7px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--line2)}
+  .pbtn{cursor:pointer;border:1px solid var(--line);background:var(--card2);color:var(--txt);
+    border-radius:8px;padding:7px 11px;font:600 12.5px/1 inherit;transition:background .12s,border-color .12s}
+  .pbtn:hover:not(:disabled){border-color:var(--txt3);background:var(--bg)}
+  .pbtn:disabled{opacity:.5;cursor:default}
+  .pbtn.danger{color:var(--crit);border-color:rgba(255,59,48,.35)}
+  .pbtn.danger:hover:not(:disabled){background:var(--crit);color:#fff;border-color:var(--crit)}
+  .pnone{color:var(--txt3);font-size:13.5px;padding:16px 2px}
+  /* Rueckmeldung eines Befehls. Drei Zustaende, und der dritte nennt den Grund — ein Knopf,
+     der nur aufhoert zu blinken, sagt nicht, ob etwas passiert ist. */
+  .cmsg{margin-top:10px;padding:9px 12px;border-radius:9px;font-size:12.5px;line-height:1.45}
+  .cmsg.wait{background:var(--accent-bg);color:var(--accent)}
+  .cmsg.good{background:rgba(52,199,89,.12);color:#1d7a33}
+  .cmsg.bad{background:rgba(255,59,48,.1);color:var(--crit)}
+  @media(max-width:520px){ .pgrid{grid-template-columns:1fr} }
   /* ==== v0.39: Multi-Konto-Grid ==== */
   .agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:12px}
   .acard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
@@ -347,6 +385,16 @@
         <span class="gnote">Voluntary self-lock until server midnight — <b>cannot</b> be undone (tighten-only).</span>
       </div>
     </div>
+
+    <h2>Offene Positionen</h2>
+    <div class="phead">
+      <span class="psum" id="posSum">—</span>
+      <span style="flex:1"></span>
+      <button id="flatBtn" class="pbtn danger" style="display:none">Alles schließen</button>
+    </div>
+    <div class="pgrid" id="posGrid"></div>
+    <div class="pnone" id="posNone">Keine offene Position.</div>
+    <div id="cmdMsg"></div>
 
     <h2 data-i18n="h2.challenge">Challenge-Fortschritt</h2>
     <div class="card" style="padding:18px" id="challenge"></div>
@@ -748,6 +796,96 @@ $('acctDel').addEventListener('click',async function(){
   finally{ this.disabled=false; }
 });
 
+// ==== v0.73: Offene Positionen und Befehle ===============================================
+// Der EA schreibt pos[] und quotes{} alle 2 s in mamal_cockpit.json. Hier wird nur gezeigt
+// und geschickt — gerechnet wird nichts: die Lotgroesse, die Regeln und das OrderSend bleiben
+// im EA, wo die 19 Pruefungen stehen. Eine Oberflaeche, die selbst rechnet, rechnet irgendwann
+// anders als das Werkzeug, das sie bedient.
+const PTYPE={0:'Long',1:'Short'};
+function fmtMoney(v,ccy){
+  const n=Number(v)||0;
+  return (n>0?'+':'')+n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(ccy||'');
+}
+function fmtPrice(v,dg){
+  const n=Number(v)||0;
+  if(!n) return '—';
+  return n.toLocaleString('de-DE',{minimumFractionDigits:dg||2,maximumFractionDigits:dg||2});
+}
+function renderPositions(st){
+  const grid=$('posGrid'), none=$('posNone'), sum=$('posSum'), flat=$('flatBtn');
+  const pos=(st&&st.pos)||[], q=(st&&st.quotes)||{}, ccy=(st&&st.ccy)||'';
+  if(!pos.length){
+    grid.innerHTML=''; grid.style.display='none'; none.style.display='';
+    sum.textContent='—'; flat.style.display='none'; return;
+  }
+  grid.style.display=''; none.style.display='none'; flat.style.display='';
+  let total=0; for(const o of pos) total+=Number(o.pl)||0;
+  sum.innerHTML=pos.length+(pos.length===1?' Position':' Positionen')+' · <b class="'+(total>=0?'':'')+'">'
+               +esc(fmtMoney(total,ccy))+'</b> schwebend';
+  const html=pos.map(o=>{
+    const dg=(q[o.sym]&&q[o.sym].dg)||2;
+    const long=Number(o.typ)===0, pl=Number(o.pl)||0;
+    return '<div class="pcard '+(long?'long':'short')+'">'
+      +'<div class="ptop"><span class="psym">'+esc(o.sym)+'</span>'
+      +'<span class="pdir">'+(long?'Long':'Short')+' · '+esc(Number(o.lots).toFixed(2))+'</span></div>'
+      +'<div class="ppl '+(pl>=0?'up':'dn')+'">'+esc(fmtMoney(pl,ccy))+'</div>'
+      +'<div class="pmeta">'
+        +'<span>Einstieg<i>'+esc(fmtPrice(o.open,dg))+'</i></span>'
+        +'<span>Stop<i>'+esc(fmtPrice(o.sl,dg))+'</i></span>'
+        +'<span>Ziel<i>'+esc(fmtPrice(o.tp,dg))+'</i></span>'
+      +'</div>'
+      +'<div class="pact">'
+        +'<button class="pbtn danger" data-cmd="close" data-sym="'+esc(o.sym)+'" data-a1="'+esc(o.t)+'">Schließen</button>'
+        +'<button class="pbtn" data-cmd="half" data-sym="'+esc(o.sym)+'">Hälfte</button>'
+        +'<button class="pbtn" data-cmd="be" data-sym="'+esc(o.sym)+'">Break-even</button>'
+      +'</div></div>';
+  }).join('');
+  if(grid.dataset.h!==html){ grid.innerHTML=html; grid.dataset.h=html; }
+}
+
+// Einen Befehl absetzen und seinen Weg verfolgen. Drei Zustaende, und der letzte nennt immer
+// einen Grund — auch wenn er "abgelehnt" lautet. Ein Knopf, der stumm nichts tut, ist in
+// einem Risikowerkzeug der schlimmste Fehler, den es gibt.
+let CMDBUSY=false;
+function cmdMsg(kind,text){ $('cmdMsg').innerHTML='<div class="cmsg '+kind+'">'+esc(text)+'</div>'; }
+async function sendCmd(cmd,sym,a1,label){
+  if(CMDBUSY) return;
+  CMDBUSY=true;
+  document.querySelectorAll('.pbtn,.endday').forEach(b=>b.disabled=true);
+  try{
+    cmdMsg('wait',label+' — wird abgesetzt…');
+    const qs='acct='+encodeURIComponent(ACCT||'')+'&cmd='+encodeURIComponent(cmd)
+            +(sym?'&sym='+encodeURIComponent(sym):'')+(a1?'&a1='+encodeURIComponent(a1):'');
+    const r=await fetch('/cmd/send?'+qs,{method:'POST'});
+    const j=await r.json().catch(()=>({ok:false,error:'Unerwartete Antwort ('+r.status+')'}));
+    if(!j.ok){ cmdMsg('bad',label+' — nicht abgesetzt: '+j.error); return; }
+    cmdMsg('wait',label+' — abgesetzt, wartet auf das Terminal…');
+    // Der EA arbeitet im Sekundentakt. 45 s sind grosszuegig und begrenzt: ohne Grenze bliebe
+    //   die Anzeige ewig auf "wartet", und man wuesste nie, ob noch etwas kommt.
+    for(let i=0;i<45;i++){
+      await new Promise(r2=>setTimeout(r2,1000));
+      const sr=await fetch('/cmd/status?acct='+encodeURIComponent(ACCT||'')+'&id='+encodeURIComponent(j.id));
+      const sj=await sr.json().catch(()=>null);
+      if(!sj||!sj.ok) continue;
+      if(sj.status==='done'){ cmdMsg('good',label+' — erledigt'+(sj.info?': '+sj.info:'')); tick(); return; }
+      if(sj.status==='failed'||sj.status==='expired'){ cmdMsg('bad',label+' — abgelehnt'+(sj.info?': '+sj.info:'')); tick(); return; }
+    }
+    cmdMsg('bad',label+' — keine Rückmeldung vom Terminal. Läuft MetaTrader, und ist der EA aktiv?');
+  }catch(e){ cmdMsg('bad',label+' — Fehler: '+e.message); }
+  finally{ CMDBUSY=false; document.querySelectorAll('.pbtn,.endday').forEach(b=>b.disabled=false); }
+}
+$('posGrid').addEventListener('click',function(ev){
+  const b=ev.target.closest('.pbtn'); if(!b) return;
+  const cmd=b.dataset.cmd, sym=b.dataset.sym, a1=b.dataset.a1||'';
+  const was={close:'Position schließen',half:'Hälfte schließen',be:'Break-even'}[cmd]||cmd;
+  if(cmd==='close' && !confirm(was+' — '+sym+', Ticket '+a1+'?\n\nDer EA führt das aus, sobald er den Befehl sieht.')) return;
+  sendCmd(cmd,sym,a1,was+' ('+sym+')');
+});
+$('flatBtn').addEventListener('click',function(){
+  if(!confirm('ALLE offenen Positionen schließen?\n\nDas gilt kontoweit, nicht nur fuer dieses Symbol.')) return;
+  sendCmd('flat','','','Alles schließen');
+});
+
 // ==== v0.39: Dark Mode ====
 (function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
   document.documentElement.dataset.theme=t; })();
@@ -857,13 +995,14 @@ function renderGauges(s){
    +gauge('Diese Woche noch verlierbar', weekFloor!=null?s.equity-weekFloor:null, s.weekDD, s.weekLimit,
       `Wochenlimit ${de(s.weekLimit)}% · verbraucht ${de(s.weekDD)}%`);
 }
-$('enddayBtn').addEventListener('click',async()=>{
-  const acct=ACCT||(LASTSTATE&&LASTSTATE.account)||'';
-  if(!confirm('Really end the day?\n\nThe EA blocks new trades until server midnight. This can NOT be undone.')) return;
-  try{ const r=await fetch('/cmd/endday?acct='+encodeURIComponent(acct),{method:'POST'});
-    if(r.ok){ alert('Self-lock set — the EA picks it up in a few seconds.'); }
-    else alert('Fehler: '+await r.text());
-  }catch(e){ alert('Server nicht erreichbar.'); }
+// v0.73: ueber die Warteschlange wie jeder andere Befehl. Vorher meldete dieser Knopf Erfolg,
+//   sobald eine Datei geschrieben war — ob der EA sie je gesehen hat, erfuhr man nie. Jetzt
+//   sagt die Quittung, ob die Sperre wirklich steht. Bei einer Selbstsperre ist das der
+//   Unterschied zwischen Schutz und dem Gefuehl von Schutz.
+$('enddayBtn').addEventListener('click',()=>{
+  if(!confirm('Tag wirklich beenden?\n\nDer EA blockt neue Trades bis Server-Mitternacht.'
+             +' Das lässt sich NICHT zurücknehmen.')) return;
+  sendCmd('endday','','','Tag beenden');
 });
 $('reportBtn').addEventListener('click',()=>window.open('/report.html'+AQ(),'_blank'));
 $('tradesBtn').addEventListener('click',()=>window.open('/trade.html'+AQ(),'_blank'));   // v0.62: Trade-Akte
@@ -1036,6 +1175,7 @@ async function tick(){
     LASTSTATE=j.state;
     renderState(j.state,j.ageMs);
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
+    renderPositions(j.state);   // v0.73
     LOCK=buildLock(j.state); paintLock();   // v0.46: Sperr-Monitor mit jedem Poll neu synchronisieren
     const age=j.ageMs==null?9e9:j.ageMs; const cls=age<6000?'live':age<20000?'stale':'off'; const txt=age<6000?'live':age<20000?'delayed':'MT4 stopped?';
     // Show the real server port (j.serverPort); state.port is only the EA input InpCockpitPort.

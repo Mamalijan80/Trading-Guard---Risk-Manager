@@ -128,6 +128,7 @@ extern int    InpSlippage           = 30;
 extern int    InpMagic              = 990201;
 extern WatchScope InpWatchScope     = TOOL_ONLY;  // TOOL_ONLY=foreign magics untouched · TOOL_PLUS_MANUAL=+Magic0 · ALL_POSITIONS=touches EVERYTHING (demo/debug only, NOT funded)
 extern int    InpCloseThrottleMs    = 300;   // P0-1: min. distance between close passes
+extern int    InpCmdMaxAgeSec       = 120;   // v0.73: ein aelterer Befehl wird NICHT mehr ausgefuehrt, sondern als verfallen quittiert
 extern int    InpCloseRetries       = 5;     // close queue: max attempts per ticket before FINAL-FAIL
 extern int    InpCloseBackoffMs     = 400;   // Close-Queue: Basis-Backoff (verdoppelt je Versuch)
 extern int    InpCloseMaxBackoffMs  = 4000;  // Close-Queue: max Backoff je Ticket
@@ -251,6 +252,15 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
 #define COCKPIT_OPEN     "mamal_cockpit_open.txt"       // trigger: server sees the file -> opens the browser
 #define COCKPIT_PATHS    "mamal_files.txt"              // v0.37: signpost in the Common folder -> real Files path (portable/multi-terminal safe)
 #define COCKPIT_CMD      "mamal_cmd.txt"                // v0.39: command from the dashboard — ONLY tightening (endday = self-lock), never loosening
+// v0.73: Die Warteschlange loest die Ein-Platz-Datei ab. WARUM: mamal_cmd.txt hat genau einen
+//   Platz, den der Server ueberschreibt — zwei Befehle innerhalb eines Zyklus, und einer ist
+//   lautlos weg. Fuer "Tag beenden" war das folgenlos (zweimal dasselbe Ergebnis), fuer
+//   "EURUSD schliessen" waere es ein verschwundener Auftrag ohne jede Spur.
+//   Genau EIN Schreiber je Datei: das Cockpit schreibt nur die Warteschlange, der EA nur die
+//   Quittungen. Damit gibt es keinen Schreibkonflikt, den man aufloesen muesste.
+#define COCKPIT_CMDQ     "mamal_cmdq.txt"               // v0.73: Warteschlange, eine Zeile je Befehl (nur das Cockpit schreibt)
+#define COCKPIT_ACK      "mamal_ack.csv"                // v0.73: Quittungen (nur der EA schreibt)
+#define GV_CMD_PREFIX    "RG_CMD_"                      // v0.73: erledigte Befehls-IDs, ueberleben Neustart und Recompile
 #define LOCKSALT         "MMT-ls-7731"                  // HMAC-light salt for the lockstate checksum
 
 double g_initialBalance = 0;
@@ -1421,6 +1431,127 @@ void WriteCockpit()
       }
    }
 }
+// ── v0.73: Befehle aus dem Cockpit ─────────────────────────────────────────────────────
+//
+// Die Regeln, und jede hat einen Grund, der Geld gekostet haette:
+//
+//  * ERLEDIGT WIRD VOR AUSGEFUEHRT VERMERKT. Stuerzt das Terminal mitten im Auftrag ab, ist
+//    der Befehl verloren statt doppelt. Beim Eroeffnen ist das die einzig richtige Richtung:
+//    eine verschwundene Order sieht man sofort (es ist keine Position da), eine doppelte
+//    bemerkt man vielleicht nie.
+//  * GELOESCHT WIRD NICHTS. Die alte Fassung loeschte die Befehlsdatei als Quittung — ein
+//    fehlgeschlagener Lesevorgang war damit von "kein Befehl da" nicht zu unterscheiden, und
+//    der Befehl war spurlos fort. Hier raeumt der Schreiber auf, nachdem er die Quittung
+//    gesehen hat.
+//  * MIT SHARE-FLAGS GELESEN. Ohne sie scheitert das Oeffnen, sobald der Server dieselbe
+//    Datei anfasst. Genau dafuer hat das Journal in v0.44 schon Share-Flags bekommen.
+//  * ALTES WIRD NICHT NACHGEHOLT. Ein Befehl, der zwei Minuten lag (Terminal aus, Netz weg),
+//    wird quittiert und verworfen — sonst fuellt er am Montag zu einem Preis, den niemand
+//    gesehen hat.
+//  * SYMBOLGEBUNDENES fuehrt die Instanz mit DIESEM Symbol aus, nicht der Master. Der Master
+//    sitzt auf dem Chart, auf dem er zufaellig sitzt; ein "schliesse EURUSD" von ihm haette
+//    GBPJPY getroffen. Symbollose Befehle (endday, alles flat) macht nur der Master.
+string CmdKey(string id){ return GV_CMD_PREFIX+id; }
+
+void AckCmd(string id,string status,int ticket,double price,string info)
+{
+   int h=FileOpen(COCKPIT_ACK,FILE_READ|FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE);
+   if(h==INVALID_HANDLE) return;
+   FileSeek(h,0,SEEK_END);
+   FileWriteString(h,StringFormat("%s;%s;%d;%s;%s;%s;%s\r\n",
+      id,status,ticket,DoubleToString(price,(int)MarketInfo(Symbol(),MODE_DIGITS)),
+      info,TimeToString(SrvTime(),TIME_DATE|TIME_MINUTES|TIME_SECONDS),Symbol()));
+   FileClose(h);
+}
+
+// Alte Merker wegraeumen. Ohne das waechst der GlobalVariable-Bestand mit jedem Befehl, und
+// MT4 wirft nach vier Wochen selbst weg — in genau der Reihenfolge, die man nicht will.
+void PruneCmdMarks()
+{
+   datetime cut=SrvTime()-24*3600;
+   for(int i=GlobalVariablesTotal()-1;i>=0;i--)
+   {
+      string nm=GlobalVariableName(i);
+      if(StringFind(nm,GV_CMD_PREFIX)!=0) continue;
+      if((datetime)GlobalVariableGet(nm)<cut) GlobalVariableDel(nm);
+   }
+}
+
+void ProcessCmdQueue()
+{
+   if(!InpCockpit) return;
+   if(!FileIsExist(COCKPIT_CMDQ)) return;
+   int h=FileOpen(COCKPIT_CMDQ,FILE_READ|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE);
+   if(h==INVALID_HANDLE) return;                       // belegt — naechster Zyklus, nichts geht verloren
+
+   bool isMaster=(g_masterStreak>=2);
+   int  handled=0;
+   while(!FileIsEnding(h) && handled<20)               // Deckel je Zyklus: der Rest kommt gleich dran
+   {
+      string line=FileReadString(h);
+      if(StringLen(line)<3) continue;
+      string f[]; int n=StringSplit(line,(ushort)124,f);   // 124 = senkrechter Strich
+      if(n<5) continue;
+      string id=f[0], cmd=f[1], sym=f[2], a1=f[3], a2=f[4];
+      datetime issued=(n>=6)?(datetime)StringToInteger(f[5]):SrvTime();
+      if(StringLen(id)==0 || StringLen(cmd)==0) continue;
+
+      // Zustaendigkeit. Wer nicht zustaendig ist, vermerkt NICHTS und quittiert NICHTS —
+      //   sonst haelt die erste Instanz, die vorbeikommt, den Befehl fuer erledigt.
+      if(StringLen(sym)>0){ if(sym!=Symbol()) continue; }
+      else               { if(!isMaster) continue; }
+
+      if(GlobalVariableCheck(CmdKey(id))) continue;    // schon erledigt
+      handled++;
+
+      if(InpCmdMaxAgeSec>0 && issued>0 && SrvTime()-issued>InpCmdMaxAgeSec)
+      {
+         GlobalVariableSet(CmdKey(id),(double)SrvTime()); g_gvDirty=true;
+         AckCmd(id,"expired",0,0,StringFormat("aelter als %d s — nicht mehr ausgefuehrt",InpCmdMaxAgeSec));
+         continue;
+      }
+
+      // ERST vermerken, DANN tun. Siehe oben.
+      GlobalVariableSet(CmdKey(id),(double)SrvTime()); GlobalVariablesFlush(); g_gvDirty=false;
+
+      if(cmd=="endday")
+      {
+         double cur=GlobalVariableCheck(GV_LOCK_UNTIL)?GlobalVariableGet(GV_LOCK_UNTIL):0;
+         double nxt=(double)NextServerMidnight();
+         if(nxt>cur)
+         {
+            GlobalVariableSet(GV_LOCK_UNTIL,nxt); GlobalVariableSet(GV_LOCK_WHY,4);
+            GlobalVariablesFlush(); WriteLockstate();
+            Journal("SELF_LOCK","-","-",0,0,0,0,0,"Tag beendet per Cockpit — Selbstsperre bis Server-Mitternacht");
+            Notify(T("lock.selfLock"));
+            AckCmd(id,"done",0,0,"Selbstsperre bis Server-Mitternacht");
+         }
+         else AckCmd(id,"done",0,0,"Sperre lief bereits mindestens so lange");
+      }
+      else if(cmd=="flat")        { PanelClose(false,false); AckCmd(id,"done",0,0,"alle Positionen zum Schliessen angemeldet"); }
+      else if(cmd=="closesym")    { PanelClose(true,false);  AckCmd(id,"done",0,0,"Positionen in "+Symbol()+" angemeldet"); }
+      else if(cmd=="half")        { PanelClose(true,true);   AckCmd(id,"done",0,0,"Haelfte in "+Symbol()+" angemeldet"); }
+      else if(cmd=="be")          { PanelBreakEven(true);    AckCmd(id,"done",0,0,"Break-even in "+Symbol()+" versucht"); }
+      else if(cmd=="close")
+      {
+         int tk=(int)StringToInteger(a1);
+         if(tk<=0) AckCmd(id,"failed",0,0,"kein Ticket angegeben");
+         else if(!OrderSelect(tk,SELECT_BY_TICKET)) AckCmd(id,"failed",tk,0,"Ticket nicht gefunden");
+         else if(OrderCloseTime()>0)                AckCmd(id,"done",tk,0,"war schon geschlossen");
+         else
+         {
+            // RequestClose und NICHT ein eigenes OrderClose: die bestehende Warteschlange
+            //   haelt err 132 (Markt zu) mit Backoff im Bestand, ein eigener Aufruf scheitert
+            //   einmal und ist weg.
+            RequestClose(tk,"Befehl aus dem Cockpit");
+            AckCmd(id,"done",tk,OrderOpenPrice(),"zum Schliessen angemeldet");
+         }
+      }
+      else AckCmd(id,"failed",0,0,"unbekannter Befehl: "+cmd);
+   }
+   FileClose(h);
+}
+
 void OpenCockpit()
 {
    WriteCockpit();   // frischen Stand garantieren
@@ -2422,6 +2553,12 @@ void Cycle()
          }
       }
    }
+   // v0.73: VOR dem Master-Tor, weil symbolgebundene Befehle die Instanz mit DIESEM Symbol
+   //   ausfuehren muss — der Master sitzt auf irgendeinem der sechs Charts.
+   ProcessCmdQueue();
+   static uint s_cmdPruneMs=0;
+   if(GetTickCount()-s_cmdPruneMs>=3600000){ s_cmdPruneMs=GetTickCount(); PruneCmdMarks(); }
+
    if(g_masterStreak < 2)
    {
       // v0.38 (verify): a differing InpMagic on a passive chart = its panel trades would be

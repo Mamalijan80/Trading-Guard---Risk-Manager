@@ -332,6 +332,66 @@ function accountsList() {
 // Dazu kommen Konten, die es gar nicht mehr als Ordner gibt, sondern nur noch als Zeilen im
 // Journal eines anderen Kontos (nach einem Login-Wechsel im selben Terminal). Die kann man
 // nicht loeschen, nur ausblenden — fuer sie ist diese Liste da.
+// ── v0.73: Befehlswarteschlange und Quittungen ─────────────────────────────────────────
+const CMDQ_FILE = 'mamal_cmdq.txt';
+const ACK_FILE  = 'mamal_ack.csv';
+// Der Katalog. sym = braucht ein Symbol, arg = braucht ein Argument (und wie es heisst).
+// Nur risikoSENKENDE Befehle: dieser Kanal kann per Konstruktion nichts lockern, und das ist
+// eine zugesagte Eigenschaft des Werkzeugs, kein Zufall.
+const CMDS = {
+  endday:   { sym: false, arg: '', was: 'Selbstsperre bis Server-Mitternacht' },
+  flat:     { sym: false, arg: '', was: 'alle Positionen schliessen' },
+  closesym: { sym: true,  arg: '', was: 'alle Positionen dieses Symbols schliessen' },
+  half:     { sym: true,  arg: '', was: 'die Haelfte schliessen' },
+  be:       { sym: true,  arg: '', was: 'Stop auf Einstand ziehen' },
+  close:    { sym: true,  arg: 'ein Ticket', was: 'ein Ticket schliessen' },
+};
+
+function appendCmd(dir, id, cmd, sym, a1, a2) {
+  const line = [id, cmd, sym, a1, a2, Math.floor(Date.now() / 1000)].join('|') + '\r\n';
+  // latin1 wie alles andere, was zwischen Server und EA liegt: MQL4 liest FILE_ANSI.
+  fs.appendFileSync(path.join(dir, CMDQ_FILE), line, 'latin1');
+}
+
+// Quittungen: id;status;ticket;preis;text;srvzeit;symbol — nur der EA schreibt sie.
+function readAck(dir, id) {
+  let raw = '';
+  try { raw = fs.readFileSync(path.join(dir, ACK_FILE), 'latin1'); } catch (e) { /* noch keine */ }
+  const lines = raw.split(/\r?\n/);
+  for (let i = lines.length - 1; i >= 0; i--) {      // die juengste Quittung gewinnt
+    const c = lines[i].split(';');
+    if (c[0] !== id) continue;
+    return { status: c[1] || '?', ticket: Number(c[2]) || 0, price: Number(c[3]) || 0,
+             info: c[4] || '', at: c[5] || '', symbol: c[6] || '' };
+  }
+  // Keine Quittung: steht er noch in der Warteschlange, wartet er aufs Terminal.
+  let q = '';
+  try { q = fs.readFileSync(path.join(dir, CMDQ_FILE), 'latin1'); } catch (e) { /* keine */ }
+  return { status: q.indexOf(id + '|') >= 0 ? 'pending' : 'unknown', ticket: 0, price: 0, info: '', at: '' };
+}
+
+// Aufraeumen: quittierte und alte Zeilen aus der Warteschlange nehmen. Der EA loescht nie —
+// er vermerkt nur, was er erledigt hat — also muss es hier passieren, und zwar unteilbar,
+// damit der EA nie eine halbe Datei liest.
+function sweepCmdQueue(dir) {
+  const qf = path.join(dir, CMDQ_FILE);
+  let raw = '';
+  try { raw = fs.readFileSync(qf, 'latin1'); } catch (e) { return; }
+  let ack = '';
+  try { ack = fs.readFileSync(path.join(dir, ACK_FILE), 'latin1'); } catch (e) { /* keine */ }
+  const cutoff = Math.floor(Date.now() / 1000) - 15 * 60;
+  const keep = raw.split(/\r?\n/).filter(l => {
+    const c = l.split('|');
+    if (c.length < 6) return false;
+    if (ack.indexOf(c[0] + ';') >= 0) return false;            // quittiert
+    return (Number(c[5]) || 0) >= cutoff;                       // und nicht uralt
+  });
+  if (keep.length === raw.split(/\r?\n/).filter(x => x.length > 2).length) return;   // nichts zu tun
+  const tmp = qf + '.neu';
+  fs.writeFileSync(tmp, keep.length ? keep.join('\r\n') + '\r\n' : '', 'latin1');
+  fs.renameSync(tmp, qf);
+}
+
 const HIDDEN_FILE = () => path.join(DATA_DIR, 'hidden-accounts.json');
 function readHidden() {
   try { const o = JSON.parse(fs.readFileSync(HIDDEN_FILE(), 'utf8')); return (o && typeof o === 'object') ? o : {}; }
@@ -586,6 +646,16 @@ const DATA_DIR = process.env.MAMAL_DATA_DIR || path.join(__dirname, 'data');
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); }
 catch (e) { console.error('  WARNUNG: ' + DATA_DIR + ' ist nicht anlegbar (' + e.message + ') — keine Equity-Kurve.'); }
 function equityFile(acct) { return path.join(DATA_DIR, 'equity_' + String(acct).replace(/\D/g, '') + '.csv'); }
+// v0.73: Warteschlange sauber halten. Im selben Takt wie die Equity-Abtastung, weil beide
+//   ohnehin die Kontoliste durchgehen.
+setInterval(() => {
+  if (RELAY_ROOT) return;                      // dort laeuft kein EA, der etwas quittieren koennte
+  for (const a of accountsList()) {
+    const d = dirForAccount(a.account);
+    if (d) { try { sweepCmdQueue(d); } catch (e) { /* beim naechsten Mal */ } }
+  }
+}, 30000);
+
 setInterval(() => {
   for (const a of accountsList()) {
     if (a.ageMs > 15000) continue;              // sample only accounts writing live
@@ -1127,6 +1197,48 @@ function handler(req, res) {
   // v0.39: "Tag beenden" (end day) — writes the tighten-only command into the account's Files folder.
   // POST only; the worst abuse would be an ADDITIONAL lock (never a loosening) — tighten-only by design.
   // Content is BOM-free ASCII (latin1) — the EA prefix check "endday" relies on that.
+  // ── v0.73: Befehle an den EA ─────────────────────────────────────────────────────────
+  //
+  // Eine Warteschlange statt der Ein-Platz-Datei: eine Zeile je Befehl, mit eigener Kennung.
+  // Genau ein Schreiber je Datei — das Cockpit schreibt nur die Warteschlange, der EA nur die
+  // Quittungen. Deshalb gibt es keinen Schreibkonflikt aufzuloesen.
+  //
+  // Die Liste der erlaubten Befehle steht HIER und nirgends sonst. Alles, was nicht
+  // druntersteht, kommt gar nicht erst in die Datei: ein Kanal in ein Werkzeug, das Geld
+  // bewegt, darf nichts durchreichen, was er nicht selbst benannt hat.
+  if (p === '/cmd/send' || p === '/cmd/status') {
+    if (RELAY_ROOT) return sendJson(res, { ok: false, error:
+      'Diese Instanz ist ein Relay: der Befehl kaeme in einem Container an, den kein MetaTrader'
+      + ' liest. Befehle gehen am Cockpit neben MT4 — nach dem Umzug auf eine Maschine ist das'
+      + ' dasselbe Fenster.' });
+    if (!acct) return sendJson(res, { ok: false, error: 'acct erforderlich' });
+    const dir = dirForAccount(acct);
+    if (!dir) return sendJson(res, { ok: false, error: 'Konto ' + acct + ' hat keinen Ordner.' });
+
+    if (p === '/cmd/status') {
+      const id = (u.searchParams.get('id') || '').replace(/[^a-z0-9]/gi, '').slice(0, 24);
+      if (!id) return sendJson(res, { ok: false, error: 'id erforderlich' });
+      return sendJson(res, Object.assign({ ok: true, id }, readAck(dir, id)));
+    }
+
+    if (req.method !== 'POST') { res.writeHead(405); return res.end('POST only'); }
+    const cmd = (u.searchParams.get('cmd') || '').toLowerCase().replace(/[^a-z]/g, '');
+    const def = CMDS[cmd];
+    if (!def) return sendJson(res, { ok: false, error: 'Unbekannter Befehl.' });
+    // Symbole duerfen Punkte und Rauten tragen (US30.cash, GER40#) — aber nichts, was eine
+    //   Zeile oder ein Feld beenden koennte.
+    const sym = (u.searchParams.get('sym') || '').replace(/[^A-Za-z0-9._#]/g, '').slice(0, 15);
+    const a1  = (u.searchParams.get('a1')  || '').replace(/[^0-9.\-]/g, '').slice(0, 20);
+    const a2  = (u.searchParams.get('a2')  || '').replace(/[^0-9.\-]/g, '').slice(0, 20);
+    if (def.sym && !sym) return sendJson(res, { ok: false, error: 'Dieser Befehl braucht ein Symbol.' });
+    if (def.arg && !a1)  return sendJson(res, { ok: false, error: 'Dieser Befehl braucht ' + def.arg + '.' });
+
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    try { appendCmd(dir, id, cmd, def.sym ? sym : '', a1, a2); }
+    catch (e) { return sendJson(res, { ok: false, error: 'Konnte den Befehl nicht ablegen: ' + e.message }); }
+    return sendJson(res, { ok: true, id, cmd, sym: def.sym ? sym : '' });
+  }
+
   // v0.72: Konto vergessen. POST, damit es nicht aus Versehen ueber einen Link passiert; der
   // allgemeine Origin-Riegel oben deckt CSRF ab.
   if (p === '/cmd/forget') {
