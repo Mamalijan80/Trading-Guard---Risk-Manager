@@ -1391,9 +1391,15 @@ function handler(req, res) {
   if (p === '/trade') return sendJson(res, tradeDossier((u.searchParams.get('ticket') || '').replace(/\D/g, ''), acct));
   if (p === '/trades') return sendJson(res, tradeList(acct));
   if (p === '/trade.html') return sendFile(res, 'trade.html');
-  if (p === '/i18n.js') {   // v0.53: Uebersetzungstabelle (de/en/fa)
-    return fs.readFile(path.join(__dirname, 'i18n.js'), (err, buf) => {
-      if (err) { res.writeHead(404); return res.end('i18n.js fehlt'); }
+  // v0.53: Uebersetzungstabelle (de/en/fa). v0.73: dazu i18napply.js, das t()
+  //   fuer die Nebenseiten mitbringt -- die luden die Tabelle vorher gar nicht
+  //   und waren deutsch, mit englischen Einsprengseln. Feste Erlaubnisliste,
+  //   kein aus dem Pfad gebauter Dateiname: sonst waere das hier ein Leseloch
+  //   in den ganzen Ordner.
+  if (p === '/i18n.js' || p === '/i18napply.js') {
+    const file = p.slice(1);
+    return fs.readFile(path.join(__dirname, file), (err, buf) => {
+      if (err) { res.writeHead(404); return res.end(file + ' fehlt'); }
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(buf);
     });

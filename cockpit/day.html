@@ -61,47 +61,58 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="back"><a href="/">← back to the cockpit</a></div>
+  <div class="back"><a href="/" data-i18n="nav.back">← zurück zum Cockpit</a></div>
   <div class="hero">
-    <div class="day"><small>Handelstag</small><span id="dtitle">…</span></div>
-    <div class="net"><div class="l">Netto an diesem Tag</div><div class="v" id="net">—</div></div>
+    <div class="day"><small data-i18n="day.label">Handelstag</small><span id="dtitle">…</span></div>
+    <div class="net"><div class="l" data-i18n="day.net">Netto an diesem Tag</div><div class="v" id="net">—</div></div>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="l">Trades</div><div class="v" id="k-trades">—</div></div>
-    <div class="kpi"><div class="l">Gewinne</div><div class="v pos" id="k-wins">—</div></div>
-    <div class="kpi"><div class="l">Verluste</div><div class="v neg" id="k-losses">—</div></div>
-    <div class="kpi"><div class="l">Regel-Blocks</div><div class="v" id="k-blocks">—</div></div>
-    <div class="kpi"><div class="l">davon manuell</div><div class="v" id="k-manual">—</div></div>
+    <div class="kpi"><div class="l" data-i18n="day.kpi.trades">Trades</div><div class="v" id="k-trades">—</div></div>
+    <div class="kpi"><div class="l" data-i18n="day.kpi.wins">Gewinne</div><div class="v pos" id="k-wins">—</div></div>
+    <div class="kpi"><div class="l" data-i18n="day.kpi.losses">Verluste</div><div class="v neg" id="k-losses">—</div></div>
+    <div class="kpi"><div class="l" data-i18n="day.kpi.blocks">Regel-Blocks</div><div class="v" id="k-blocks">—</div></div>
+    <div class="kpi"><div class="l" data-i18n="day.kpi.manual">davon manuell</div><div class="v" id="k-manual">—</div></div>
   </div>
 
-  <h2 id="rhead" style="display:none">Welche Regeln haben an diesem Tag gegriffen</h2>
+  <h2 id="rhead" style="display:none" data-i18n="day.h2.rules">Welche Regeln haben an diesem Tag gegriffen</h2>
   <div class="rules" id="rules"></div>
 
-  <h2>Was an diesem Tag passiert ist</h2>
-  <div class="card"><table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Symbol</th><th>Netto</th><th>Grund / Tag</th></tr></thead>
-    <tbody id="tl"><tr><td colspan="5" class="empty">lade…</td></tr></tbody></table></div>
+  <h2 data-i18n="day.h2.events">Was an diesem Tag passiert ist</h2>
+  <div class="card"><table><thead><tr><th data-i18n="journal.th.time">Zeit</th><th data-i18n="journal.th.event">Ereignis</th><th data-i18n="journal.th.symbol">Symbol</th><th data-i18n="journal.th.net">Netto</th><th data-i18n="journal.th.reason">Grund / Tag</th></tr></thead>
+    <tbody id="tl"><tr><td colspan="5" class="empty" data-i18n="journal.loading">lade…</td></tr></tbody></table></div>
 </div>
+<script src="/i18n.js"></script>
+<script src="/i18napply.js"></script>
 <script>
 // v0.39: take over the theme from the dashboard
-(function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-  document.documentElement.dataset.theme=t; })();
+//   v0.73: `t` hier umbenannt -- i18napply.js bringt die Funktion t() mit,
+//   und eine lokale Variable desselben Namens wuerde sie in diesem Block
+//   verdecken ('t is not a function' statt Uebersetzung).
+(function(){ const saved=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.theme=saved; })();
 const $=id=>document.getElementById(id);
 const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
 const eur=v=>(v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
 // Defuse foreign text (broker symbols, free journal tags) before innerHTML.
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
-const RULES={R1:['Risiko / Trade','fester %-Satz'],R2:['Idee-Cap','kein Nachladen derselben Idee'],R3:['Tagesbudget','Tages-Risiko-Budget aufgebraucht'],R4:['Tagesverlust','Tages-Verlust-Sperre'],R4b:['Max-Verlust','harte Gesamt-Grenze'],R5:['Cooldown','Zwangspause nach Verlusten'],R6:['Verlustserie','N Verluste in Folge'],R7:['SL/TP-Pflicht','Trade ohne SL/TP geschlossen'],R8:['Mindest-CRV','zu wenig Chance/Risiko'],R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],R12:['Gesamtrisiko','zu viel gleichzeitig offen'],R13:['Tagesziel','Ziel erreicht'],R14:['Mindestpause','zu schnelle Folge-Trades'],R15:['Min-SL-Abstand','Stop zu eng'],R16:['Session/News','outside trading hours'],R17:['Korrelation','too much of the same currency'],R18:['Wochenlimit','Wochen-Verlust-Deckel'],R19:['De-Risk','Risiko runter nach Verlusten'],R22:['Nur Panel-Trades','opened manually/on phone — will be reverted'],R25:['Revenge','Gegen-Trade nach Verlust']};
-const MON=['Jan','Feb','Mar','Apr','Mai','Juni','Juli','Aug','Sep','Okt','Nov','Dez'];
-function fmtDay(d){ const p=d.split('.'); if(p.length!==3)return d; return `${Number(p[2])}. ${MON[Number(p[1])-1]} ${p[0]}`; }
+// v0.73: Diese Seite fuehrte eine EIGENE Regeltabelle. Ihre Formulierungen
+//   wichen von der des Dashboards ab (R3 hier 'Tages-Risiko-Budget auf-
+//   gebraucht', dort 'max. risk you may open per day') und sie trug dieselben
+//   englischen Einsprengsel (R16, R17, R22). Zwei Tabellen fuer dieselbe Sache
+//   heisst: jede Korrektur muss man zweimal machen, und beim zweiten Mal
+//   vergisst es jemand. Jetzt beide aus rules.<id>.name/.sub.
+const ruleMeta = id => [ t('rules.'+id+'.name') || id, t('rules.'+id+'.sub') || '' ];
+const monShort = () => t('calendar.months.short').split(',');
+function fmtDay(d){ const p=d.split('.'); if(p.length!==3)return d; return `${Number(p[2])}. ${monShort()[Number(p[1])-1]} ${p[0]}`; }
 function badgeFor(ev){const e=(ev||'').toUpperCase();if(e==='CLOSE_MAN')return 'bd-man';if(e==='OPEN')return 'bd-open';if(e==='CLOSE')return 'bd-close';if(e==='BLOCKED')return 'bd-block';if(e.indexOf('PROTECT')>=0)return 'bd-prot';if(['TEST','INFO','PROFILE'].includes(e))return 'bd-test';return 'bd-lock';}
 
 const QS=new URLSearchParams(location.search);
 const D=QS.get('d')||'';
 const ACCT=QS.get('acct')||'';   // v0.38: multi-account — day view of the selected account
-document.title='Mamal · '+D;
+document.title=t('day.title',{date:D});
 async function load(){
-  let x; try{ x=await (await fetch('/day?d='+encodeURIComponent(D)+(ACCT?'&acct='+encodeURIComponent(ACCT):''))).json(); }catch(e){ $('dtitle').textContent='Fehler'; return; }
+  let x; try{ x=await (await fetch('/day?d='+encodeURIComponent(D)+(ACCT?'&acct='+encodeURIComponent(ACCT):''))).json(); }catch(e){ $('dtitle').textContent=t('day.error'); return; }
   $('dtitle').textContent=fmtDay(x.date||D);
   const nv=$('net'); nv.textContent=eur(x.net||0); nv.className='v '+((x.net||0)>0.005?'pos':(x.net||0)<-0.005?'neg':'flat');
   $('k-trades').textContent=x.closes||0; $('k-wins').textContent=x.wins||0; $('k-losses').textContent=x.losses||0; $('k-blocks').textContent=x.blocks||0;
@@ -110,19 +121,19 @@ async function load(){
 
   const rr=x.rules||[];
   $('rhead').style.display=rr.length?'block':'none';
-  $('rules').innerHTML=rr.map(r=>{const m=RULES[r.id]||[r.id,''];
+  $('rules').innerHTML=rr.map(r=>{const m=ruleMeta(r.id);
     return `<div class="rcard"><div class="h"><span class="rid">${esc(r.id)}</span><span class="rn">${esc(m[0])}</span><span class="cnt">${r.count}×</span></div>
       <div class="ex">${esc(m[1])}</div></div>`;}).join('');
 
   const ev=x.events||[];
   const tl=$('tl');
-  if(!ev.length){ tl.innerHTML='<tr><td colspan="5" class="empty">keine Ereignisse an diesem Tag</td></tr>'; return; }
+  if(!ev.length){ tl.innerHTML=`<tr><td colspan="5" class="empty">${esc(t('day.events.empty'))}</td></tr>`; return; }
   tl.innerHTML=ev.map(r=>{const net=Number(r.net)||0;
     const nt=net!==0?`<span class="${net>0?'net-pos':'net-neg'}">${net>0?'+':''}${de(net)}</span>`:'<span style="color:var(--txt3)">—</span>';
     const time=(r.time||'').replace(/^\d{4}\.\d{2}\.\d{2}\s*/,'');
     const sym=r.symbol&&r.symbol!=='-'?r.symbol+(r.dir&&r.dir!=='-'?' '+r.dir:''):'';
     const isMan=(r.event||'').toUpperCase()==='CLOSE_MAN';
-    return `<tr${isMan?' style="background:var(--amber-bg)"':''}><td>${esc(time)}</td><td><span class="badge ${badgeFor(r.event)}">${isMan?'MANUELL':esc(r.event||'')}</span></td><td>${esc(sym)}</td><td>${nt}</td>
+    return `<tr${isMan?' style="background:var(--amber-bg)"':''}><td>${esc(time)}</td><td><span class="badge ${badgeFor(r.event)}">${isMan?esc(t('journal.badge.manual')):esc(r.event||'')}</span></td><td>${esc(sym)}</td><td>${nt}</td>
       <td style="white-space:normal;color:var(--txt2)">${esc((r.tag||'').slice(0,80))}</td></tr>`;}).join('');
 }
 load();
