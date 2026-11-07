@@ -403,7 +403,7 @@
       <div class="gauges" id="gauges"></div>
       <div class="gact">
         <button id="enddayBtn" class="endday">🛑 Tag beenden</button>
-        <span class="gnote">Voluntary self-lock until server midnight — <b>cannot</b> be undone (tighten-only).</span>
+        <span class="gnote" data-i18n="note.selflock">Freiwillige Selbstsperre bis Server-Mitternacht — nicht ruecknehmbar (nur Verschaerfung).</span>
       </div>
     </div>
 
@@ -518,7 +518,20 @@ function applyLang(){
   root.lang = LANG;
   root.dir  = (LANG==='fa') ? 'rtl' : 'ltr';       // Persian runs right to left
   document.querySelectorAll('[data-i18n]').forEach(el=>{
-    const v=t(el.dataset.i18n); if(v) el.textContent=v;
+    const v=t(el.dataset.i18n); if(!v) return;
+    // v0.73-fix: textContent loescht KINDELEMENTE. <h2 data-i18n="h2.equity"> traegt
+    //   <span id="eqCap">, und der war nach jedem Laden weg — applyLang() laeuft beim Start,
+    //   nicht erst beim Sprachwechsel. drawEquity() lief danach in einen TypeError, den sein
+    //   catch verschluckte ("Kurve ist Komfort"): die Beschriftung des Equity-Verlaufs fehlte
+    //   seither stumm, in jeder Sprache. Also nur die TEXTknoten ersetzen.
+    const hasKids=[...el.childNodes].some(n=>n.nodeType===1);
+    if(!hasKids){ el.textContent=v; return; }
+    let done=false;
+    for(const n of [...el.childNodes]){
+      if(n.nodeType!==3) continue;
+      if(!done){ n.nodeValue=v+' '; done=true; } else n.nodeValue='';
+    }
+    if(!done) el.insertBefore(document.createTextNode(v+' '), el.firstChild);
   });
   const ls=$('langSel'); if(ls) ls.value=LANG;
   // Redraw everything so the dynamic texts switch over too
@@ -901,6 +914,22 @@ function parseNum(x){
 }
 function renderOrder(st){
   const q=(st&&st.quotes)||{}, sel=$('oSym');
+  // v0.73-fix: Auf einem Relay (die gehostete Ansicht) wird jeder Befehl abgelehnt — dort liegt
+  //   kein MetaTrader, der die Warteschlange liest. Vorher standen "Kaufen" und "Verkaufen"
+  //   trotzdem voll bedienbar da. Ein Knopf, der nicht handeln KANN, darf nicht aussehen wie
+  //   einer, der es kann: das ist derselbe Fehler wie eine Quittung, die "erledigt" sagt,
+  //   ohne etwas getan zu haben — nur eine Stufe frueher.
+  if(ISRELAY){
+    $('orderCard').style.display='';
+    ['oBuy','oSell','oSym','oSL'].forEach(id=>{ const e=$(id); if(e) e.disabled=true; });
+    $('oQuote').textContent='—';
+    const w=$('oWarn'); w.style.display='';
+    w.textContent='Diese Ansicht ist eine Fernkopie — sie zeigt an, kann aber nichts ausloesen. '
+                 +'Befehle gehen nur am Cockpit neben MetaTrader. Laufen beide auf derselben '
+                 +'Maschine (VPS), ist das dasselbe Fenster.';
+    return;
+  }
+  ['oBuy','oSell','oSym','oSL'].forEach(id=>{ const e=$(id); if(e) e.disabled=false; });
   // Nur Symbole, auf denen wirklich eine EA-Instanz sitzt. Die Marktuebersicht kennt vierzig,
   // zustaendig sind sechs — ein Befehl auf die uebrigen wuerde von niemandem ausgefuehrt.
   const act=(st&&Array.isArray(st.active)&&st.active.length)?st.active:null;
@@ -1101,6 +1130,8 @@ setInterval(paintLock,1000);   // smooth clock between the polls
 
 // ==== v0.39: Puffer-Tacho ====
 let LASTSTATE=null, LASTA=null, CCY='EUR';
+// v0.73-fix: Sitzt diese Seite auf einem Relay? Dann kann KEIN Befehl ausgefuehrt werden.
+let ISRELAY=false;
 function gauge(lab,remainEur,usedPct,limPct,sub){
   const f=(limPct>0&&isFinite(usedPct))?clamp(usedPct/limPct):0;   // v0.39-fix: fehlendes DD-Feld -> 0% statt NaN-CSS
   const col=f>=1?'var(--red)':f>=0.75?'var(--amber)':'var(--green)';
@@ -1299,7 +1330,7 @@ async function tick(){
         $('offlineWhy').textContent=ACCT?('Gewähltes Konto: '+ACCT+' — kein anderes Konto liefert gerade Daten.'):'';
       }
       $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML='<span class="off">● keine Verbindung zu MT4</span>'; failStreak=0; return; }
-    LASTSTATE=j.state;
+    LASTSTATE=j.state; ISRELAY=!!j.relay;
     renderState(j.state,j.ageMs);
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
     renderPositions(j.state); renderOrder(j.state);   // v0.73

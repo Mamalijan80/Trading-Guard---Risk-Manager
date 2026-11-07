@@ -1209,7 +1209,11 @@ function handler(req, res) {
 
   const acct = (u.searchParams.get('acct') || '').replace(/\D/g, '');   // digits only (path injection ruled out)
   // serverPort = the ACTUAL port; state.port is only the EA input InpCockpitPort (display only)
-  if (p === '/state')     return sendJson(res, { ok: true, state: readState(acct), ageMs: stateAgeMs(acct), serverPort: PORT, accounts: accountsList() });
+  // v0.73-fix: relay mitschicken. Auf einem Relay lehnt /cmd/send JEDEN Befehl ab (die Datei
+  //   kaeme in einem Container an, den kein MetaTrader liest). Ohne dieses Kennzeichen hat die
+  //   Oberflaeche davon nichts gewusst und zeigte "Kaufen"/"Verkaufen" voll bedienbar an —
+  //   am Handy der gefaehrlichst aussehende Knopf der Seite, und er konnte nie etwas ausloesen.
+  if (p === '/state')     return sendJson(res, { ok: true, state: readState(acct), ageMs: stateAgeMs(acct), serverPort: PORT, relay: !!RELAY_ROOT, accounts: accountsList() });
   if (p === '/accounts')  return sendJson(res, accountsList());
   // v0.45-fix (Verify): filter FIRST, cap AFTERWARDS. Before, slice(-80) cut into the raw data, so that
   // periodic INFO lines pushed real events out of the cockpit list.
