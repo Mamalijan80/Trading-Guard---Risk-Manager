@@ -1490,8 +1490,19 @@ int CountMarketPos(string sym)
 
 void AckCmd(string id,string status,int ticket,double price,string info)
 {
-   int h=FileOpen(COCKPIT_ACK,FILE_READ|FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE);
-   if(h==INVALID_HANDLE) return;
+   // Mehrere Versuche: das Cockpit liest diese Datei im Sekundentakt, waehrend es auf eine
+   //   Quittung wartet. Scheitert das Oeffnen genau dann, geht die Quittung verloren — und
+   //   das ist der Fehler in die gefaehrliche Richtung: bei einer Eroeffnung meldete der
+   //   Browser "nicht ausgefuehrt", waehrend die Position laengst offen steht. Lieber
+   //   dreimal anklopfen als einmal lautlos aufgeben.
+   int h=INVALID_HANDLE;
+   for(int att=0; att<3 && h==INVALID_HANDLE; att++)
+   {
+      h=FileOpen(COCKPIT_ACK,FILE_READ|FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE);
+      if(h==INVALID_HANDLE) Sleep(50);
+   }
+   if(h==INVALID_HANDLE)
+   { PrintFormat("Mamal: Quittung fuer %s (%s) konnte nicht geschrieben werden (err=%d) — das Cockpit sieht das Ergebnis nicht.",id,status,GetLastError()); return; }
    FileSeek(h,0,SEEK_END);
    FileWriteString(h,StringFormat("%s;%s;%d;%s;%s;%s;%s\r\n",
       id,status,ticket,DoubleToString(price,(int)MarketInfo(Symbol(),MODE_DIGITS)),
