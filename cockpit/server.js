@@ -335,9 +335,13 @@ function accountsList() {
 // ── v0.73: Befehlswarteschlange und Quittungen ─────────────────────────────────────────
 const CMDQ_FILE = 'mamal_cmdq.txt';
 const ACK_FILE  = 'mamal_ack.csv';
-// Der Katalog. sym = braucht ein Symbol, arg = braucht ein Argument (und wie es heisst).
-// Nur risikoSENKENDE Befehle: dieser Kanal kann per Konstruktion nichts lockern, und das ist
-// eine zugesagte Eigenschaft des Werkzeugs, kein Zufall.
+// Der Katalog. sym = braucht ein Symbol, arg = braucht ein Argument (und wie es heisst),
+// opens = eroeffnet eine Position, erhoeht also Risiko.
+//
+// Der Kanal kann KEINE REGEL LOCKERN — das ist eine zugesagte Eigenschaft und kein Zufall.
+// Eroeffnen ist davon unberuehrt: eine Order aus dem Browser laeuft durch dieselbe Funktion
+// wie ein Klick aufs Panel, mit denselben neunzehn Pruefungen davor. Was dort abgelehnt wird,
+// wird auch von hier abgelehnt, mit demselben Grund.
 const CMDS = {
   endday:   { sym: false, arg: '', was: 'Selbstsperre bis Server-Mitternacht' },
   flat:     { sym: false, arg: '', was: 'alle Positionen schliessen' },
@@ -345,6 +349,8 @@ const CMDS = {
   half:     { sym: true,  arg: '', was: 'die Haelfte schliessen' },
   be:       { sym: true,  arg: '', was: 'Stop auf Einstand ziehen' },
   close:    { sym: true,  arg: 'ein Ticket', was: 'ein Ticket schliessen' },
+  buy:      { sym: true,  arg: 'einen Stop-Preis', opens: true, was: 'kaufen' },
+  sell:     { sym: true,  arg: 'einen Stop-Preis', opens: true, was: 'verkaufen' },
 };
 
 function appendCmd(dir, id, cmd, sym, a1, a2) {
@@ -1236,7 +1242,7 @@ function handler(req, res) {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     try { appendCmd(dir, id, cmd, def.sym ? sym : '', a1, a2); }
     catch (e) { return sendJson(res, { ok: false, error: 'Konnte den Befehl nicht ablegen: ' + e.message }); }
-    return sendJson(res, { ok: true, id, cmd, sym: def.sym ? sym : '' });
+    return sendJson(res, { ok: true, id, cmd, sym: def.sym ? sym : '', opens: !!def.opens });
   }
 
   // v0.72: Konto vergessen. POST, damit es nicht aus Versehen ueber einen Link passiert; der

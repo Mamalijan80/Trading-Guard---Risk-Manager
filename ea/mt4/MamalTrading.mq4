@@ -1165,11 +1165,16 @@ string RuleIdFromTag(string tag)   // pull the leading "Rxx" out of the tag (emp
 }
 // v0.17: audit-grade journal — context (time/account/balance/equity/magic/DayKey/RuleId) is filled
 // automatically, ticket/net optional. Header on first write. Call sites stay unchanged.
+string g_lastBlockWhy="";   // v0.73: Grund der zuletzt abgelehnten Order (fuer die Quittung ans Cockpit)
 void Journal(string ev,string sym,string dir,double lot,double entry,double sl,double tp,double riskpct,string tag,int ticket=0,double net=0.0)
 {
    // v0.32 Panel-Spiegel: Versuche (BLOCKED) + Trades (OPEN) zaehlen — geteilt (kontoweit), unabhaengig vom CSV-Journal
    if(ev=="BLOCKED")
    {
+      // v0.73: Der Grund wird gemerkt, damit eine Order aus dem Browser nicht nur "abgelehnt"
+      //   zurueckmeldet, sondern WARUM. Ohne das stuende man vor einem Knopf, der nichts tut,
+      //   und muesste das Journal durchsuchen, um zu erfahren, welche Regel gegriffen hat.
+      g_lastBlockWhy=tag;
       GlobalVariableSet(GV_BLOCKS, GlobalVariableGet(GV_BLOCKS)+1);
       datetime nb=SrvTime(); datetime bl=(datetime)GlobalVariableGet(GV_BLK_LAST);
       double burst = ((nb-bl) < 60) ? GlobalVariableGet(GV_BLK_BURST)+1 : 1;   // rejections in the last 60s window
@@ -1545,6 +1550,26 @@ void ProcessCmdQueue()
             //   einmal und ist weg.
             RequestClose(tk,"Befehl aus dem Cockpit");
             AckCmd(id,"done",tk,OrderOpenPrice(),"zum Schliessen angemeldet");
+         }
+      }
+      else if(cmd=="buy" || cmd=="sell")
+      {
+         double sl=StringToDouble(a1);
+         if(sl<=0) AckCmd(id,"failed",0,0,"kein Stop-Preis angegeben");
+         else
+         {
+            // Erfolg wird am Fuellzaehler abgelesen: Journal("OPEN",...) erhoeht ihn, und das
+            //   passiert genau einmal, nach einem erfolgreichen OrderSend. Scheitert es, hat
+            //   DoEntry den Grund schon in g_lastBlockWhy hinterlegt.
+            g_lastBlockWhy="";
+            double fillsBefore=GlobalVariableGet(GV_FILLS);
+            DoEntry(cmd=="buy",sl);
+            if(GlobalVariableGet(GV_FILLS)>fillsBefore)
+               AckCmd(id,"done",0,sl,StringFormat("%s %s eroeffnet, Stop %s",
+                      (cmd=="buy"?"Kauf":"Verkauf"),Symbol(),
+                      DoubleToString(sl,(int)MarketInfo(Symbol(),MODE_DIGITS))));
+            else
+               AckCmd(id,"failed",0,sl,StringLen(g_lastBlockWhy)>0?g_lastBlockWhy:"abgelehnt — Grund steht im Journal");
          }
       }
       else AckCmd(id,"failed",0,0,"unbekannter Befehl: "+cmd);
@@ -3205,7 +3230,18 @@ double CalcLot(double dist,double &riskPctOut)
    return lot;
 }
 
-void DoEntry(bool isBuy)
+// v0.73: slOverride — der Stop-Preis, wenn die Order NICHT vom Chart kommt.
+//
+// WARUM DIE ORDER AUS DEM BROWSER DURCH GENAU DIESE FUNKTION MUSS: zwischen hier und dem
+// einzigen OrderSend stehen neunzehn Pruefungen. Ein zweiter Weg zum Broker waere ein zweiter
+// Eingang ohne Tuersteher, und das Werkzeug waere seinen Zweck los. Also bekommt der Fernweg
+// genau einen zusaetzlichen Parameter — den Preis, den sonst die weisse Linie auf dem Chart
+// liefert — und laeuft danach Zeile fuer Zeile denselben Weg wie ein Klick aufs Panel.
+//
+// Das Ziel (TP) wird bewusst NICHT uebergeben: es entsteht aus dem Stopabstand und InpRR,
+// wie bisher. Sonst koennte eine Order aus dem Browser das Chance-Risiko-Verhaeltnis
+// unterlaufen, das R8 durchsetzen soll.
+void DoEntry(bool isBuy,double slOverride=0)
 {
    string dir=isBuy?"BUY":"SELL";
    if(!IsTradeAllowed()){ Notify(T("block.autoTradingOff")); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"AutoTrading aus"); return; }
@@ -3228,7 +3264,11 @@ void DoEntry(bool isBuy)
       { int rem=(int)(InpMinGapSec-(SrvTime()-(datetime)lastE)); Notify(TF("block.minGap",IntegerToString(rem))); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"R14 Mindestpause"); return; }
    }
 
-   double slp=SLLinePrice();
+   // Der Stop kommt entweder mitgegeben (Browser) oder von der Linie auf dem Chart (Panel).
+   //   Eine Order aus dem Browser darf die Linie NICHT erben: die kann zwei Tage alt sein, und
+   //   die Positionsgroesse haengt am Stopabstand — sie waere gegen eine falsche Distanz
+   //   gerechnet, und R1 schloesse die Position sofort wieder.
+   double slp=(slOverride>0)?slOverride:SLLinePrice();
    // §07-fix (R11 gaps): these rejection paths used to write NO journal entry — so the "audit-grade" journal was missing
    //   exactly those failed attempts that matter for the discipline statistics.
    if(slp<=0){ Notify(T("block.noSlLine")); Journal("BLOCKED",Symbol(),dir,0,0,0,0,0,"R7 no SL line set"); return; }

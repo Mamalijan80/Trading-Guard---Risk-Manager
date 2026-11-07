@@ -303,7 +303,28 @@
   .cmsg.wait{background:var(--accent-bg);color:var(--accent)}
   .cmsg.good{background:rgba(52,199,89,.12);color:#1d7a33}
   .cmsg.bad{background:rgba(255,59,48,.1);color:var(--crit)}
-  @media(max-width:520px){ .pgrid{grid-template-columns:1fr} }
+  /* ==== v0.73: Neue Position ==== */
+  .ocard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:16px 18px}
+  .orow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+  .ofield{display:flex;flex-direction:column;gap:5px;min-width:150px;flex:1}
+  .ofield label{font:600 10.5px/1 inherit;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3)}
+  .ofield select,.ofield input{font:500 15px/1.2 inherit;padding:10px 12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--bg);color:var(--txt);width:100%;
+    font-variant-numeric:tabular-nums}
+  .ofield input:focus,.ofield select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  .oquote{display:flex;gap:18px;font-variant-numeric:tabular-nums;font-size:13px;color:var(--txt2);
+    margin-top:12px;flex-wrap:wrap}
+  .oquote b{color:var(--txt);font-weight:650}
+  .obtns{display:flex;gap:10px;margin-top:14px}
+  .obtn{flex:1;cursor:pointer;border:0;border-radius:11px;padding:13px;font:700 15px/1 inherit;
+    color:#fff;letter-spacing:-.01em;transition:opacity .12s}
+  .obtn:disabled{opacity:.45;cursor:default}
+  .obtn.buy{background:var(--good)} .obtn.sell{background:var(--crit)}
+  .obtn:hover:not(:disabled){opacity:.88}
+  .onote{margin-top:11px;font-size:12px;color:var(--txt3);line-height:1.5}
+  .owarn{margin-top:11px;font-size:12.5px;color:var(--crit);line-height:1.45;font-weight:600}
+  @media(max-width:520px){ .pgrid{grid-template-columns:1fr} .ofield{min-width:100%} }
   /* ==== v0.39: Multi-Konto-Grid ==== */
   .agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:12px}
   .acard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
@@ -346,9 +367,9 @@
     <!-- v0.72: Zugang verwalten. Bewusst ein Link und keine Schaltflaeche: die Seite liegt
          serverseitig und muss auch erreichbar sein, wenn das Dashboard-Skript nicht laeuft. -->
     <a id="pwBtn" class="hbtn" href="/passwort" style="text-decoration:none"
-       title="Passwort setzen, aendern oder pruefen">🔑</a>
+       title="Passwort setzen, ändern oder prüfen">🔑</a>
     <select id="acctSel" class="chip" style="display:none;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:4px 8px;font:inherit"></select>
-    <button id="acctDel" class="hbtn" style="display:none" title="Dieses Konto aus der Liste entfernen (nur wenn es keine Daten mehr liefert)">🗑</button>
+    <button id="acctDel" class="hbtn" style="display:none" title="Dieses Konto aus der Liste entfernen — nur wenn es keine Daten mehr liefert">🗑</button>
     <span id="chip" class="chip">—</span>
     <div class="eq"><div class="l">KAPITAL</div><div class="v" id="equity">—</div></div>
   </header>
@@ -384,6 +405,29 @@
         <button id="enddayBtn" class="endday">🛑 Tag beenden</button>
         <span class="gnote">Voluntary self-lock until server midnight — <b>cannot</b> be undone (tighten-only).</span>
       </div>
+    </div>
+
+    <h2>Neue Position</h2>
+    <div class="ocard" id="orderCard">
+      <div class="orow">
+        <div class="ofield">
+          <label for="oSym">Symbol</label>
+          <select id="oSym"></select>
+        </div>
+        <div class="ofield">
+          <label for="oSL">Stop-Preis</label>
+          <input id="oSL" type="text" inputmode="decimal" autocomplete="off" placeholder="z. B. 43900,00">
+        </div>
+      </div>
+      <div class="oquote" id="oQuote">—</div>
+      <div class="owarn" id="oWarn" style="display:none"></div>
+      <div class="obtns">
+        <button class="obtn buy"  id="oBuy">Kaufen</button>
+        <button class="obtn sell" id="oSell">Verkaufen</button>
+      </div>
+      <div class="onote">Die <b>Positionsgröße rechnet der EA</b> aus deinem Risiko pro Trade und
+        dem Stopabstand — hier wird nichts gerechnet. Das Ziel entsteht aus dem Stopabstand und
+        deinem CRV. Alle Regeln prüft der EA vor der Ausführung, genau wie beim Klick aufs Panel.</div>
     </div>
 
     <h2>Offene Positionen</h2>
@@ -782,8 +826,8 @@ $('acctSel').addEventListener('change',function(){ ACCT=this.value; localStorage
 $('acctDel').addEventListener('click',async function(){
   const nr=ACCT; if(!nr) return;
   if(!confirm('Konto '+nr+' aus dem Cockpit entfernen?\n\nAuf dem Relay werden die Daten dieses '
-             +'Kontos samt Equity-Verlauf geloescht. Das laesst sich nicht rueckgaengig machen.\n\n'
-             +'Liefert das Konto spaeter wieder, taucht es von selbst wieder auf.')) return;
+             +'Kontos samt Equity-Verlauf gelöscht. Das lässt sich nicht rückgängig machen.\n\n'
+             +'Liefert das Konto später wieder, taucht es von selbst wieder auf.')) return;
   this.disabled=true;
   try{
     const r=await fetch('/cmd/forget?acct='+encodeURIComponent(nr),{method:'POST'});
@@ -843,6 +887,68 @@ function renderPositions(st){
   if(grid.dataset.h!==html){ grid.innerHTML=html; grid.dataset.h=html; }
 }
 
+// ---- Neue Position ----------------------------------------------------------------------
+// Diese Oberflaeche RECHNET NICHT. Sie sammelt Symbol und Stop-Preis und schickt beides; die
+// Groesse, das Ziel und jede Regel bleiben im EA. Was hier gepruft wird, ist nur dazu da,
+// einen offensichtlichen Vertipper abzufangen, BEVOR er als abgelehnte Order im Journal steht.
+function parseNum(x){
+  const t=String(x||'').trim().replace(/\s/g,'').replace(',','.');
+  if(!/^-?\d*\.?\d+$/.test(t)) return NaN;
+  return parseFloat(t);
+}
+function renderOrder(st){
+  const q=(st&&st.quotes)||{}, sel=$('oSym');
+  const syms=Object.keys(q).sort();
+  if(!syms.length){ $('orderCard').style.display='none'; return; }
+  $('orderCard').style.display='';
+  const want=syms.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+  if(sel.dataset.h!==want){
+    const keep=sel.value;
+    sel.innerHTML=want; sel.dataset.h=want;
+    // Vorauswahl: das Symbol des Charts, auf dem der Master sitzt — das ist das, was der
+    //   Nutzer gerade vor Augen hat.
+    sel.value=(keep&&q[keep])?keep:((st&&q[st.symbol])?st.symbol:syms[0]);
+  }
+  paintQuote(st);
+}
+function paintQuote(st){
+  const q=(st&&st.quotes)||{}, sy=$('oSym').value, d=q[sy];
+  const box=$('oQuote'), warn=$('oWarn');
+  if(!d){ box.textContent='—'; warn.style.display='none'; return; }
+  box.innerHTML='Geld <b>'+esc(fmtPrice(d.bid,d.dg))+'</b>'
+              +'<span>Brief <b>'+esc(fmtPrice(d.ask,d.dg))+'</b></span>'
+              +'<span>Spread <b>'+esc(((d.ask-d.bid)/(d.pt||1)).toFixed(0))+'</b> Punkte</span>';
+  const sl=parseNum($('oSL').value);
+  if(isNaN(sl)||sl<=0){ warn.style.display='none'; return; }
+  // Auf welcher Seite der Stop steht, entscheidet die Richtung — beide koennen nicht gleich-
+  //   zeitig gelten, also wird nur gewarnt, wenn er zu KEINER passt.
+  const okBuy=sl<d.bid, okSell=sl>d.ask;
+  const dist=Math.min(Math.abs(d.ask-sl),Math.abs(sl-d.bid))/(d.pt||1);
+  if(!okBuy&&!okSell){
+    warn.style.display=''; warn.textContent='Dieser Stop liegt mitten im Spread — er passt weder zu Kaufen noch zu Verkaufen.';
+  } else if(d.stp>0 && dist<d.stp){
+    warn.style.display=''; warn.textContent='Nur '+dist.toFixed(0)+' Punkte Abstand — der Broker verlangt mindestens '+d.stp+'. Der EA würde ablehnen.';
+  } else { warn.style.display='none'; }
+}
+$('oSym').addEventListener('change',()=>paintQuote(LASTSTATE));
+$('oSL').addEventListener('input',()=>paintQuote(LASTSTATE));
+function placeOrder(isBuy){
+  const sy=$('oSym').value, sl=parseNum($('oSL').value);
+  const q=(LASTSTATE&&LASTSTATE.quotes)||{}, d=q[sy];
+  if(!sy||!d){ cmdMsg('bad','Kein Kurs für dieses Symbol.'); return; }
+  if(isNaN(sl)||sl<=0){ cmdMsg('bad','Bitte einen Stop-Preis eintragen.'); return; }
+  if(isBuy && sl>=d.bid){ cmdMsg('bad','Für einen Kauf muss der Stop UNTER dem Kurs liegen.'); return; }
+  if(!isBuy && sl<=d.ask){ cmdMsg('bad','Für einen Verkauf muss der Stop ÜBER dem Kurs liegen.'); return; }
+  const dir=isBuy?'Kaufen':'Verkaufen';
+  // Die Rueckfrage nennt alles, was die Order ausmacht. Ein "Wirklich?" ohne Zahlen ist beim
+  //   zweiten Mal nur noch ein Klick.
+  if(!confirm(dir+' '+sy+'\n\nStop-Preis: '+fmtPrice(sl,d.dg)+'\nKurs jetzt: '+fmtPrice(isBuy?d.ask:d.bid,d.dg)
+             +'\n\nDie Größe rechnet der EA aus deinem Risiko. Alle Regeln werden vorher geprüft.')) return;
+  sendCmd(isBuy?'buy':'sell',sy,String(sl),dir+' '+sy);
+}
+$('oBuy').addEventListener('click',()=>placeOrder(true));
+$('oSell').addEventListener('click',()=>placeOrder(false));
+
 // Einen Befehl absetzen und seinen Weg verfolgen. Drei Zustaende, und der letzte nennt immer
 // einen Grund — auch wenn er "abgelehnt" lautet. Ein Knopf, der stumm nichts tut, ist in
 // einem Risikowerkzeug der schlimmste Fehler, den es gibt.
@@ -851,7 +957,7 @@ function cmdMsg(kind,text){ $('cmdMsg').innerHTML='<div class="cmsg '+kind+'">'+
 async function sendCmd(cmd,sym,a1,label){
   if(CMDBUSY) return;
   CMDBUSY=true;
-  document.querySelectorAll('.pbtn,.endday').forEach(b=>b.disabled=true);
+  document.querySelectorAll('.pbtn,.endday,.obtn').forEach(b=>b.disabled=true);
   try{
     cmdMsg('wait',label+' — wird abgesetzt…');
     const qs='acct='+encodeURIComponent(ACCT||'')+'&cmd='+encodeURIComponent(cmd)
@@ -872,7 +978,7 @@ async function sendCmd(cmd,sym,a1,label){
     }
     cmdMsg('bad',label+' — keine Rückmeldung vom Terminal. Läuft MetaTrader, und ist der EA aktiv?');
   }catch(e){ cmdMsg('bad',label+' — Fehler: '+e.message); }
-  finally{ CMDBUSY=false; document.querySelectorAll('.pbtn,.endday').forEach(b=>b.disabled=false); }
+  finally{ CMDBUSY=false; document.querySelectorAll('.pbtn,.endday,.obtn').forEach(b=>b.disabled=false); }
 }
 $('posGrid').addEventListener('click',function(ev){
   const b=ev.target.closest('.pbtn'); if(!b) return;
@@ -1175,7 +1281,7 @@ async function tick(){
     LASTSTATE=j.state;
     renderState(j.state,j.ageMs);
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
-    renderPositions(j.state);   // v0.73
+    renderPositions(j.state); renderOrder(j.state);   // v0.73
     LOCK=buildLock(j.state); paintLock();   // v0.46: Sperr-Monitor mit jedem Poll neu synchronisieren
     const age=j.ageMs==null?9e9:j.ageMs; const cls=age<6000?'live':age<20000?'stale':'off'; const txt=age<6000?'live':age<20000?'delayed':'MT4 stopped?';
     // Show the real server port (j.serverPort); state.port is only the EA input InpCockpitPort.
