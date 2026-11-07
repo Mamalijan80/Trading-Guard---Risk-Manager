@@ -570,33 +570,28 @@ const eur = v => (v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{mini
 const ESCMAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ESCMAP[c]);
 
-const RULES = {
-  R1:['Risiko / Trade','fester %-Satz pro Trade'], R2:['Idee-Cap','eine Idee = ein Budget, kein Nachladen'],
-  R3:['Tagesbudget','max. risk you may open per day'], R4:['Tagesverlust','Tages-Verlust-Sperre'],
-  R4b:['Max-Verlust','harte Gesamt-Verlust-Grenze'], R5:['Cooldown','Zwangspause nach Verlusten'],
-  R6:['Verlustserie','Sperre nach N Verlusten in Folge'], R7:['SL/TP-Pflicht','Trade ohne SL/TP wird geschlossen'],
-  R8:['Mindest-CRV','zu wenig Chance/Risiko'], R9:['Anti-FOMO','Pre-Trade-Gate gegen Impuls-Einstiege'],
-  R12:['Gesamtrisiko','zu viel gleichzeitiges Risiko offen'],
-  R13:['Tagesziel','Gewinn sichern bei Ziel'], R14:['Mindestpause','zu schnelle Folge-Trades'],
-  R15:['Min-SL-Abstand','Stop zu eng am Preis'], R16:['Session/News','outside trading hours'],
-  R17:['Korrelation','too much of the same currency'], R18:['Wochenlimit','Wochen-Verlust-Deckel'],
-  R19:['De-Risk','Risiko runter nach Verlusten'], R25:['Revenge','Gegen-Trade direkt nach Verlust'],
-  R22:['Nur Panel-Trades','opened manually/on phone — will be reverted']
-};
-const INSIGHT = {
-  R3:'You want to trade more often than your daily budget allows — once the limit is hit, you are done for the day.',
-  R15:'Du setzt den Stop-Loss oft zu eng. (Diese Regel ist inzwischen ausgeschaltet.)',
-  R12:'Du hast oft zu viel Risiko gleichzeitig offen — weniger parallele Trades.',
-  R2:'You keep adding to the same idea instead of leaving one position alone.',
-  R6:'Verlustserien — halte die Pausen ein, statt weiterzumachen.',
-  R5:'After losses you push straight on — the cooldown pause is there to cool off.',
-  R22:'You trade past the panel (manually/on phone). These trades bypass all rules and get reverted — but the trade fills for real first, so spread and slippage stay your loss.',
-  R25:'Rache-Trades direkt nach einem Verlust.', R14:'Du feuerst Trades zu schnell hintereinander ab.',
-  R8:'You take trades with too little reward relative to the risk.',
-  R17:'You pile up too much of the same currency.', R4:'Tagesverlust-Grenze erreicht.', R18:'Wochen-Verlust-Grenze.'
-};
-const MONTHS = ['Januar','Februar','Mar','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-const DOW = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+// v0.73-fix: Diese vier Tabellen standen fest im Code -- und zwar GEMISCHT
+//   deutsch und englisch. R3 ("max. risk you may open per day"), R16, R17 und
+//   R22 waren englisch, der Rest deutsch; bei INSIGHT dasselbe Bild. Beide
+//   Sprachen zugleich in einer Oberflaeche. MONTHS trug ausserdem 'Mar' statt
+//   'Maerz' -- der Maerz stand im Kalender also verstuemmelt da.
+//   Alle Texte lagen die ganze Zeit in der Tabelle: rules.<id>.name/.sub,
+//   insight.<id>, calendar.months, calendar.dow, vollstaendig in de/en/fa.
+//
+//   Sie sind jetzt FUNKTIONEN, nicht const. Als const waeren sie beim ersten
+//   Laden in der damaligen Sprache eingefroren und haetten beim Umschalten
+//   nicht mitgewechselt -- applyLang() zeichnet alles neu, also sieht jede
+//   dieser Funktionen beim Zeichnen frisch nach.
+//
+//   Der Schluessel wird hier ZUSAMMENGEBAUT ('rules.'+id+'.name'). Eine Luecke
+//   zeigt sich darum nicht als Absturz, sondern STUMM: t() faellt auf Deutsch
+//   zurueck und erst dann auf den Ersatzwert. Genau deshalb prueft
+//   `python i18ncheck.py` die zusammengebauten Schluessel gegen die Tabelle --
+//   im Browser waere die Luecke nicht zu sehen.
+const ruleMeta = id => [ t('rules.'+id+'.name') || id, t('rules.'+id+'.sub') || '' ];
+const ruleInsight = id => t('insight.'+id) || '';
+const months = () => t('calendar.months').split(',');
+const dowNames = () => t('calendar.dow').split(',');
 
 function lossCls(f){ return f>=1?'r':f>=0.8?'a':f>=0.5?'a':'g'; }
 function lossBg(f){ return f>=1?'bg-r':f>=0.8?'bg-a':f>=0.5?'bg-a':'bg-g'; }
@@ -686,7 +681,7 @@ function renderState(s,ageMs){
   c.push(info('R7','SL/TP-Pflicht','Jeder Trade braucht Stop-Loss und Take-Profit.','immer an'));
   $('rules').innerHTML=c.join('');
 
-  const off=(s.disabled||[]).map(x=>{const k=String(x).replace('R15min','R15'); const nm=(RULES[k]||['',''])[0];
+  const off=(s.disabled||[]).map(x=>{const k=String(x).replace('R15min','R15'); const nm=ruleMeta(k)[0];
     return `<span class="off-chip"><b>${esc(String(x).replace('R15min','R15·MinSL'))}</b> ${esc(nm)} — aus</span>`;});
   $('off').innerHTML=off.join(''); $('offHead').style.display=off.length?'block':'none';
   $('content').style.display='block'; $('offline').style.display='none';
@@ -730,22 +725,27 @@ function renderCoach(a){
   for(let h=0;h<24;h++){ const c=bh[h]||0;
     const bg=c===0?'var(--line2)':RAMP[Math.min(RAMP.length-1,Math.ceil(c/mx*RAMP.length)-1)];
     const dark=c>0 && c/mx>0.55;
-    strip+=`<div class="hc ${h===hotH&&hotV>0?'hot':''}" style="background:${bg}" title="${h}:00 Uhr — ${c} Ablehnungen"><span class="hh"${dark?' style="color:#fff"':''}>${h}</span></div>`; }
+    strip+=`<div class="hc ${h===hotH&&hotV>0?'hot':''}" style="background:${bg}" title="${esc(t('hours.cell.title',{h:h,n:c}))}"><span class="hh"${dark?' style="color:#fff"':''}>${h}</span></div>`; }
   $('hourStrip').innerHTML=strip;
+  // Stand englisch in der deutschen Oberflaeche, obwohl beide Saetze deutsch
+  //   in der Tabelle liegen und niemand sie abrief.
   $('hourCap').innerHTML= hotH>=0&&hotV>0
-    ? `Deine meisten Ablehnungen: <b>${hotH}:00 Uhr (${hotV}×)</b> — dann klickst du am impulsivsten. Dieses Fenster bewusst meiden.`
-    : 'No conspicuous rejection times yet.';
+    ? t('hours.caption',{h:hotH,n:hotV})
+    : esc(t('hours.caption.empty'));
 }
 const rankColor = i => i===0?'#dc2626':i===1?'#ea7317':i===2?'#d99a06':'#2563eb';
 function renderWeak(a){
   const rules=a.rules||[];
-  if(!rules.length){ $('weakLead').textContent='Noch keine Regel-Eingriffe aufgezeichnet — sauber.'; $('weakBars').innerHTML=''; return; }
-  const top=rules[0], topName=(RULES[top.id]||[top.id])[0];
-  $('weakLead').innerHTML=`Your most frequent brake: <b>${esc(top.id)} · ${esc(topName)}</b> (${top.count}×). ${INSIGHT[top.id]||''}`;
+  if(!rules.length){ $('weakLead').textContent=t('weak.empty'); $('weakBars').innerHTML=''; return; }
+  const top=rules[0], topName=ruleMeta(top.id)[0];
+  // weak.lead benutzt noch die gezaehlten Platzhalter {0}{1}{2} -- t() ersetzt
+  //   stur jedes {k}, die Benennung ist ihm gleich.
+  $('weakLead').innerHTML=t('weak.lead',{0:esc(top.id),1:esc(topName),2:top.count})
+    +' '+esc(ruleInsight(top.id));
   const max=rules[0].count;
   $('weakBars').innerHTML=rules.map((r,i)=>{
-    const meta=RULES[r.id]||[r.id,'']; const w=Math.max(4,Math.round(r.count/max*100));
-    const parts=[]; if(r.blocked)parts.push(r.blocked+'× am Einstieg blockiert'); if(r.closed)parts.push(r.closed+'× Trade geschlossen');
+    const meta=ruleMeta(r.id); const w=Math.max(4,Math.round(r.count/max*100));
+    const parts=[]; if(r.blocked)parts.push(t('weak.blocked',{n:r.blocked})); if(r.closed)parts.push(t('weak.closed',{n:r.closed}));
     return `<div class="wrow"><div class="nm"><span class="rankdot" style="background:${rankColor(i)}">${i+1}</span>${esc(r.id)} · ${esc(meta[0])}
       <small>${esc(parts.join(' · ')||meta[1])}</small></div>
       <div class="wtrack"><i style="width:${w}%;background:${rankColor(i)}"></i></div>
@@ -783,8 +783,8 @@ function renderCalendar(a){
       cells+=`<div class="cell act ${cls}${wknd}" onclick="openDay('${key}')"><div class="d">${d}</div>
         <div class="n">${nt}</div>${bb}${mm2}</div>`;
     }
-    blocks.push(`<div class="month"><h3>${MONTHS[mm-1]} ${yy}</h3>
-      <div class="cal">${DOW.map(x=>`<div class="dow">${x}</div>`).join('')}${cells}</div></div>`);
+    blocks.push(`<div class="month"><h3>${esc(months()[mm-1]||mm)} ${yy}</h3>
+      <div class="cal">${dowNames().map(x=>`<div class="dow">${esc(x)}</div>`).join('')}${cells}</div></div>`);
   }
   $('months').innerHTML=blocks.join('');
 }
