@@ -261,6 +261,7 @@ extern double InpRiskMaxPct          = 1.00;  // upper limit the selector allows
 #define COCKPIT_CMDQ     "mamal_cmdq.txt"               // v0.73: Warteschlange, eine Zeile je Befehl (nur das Cockpit schreibt)
 #define COCKPIT_ACK      "mamal_ack.csv"                // v0.73: Quittungen (nur der EA schreibt)
 #define GV_CMD_PREFIX    "RG_CMD_"                      // v0.73: erledigte Befehls-IDs, ueberleben Neustart und Recompile
+#define GV_SYM_PREFIX    "RG_SYM_"                      // v0.73: welche Symbole eine lebende Instanz haben
 #define LOCKSALT         "MMT-ls-7731"                  // HMAC-light salt for the lockstate checksum
 
 double g_initialBalance = 0;
@@ -1391,6 +1392,19 @@ void WriteCockpit()
       nq++;
    }
 
+   // Symbole mit einer lebenden Instanz (Meldung juenger als 60 s). Nur auf diesen kann ein
+   //   Befehl ueberhaupt ausgefuehrt werden.
+   string act=""; int na=0;
+   for(int gi=GlobalVariablesTotal()-1; gi>=0 && na<20; gi--)
+   {
+      string gn=GlobalVariableName(gi);
+      if(StringFind(gn,GV_SYM_PREFIX)!=0) continue;
+      if(TimeLocal()-(datetime)GlobalVariableGet(gn)>60) continue;     // Instanz ist weg
+      if(na>0) act=act+",";
+      act=act+"\""+StringSubstr(gn,StringLen(GV_SYM_PREFIX))+"\"";
+      na++;
+   }
+
    string j="{";
    j=j+StringFormat("\"v\":\"%s\",\"srvtime\":\"%s\",", EA_VER, TimeToString(SrvTime(),TIME_DATE|TIME_MINUTES|TIME_SECONDS));
    j=j+StringFormat("\"account\":\"%s\",\"symbol\":\"%s\",\"tf\":\"%s\",\"port\":%d,\"profile\":\"%s\",\"funded\":%s,", IntegerToString(AccountNumber()), Symbol(), PeriodStr(), InpCockpitPort, PropFirmName(InpPropFirm), JB(InpFundedMode));   // v0.37: Kontonummer (String, ueberlauf-sicher) -> Dashboard zeigt, WELCHES Konto (bei mehreren Terminals)
@@ -1410,7 +1424,7 @@ void WriteCockpit()
    j=j+StringFormat("\"disabled\":[%s],", dis);
    // Zuletzt, weil es die beiden laengsten Felder sind: wer die Datei von Hand liest, hat die
    //   Risikowerte dann schon vor Augen.
-   j=j+StringFormat("\"posCount\":%d,\"pos\":[%s],\"quotes\":{%s}", npos, pos, qts);
+   j=j+StringFormat("\"posCount\":%d,\"active\":[%s],\"pos\":[%s],\"quotes\":{%s}", npos, act, pos, qts);
    j=j+"}";
 
    int h=FileOpen(COCKPIT_TMP,FILE_WRITE|FILE_TXT|FILE_ANSI);
@@ -1459,6 +1473,21 @@ void WriteCockpit()
 //    GBPJPY getroffen. Symbollose Befehle (endday, alles flat) macht nur der Master.
 string CmdKey(string id){ return GV_CMD_PREFIX+id; }
 
+// Offene Marktpositionen zaehlen, wahlweise nur fuer ein Symbol. Dient einzig dazu, eine
+// Quittung auf ein ERGEBNIS zu stuetzen statt auf eine Absicht.
+int CountMarketPos(string sym)
+{
+   int n=0;
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      if(!OrderSelect(i,SELECT_BY_POS,MODE_TRADES)) continue;
+      if(OrderType()>OP_SELL) continue;
+      if(StringLen(sym)>0 && OrderSymbol()!=sym) continue;
+      n++;
+   }
+   return n;
+}
+
 void AckCmd(string id,string status,int ticket,double price,string info)
 {
    int h=FileOpen(COCKPIT_ACK,FILE_READ|FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE);
@@ -1504,8 +1533,18 @@ void ProcessCmdQueue()
 
       // Zustaendigkeit. Wer nicht zustaendig ist, vermerkt NICHTS und quittiert NICHTS —
       //   sonst haelt die erste Instanz, die vorbeikommt, den Befehl fuer erledigt.
-      if(StringLen(sym)>0){ if(sym!=Symbol()) continue; }
-      else               { if(!isMaster) continue; }
+      //
+      // v0.73-fix: "close" gehoert zum MASTER, obwohl ein Symbol dabeisteht. Grund: es legt das
+      // Ticket mit RequestClose() in die Schliess-Warteschlange, und die ist ein instanzLOKALES
+      // Array, das nur im Master-Pfad geleert wird (ProcessCloseQueue). Haette eine passive
+      // Instanz den Befehl ausgefuehrt, waere das Ticket in einer Schlange gelandet, die nie
+      // jemand abarbeitet — quittiert mit "erledigt", und die Position stuende weiter offen.
+      // Genau die Sorte Luege, gegen die dieser ganze Kanal gebaut ist.
+      // Das Symbol bleibt trotzdem in der Zeile: die Quittung und das Protokoll nennen es.
+      bool masterOnly=(cmd=="endday" || cmd=="flat" || cmd=="close");
+      if(masterOnly)              { if(!isMaster) continue; }
+      else if(StringLen(sym)>0)   { if(sym!=Symbol()) continue; }
+      else                        { if(!isMaster) continue; }
 
       if(GlobalVariableCheck(CmdKey(id))) continue;    // schon erledigt
       handled++;
@@ -1551,10 +1590,29 @@ void ProcessCmdQueue()
          }
          else AckCmd(id,"done",0,0,"Sperre lief bereits mindestens so lange");
       }
-      else if(cmd=="flat")        { PanelClose(false,false); AckCmd(id,"done",0,0,"alle Positionen zum Schliessen angemeldet"); }
-      else if(cmd=="closesym")    { PanelClose(true,false);  AckCmd(id,"done",0,0,"Positionen in "+Symbol()+" angemeldet"); }
-      else if(cmd=="half")        { PanelClose(true,true);   AckCmd(id,"done",0,0,"Haelfte in "+Symbol()+" angemeldet"); }
-      else if(cmd=="be")          { PanelBreakEven(true);    AckCmd(id,"done",0,0,"Break-even in "+Symbol()+" versucht"); }
+      // v0.73-fix: PanelClose und PanelBreakEven steigen bei belegtem Handelskontext SOFORT und
+      //   wirkungslos aus. Vorher wurde danach bedingungslos "erledigt" quittiert — der Nutzer
+      //   haette geglaubt, er sei flat, und waere es nicht gewesen. Also vorher fragen, und
+      //   hinterher nachzaehlen, statt eine Absicht fuer ein Ergebnis zu halten.
+      else if(cmd=="flat" || cmd=="closesym" || cmd=="half" || cmd=="be")
+      {
+         if(IsTradeContextBusy())
+         { AckCmd(id,"failed",0,0,"Handelskontext belegt — nichts ausgefuehrt, bitte gleich noch einmal");
+           GlobalVariableDel(CmdKey(id)); g_gvDirty=true; continue; }   // darf erneut versucht werden
+         bool chartOnly=(cmd!="flat");
+         int before=CountMarketPos(chartOnly?Symbol():"");
+         if(cmd=="be") PanelBreakEven(true);
+         else          PanelClose(chartOnly, cmd=="half");
+         int after=CountMarketPos(chartOnly?Symbol():"");
+         if(cmd=="be")
+            AckCmd(id,"done",0,0,"Break-even in "+Symbol()+" versucht — Ergebnis steht im Journal");
+         else if(before==0)
+            AckCmd(id,"done",0,0,"es war nichts offen");
+         else if(after<before)
+            AckCmd(id,"done",0,0,StringFormat("%d von %d Positionen geschlossen",before-after,before));
+         else
+            AckCmd(id,"failed",0,0,StringFormat("nichts geschlossen (%d weiterhin offen) — Grund steht im Journal",after));
+      }
       else if(cmd=="close")
       {
          int tk=(int)StringToInteger(a1);
@@ -2597,6 +2655,13 @@ void Cycle()
    }
    // v0.73: VOR dem Master-Tor, weil symbolgebundene Befehle die Instanz mit DIESEM Symbol
    //   ausfuehren muss — der Master sitzt auf irgendeinem der sechs Charts.
+   // v0.73: Diese Instanz meldet, dass sie da ist und welches Symbol sie bedient. Ohne das
+   //   bietet die Oberflaeche alle vierzig Symbole der Marktuebersicht an, aber nur sechs
+   //   haben eine Instanz — eine Order auf die uebrigen waere von niemandem zustaendig,
+   //   wuerde nie quittiert und liefe nach zwei Minuten ins Leere. Der Nutzer saehe nur
+   //   einen Knopf, der nichts tut.
+   GlobalVariableSet(GV_SYM_PREFIX+Symbol(),(double)TimeLocal()); g_gvDirty=true;
+
    ProcessCmdQueue();
    static uint s_cmdPruneMs=0;
    if(GetTickCount()-s_cmdPruneMs>=3600000){ s_cmdPruneMs=GetTickCount(); PruneCmdMarks(); }

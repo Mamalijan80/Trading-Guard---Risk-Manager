@@ -901,7 +901,10 @@ function parseNum(x){
 }
 function renderOrder(st){
   const q=(st&&st.quotes)||{}, sel=$('oSym');
-  const syms=Object.keys(q).sort();
+  // Nur Symbole, auf denen wirklich eine EA-Instanz sitzt. Die Marktuebersicht kennt vierzig,
+  // zustaendig sind sechs — ein Befehl auf die uebrigen wuerde von niemandem ausgefuehrt.
+  const act=(st&&Array.isArray(st.active)&&st.active.length)?st.active:null;
+  const syms=Object.keys(q).filter(x=>!act||act.indexOf(x)>=0).sort();
   if(!syms.length){ $('orderCard').style.display='none'; return; }
   $('orderCard').style.display='';
   const want=syms.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');

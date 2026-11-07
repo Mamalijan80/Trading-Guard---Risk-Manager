@@ -1285,6 +1285,12 @@ function handler(req, res) {
       if (Object.keys(q).length && !q[sym])
         return sendJson(res, { ok: false, error: 'Der EA kennt das Symbol ' + sym
           + ' nicht (nicht in der Marktuebersicht). Bekannt sind: ' + Object.keys(q).slice(0, 12).join(', ') });
+      // Und sitzt dort eine Instanz? Ohne eine waere niemand zustaendig: der Befehl laege bis
+      //   zum Verfall in der Datei und wuerde nie quittiert.
+      const act = Array.isArray(st.active) ? st.active : null;
+      if (act && act.length && act.indexOf(sym) < 0)
+        return sendJson(res, { ok: false, error: 'Auf ' + sym + ' laeuft keine EA-Instanz. '
+          + 'Befehle gehen nur an Charts mit dem EA: ' + act.join(', ') });
     }
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
