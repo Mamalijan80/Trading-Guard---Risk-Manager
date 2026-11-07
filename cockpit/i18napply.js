@@ -97,6 +97,17 @@ function applyI18n() {
 // Die Regelnamen zentral, damit trade/day/report nicht je eine eigene
 //   Namensliste fuehren. report.html hatte eine -- und die wich schon ab
 //   ("Risiko/Trade" gegen "Risiko / Trade").
+// v0.73: Ein Zahlengebilde gegen den Bidi-Algorithmus abschirmen.
+//   U+2066 (Left-to-Right Isolate) und U+2069 (Pop Directional Isolate) sind
+//   unsichtbar und in einem LTR-Text wirkungslos. In einem RTL-Absatz zwingen
+//   sie den eingeschlossenen Text in die richtige Reihenfolge. Noetig ueberall
+//   dort, wo zwei Zahlengruppen nur durch ein neutrales Zeichen getrennt sind
+//   ("0 / 2", "2026.10.30 - 2026.11.06", "21:52:31") - ohne das kippt die
+//   Reihenfolge und aus 5 Siegen werden 5 Niederlagen.
+//   Fuer ganze Elemente ist die CSS-Regel html[dir="rtl"] .num das Mittel der
+//   Wahl; diese Funktion ist fuer Text, der in einen Satz eingesetzt wird.
+const ltr = s => '\u2066' + s + '\u2069';
+
 function ruleName(id) { return t('rules.' + id + '.name') || id; }
 
 document.addEventListener('DOMContentLoaded', applyI18n);

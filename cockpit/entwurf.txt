@@ -1,0 +1,62 @@
+KURZFASSUNG:
+Deine erste Funktion ist schon fertig: Konten vergessen gibt es als POST /cmd/forget mit Papierkorb-Knopf und Rückfrage (cockpit/server.js:1132-1170, cockpit/dashboard.html:732-749), committed in HEAD 158bd18 und auf origin/main gepusht — da ist nichts zu bauen, nur zu testen. Der eigentliche Befund ist ein anderer: der Knopf "Tag beenden" meldet am Handy Erfolg und bewirkt auf der gehosteten Instanz nichts, weil /cmd/endday die Datei in den Railway-Container schreibt (server.js:1184) und der Push-Agent ausschliesslich sendet, nie abholt (server.js:1255-1298). Deshalb beginnt der Plan damit, diese Lüge zu beseitigen, und baut danach den fehlenden Rückweg mit Quittung. Erst dann zieht das Cockpit auf eine Hetzner-CX23 (5,99 EUR netto / ca. 7,13 EUR brutto im Monat, Standort Falkenstein oder Nürnberg) — MT4 bleibt zunächst auf deinem Windows-PC. "Vom Handy handeln" liefert dir Schritt 4 ohne eine Zeile EA-Code: Fernzugriff auf dein echtes Panel, bei dem alle 19 Gates in DoEntry greifen (MamalTrading.mq4:3019-3094). Positionen aus dem Browser eröffnen steht ganz am Ende und erst nach einer schriftlichen FTMO-Antwort, weil der Befehlskanal heute per Konstruktion nur verschärfen kann (MamalTrading.mq4:253) und ein gestohlenes Cookie 14 Tage gilt (cockpit/auth.js:35).
+
+SCHRITTE:
+1. [klein] Die Lüge am Handy abschalten und das Löschen testen
+   Zwei kleine Dinge an einem Abend. Erstens: Konto vergessen ausprobieren. Der Knopf erscheint nur bei einem Konto, das seit 10 Minuten nichts geliefert hat (dashboard.html:728, LIVE_MS in server.js:348) — abgelaufene FTMO-Challenge also nach einer Viertelstunde. Liefert es noch, kommt eine Begründung
+   blockiert: -
+2. [klein] Hetzner CX23 statt Railway — nur das Cockpit
+   Reine Konfiguration, kein neuer Code: die Variablen stehen in cockpit/REMOTE-ACCESS.md:117-125. Node ist abhängigkeitsfrei, also genügt die Node-Runtime. MAMAL_FILES_ROOT und MAMAL_DATA_DIR auf eigene Verzeichnisse, Volume-Frage entfällt, weil die Platte dir gehört. Standort Falkenstein oder Nürnber
+   blockiert: Alle Hetzner-Cloud-Produktseiten zeigten am 07.11.2026 bei jedem Tarif 'This product is currently unavailable' (hetzner.com/cloud/cost-optimized/). Ob ausverkauft oder Darstellungsartefakt ohne angemeldetes Projekt, weiss ich nicht — in der Console prüfen, bevor du einen Termin planst.
+3. [mittel] Der Rückweg: Agent holt Befehle ab, mit Quittung
+   Das ist die eigentliche Baustelle für 'aus dem Web'. Heute fliesst alles nur in eine Richtung: startPushLoop macht ausschliesslich postJson und liest aus der Antwort nur reply.hasJournal (server.js:1255-1298). Gebraucht wird ein GET /cmd/pending am Relay, das der Agent im 2-Sekunden-Takt mit demselb
+   blockiert: -
+4. [klein] Fernzugriff auf den PC — hier kommt das Handeln vom Handy
+   Tailscale auf den Windows-PC und aufs Handy, dann RDP oder noVNC. Null Zeilen EA-Code, null Zeilen Server-Code, und du klickst dein echtes Panel: BUY/SELL laufen über GateClick (MamalTrading.mq4:710-711) in DoEntry, wo 19 Gates vor dem einzigen OrderSend stehen — AutoTrading, IsLocked, BaseWarn, R23
+   blockiert: -
+5. [mittel] Risikosenkende Knöpfe über den geprüften Kanal
+   Jetzt, wo der Kanal eine Quittung hat, kommen 'Flat jetzt' und 'Ticket schliessen' dazu. Beide existieren im EA schon als Panel-Funktion: PanelClose(false,false) schliesst kontoweit, PanelClose(true,false) nur das Chart, und beide laufen bewusst auch unter Sperre, weil sie Risiko ausschliesslich abb
+   blockiert: Schritt 3 muss stehen und ein paar Tage gelaufen sein.
+6. [klein] Export vor dem Vergessen, und drei veraltete Stellen geradeziehen
+   Ein Abend Aufräumen. Erstens ein Export-Knopf vor /cmd/forget: im Relay-Modus löscht fs.rmSync das Kontoverzeichnis rekursiv und danach die Equity-Datei (server.js:1152-1156). Journal und Zustand liegen im Original weiter auf dem PC, die Equity-Reihe nicht — sie wird am Relay aus den laufenden Konte
+   blockiert: -
+7. [klein] Nur falls MT4 wirklich umziehen soll: Windows klären, nicht Wine
+   Ein Abend Recherche und Bestellvorgang, kein Code. Hetzner Cloud bietet Windows nicht als Image an: Installation per Hand über ein eigenes ISO, keinerlei Support, auf Arm64 (CAX) gar nicht, und die Lizenzfrage schreibt Hetzner ausdrücklich dir zu (docs.hetzner.com/cloud/servers/windows-on-cloud/ und
+   blockiert: Die Antwort auf Entscheidung 1. Fällt sie auf 'MT4 bleibt am PC', entfällt dieser Schritt ganz.
+8. [gross] Erst zuletzt: Positionen aus dem Browser eröffnen
+   Nicht vor einer schriftlichen FTMO-Antwort und nicht vor Wochen Betrieb von Schritt 5. Was dann zwingend dazugehört, alles aus belegten Befunden: (a) Symbol-Routing — die Befehlsdatei liest nur die Master-Instanz, weil der Block hinter dem return des Nicht-Master-Zweigs liegt (MamalTrading.mq4:2399 
+   blockiert: Schriftliche FTMO-Antwort zu Entscheidung 4, plus Schritt 5 mehrere Wochen im Betrieb.
+
+ENTSCHEIDUNGEN:
+- Wo läuft MetaTrader 4 künftig? Daran hängt die gesamte Architektur des Befehlskanals.
+  Empfehlung: A jetzt. E, wenn du eine Maschine brauchst, die läuft, wenn dein PC aus ist. C, falls alles bei Hetzner liegen soll. B und D nicht.
+  Warum: A kostet 5,99 EUR netto im Monat, ändert am MT4-Betrieb nichts und löst sofort das Problem, das dich am meisten kostet: Railway als Zwischenstation fällt weg. B stellt den EA auf die Plattform, gegen 
+- Wie soll 'vom Handy handeln' technisch aussehen?
+  Empfehlung: Option 1 zuerst, Option 3 als Zielbild. Option 2 allein nicht.
+  Warum: Option 1 gibt dir echtes Handeln vom Handy, diesen Monat, ohne eine Zeile am EA, und nutzt den Klickpfad mit allen 19 Gates in DoEntry unverändert (MamalTrading.mq4:3019-3094). Option 2 verlangt zuers
+- Darf eine order-fähige Cockpit-Instanz im offenen Internet stehen?
+  Empfehlung: Option 2, über einen Schalter mit Standard 'aus'. Zusätzlich MAMAL_PASS_PLAIN auf einer order-fähigen Instanz gar nicht erst setzen.
+  Warum: Das ist die sparsamste Lösung mit dem grössten Effekt: kein neuer Code auf dem kritischen Pfad, und die Seite mit dem Order-Knopf steht gar nicht im Netz. Dein eigenes Projekt empfiehlt diesen Weg ber
+- Fragst du FTMO vorher schriftlich, ob eine selbst gebaute Weboberfläche, die deine eigenen Orders durch deinen eigenen EA schickt, unter das Verbot von Zugriff Dritter fällt?
+  Empfehlung: Option 1, und bis zur Antwort Option 3.
+  Warum: Keine FTMO-Seite nennt Bridges, APIs oder eigene Frontends — die Verbotsliste nennt 'third party' und, breiter, Software, die manipuliert oder einen unfairen Vorteil verschafft (ftmo.com/en/forbidden-
+
+KOSTEN: Alle Hetzner-Preise netto ohne MwSt., EU-Standorte, abgerufen 07.11.2026 von hetzner.com/cloud/cost-optimized/, /cloud/regular-performance/, /dedicated-rootserver/matrix-ax/ und /matrix-ex/.
+
+EMPFOHLENER WEG (Variante A, Schritt 2):
+- Hetzner Cloud CX23, 2 vCPU x86, 4 GB RAM, 40 GB NVMe, 20 TB Traffic: 5,99 EUR netto = ca. 7,13 EUR brutto im Monat.
+- Tailscale für Fernzugriff (Schritt 4): 0 EUR, der kostenlose Tarif deckt einen Nutzer mit wenigen Geräten.
+- Summe: ca. 7 EUR brutto im Monat.
+
+ALT
+
+NICHT BAUEN:
+ - Wine für den Dauerbetrieb. Nicht aus Prinzip, sondern weil dein eigenes Review den Grund nennt: ein Host-Absturz mit offener Position ist ein Fenster ohne Schutz, weil Enforcement an Ticks hängt (docs
+ - Eigenes Windows-ISO auf einer Hetzner-Cloud-Maschine, solange du keine Windows-Server-Lizenz mit laufender Software Assurance hast. Windows Server ist von License Mobility ausgenommen; der Weg auf get
+ - Einen US-Standort bei Hetzner. Hillsboro und Ashburn stehen im selben Auswahlmenü wie Falkenstein, und das ist der einzige dokumentierte FTMO-Verstoss, den dieses Vorhaben überhaupt erzeugen kann: kei
+ - Einen Befehl, der eine Sperre aufheben oder verkürzen kann. Die Lockerungssperre ist in diesem Projekt eine zugesagte Eigenschaft, kein Zufall: COCKPIT_CMD trägt den Kommentar 'ONLY tightening (endday
+ - Ein eigenes OrderSend im Cockpit-Pfad, also irgendetwas, das an DoEntry vorbeigeht. Zwischen MamalTrading.mq4:3019 und 3094 liegen 19 Prüfungen, und die Lotgrösse kommt aus CalcLot() aus SL-Abstand un
+ - Eine dauerhafte Verbindung für den Rückkanal, also SSE oder WebSocket. Der Server hat bis heute null Abhängigkeiten (nur Node-Bordmittel), und das wäre der erste Grund für ein npm install. Ein GET im 
+ - Automatisches Nachfassen bei fehlgeschlagenen Order-Befehlen. Die Asymmetrie im EA ist richtig und gehört ins Protokoll: ein Eröffnungsbefehl wird nie wiederholt — ein fehlgeschlagener OrderSend lande
+ - Echtes Löschen in lokalen MQL4/Files-Ordnern. /cmd/forget blendet auf einem lokalen Server bewusst nur aus, und die Begründung steht als Kommentar im Code (cockpit/server.js:322-334): das sind die Ver
+ - Ein Dashboard als Handelsoberfläche, solange die Datenlage fehlt. In mamal_cockpit.json steht kein Preis, kein Bid/Ask und keine Liste offener Positionen — ich habe WriteCockpit vollständig gelesen (M

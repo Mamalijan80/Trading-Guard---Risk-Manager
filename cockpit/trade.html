@@ -66,6 +66,19 @@
   .empty{padding:26px;text-align:center;color:var(--txt3)}
   #lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
   #lb img{max-width:96vw;max-height:94vh}
+  /* ==== v0.73: Rechts-nach-links (Persisch) ====
+     Diese Seite hatte KEINE einzige RTL-Regel, obwohl applyI18n() ihr
+     dir="rtl" setzt - die Sprache war da, das Layout nicht. Folge: Zahlen
+     liefen im RTL-Fluss mit, und ein Gebilde aus zwei Zahlengruppen mit
+     einem neutralen Trenner dazwischen kippt dabei. Aus "0 / 2" wurde auf
+     dem Schirm "2 / 0" - im Wochen-Report waren alle vier Zeilen der Woche
+     vertauscht, Siege als Niederlagen. Die Daten waren richtig, nur die
+     Darstellung log.
+     `isolate` statt `embed`: isolate kappt die Wechselwirkung mit dem
+     umgebenden Text ganz, embed laesst sie teilweise zu. */
+  html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
+  html[dir="rtl"] .num,html[dir="rtl"] .mono,html[dir="rtl"] .v,
+  html[dir="rtl"] .n,html[dir="rtl"] .cnt{direction:ltr;unicode-bidi:isolate}
 </style>
 </head>
 <body>
@@ -84,7 +97,12 @@
 const $=id=>document.getElementById(id);
 const ESC={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESC[c]);
-const eur=v=>(v>=0?'+':'−')+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+// v0.73-fix: Der Betrag kommt schon isoliert zurueck (U+2066/U+2069,
+//   unsichtbar, in LTR wirkungslos). Ohne das wanderte unter RTL das
+//   Vorzeichen ans andere Ende, sobald der Behaelter nicht zufaellig von
+//   der CSS-Regel erfasst war - derselbe Betrag sah auf einer Seite an
+//   zwei Stellen verschieden aus.
+const eur=v=>ltr((v>=0?'+':'−')+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}));
 const Q=new URLSearchParams(location.search);
 const ACCT=Q.get('acct')||localStorage.getItem('mamalAcct')||'';
 const AQ=(x)=>{const p=[];if(ACCT)p.push('acct='+encodeURIComponent(ACCT));if(x)p.push(x);return p.length?'?'+p.join('&'):'';};
@@ -122,10 +140,10 @@ async function renderList(){
     +`<th>${esc(t('trade.th.candle'))}</th><th>${esc(t('trade.th.moved'))}</th><th>${esc(t('trade.th.images'))}</th>`
     +`<th>${esc(t('journal.th.net'))}</th></tr></thead><tbody>`
     +rows.map(r=>`<tr class="click" onclick="location.href='/trade.html${AQ('ticket='+r.ticket)}'">
-        <td class="mono">${esc((r.time||'').slice(5,16))}</td><td>${esc(r.symbol||'')}</td><td>${esc(r.dir||'')}</td>
+        <td class="mono num">${esc((r.time||'').slice(5,16))}</td><td>${esc(r.symbol||'')}</td><td>${esc(r.dir||'')}</td>
         <td style="color:${C3[r.third||0]}">${T3[r.third||0]||'—'}</td>
-        <td${r.moves?' class="warn"':''}>${r.moves||'—'}</td><td>${r.shots||'—'}</td>
-        <td class="${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?`title="${esc(t('trade.title.inferred'))}"`:(r.backfilled?`title="${esc(t('trade.title.backfilled'))}"`:'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
+        <td class="num${r.moves?' warn':''}">${r.moves||'—'}</td><td class="num">${r.shots||'—'}</td>
+        <td class="num ${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?`title="${esc(t('trade.title.inferred'))}"`:(r.backfilled?`title="${esc(t('trade.title.backfilled'))}"`:'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
     +'</tbody></table></div>';
 }
 
@@ -173,8 +191,8 @@ async function renderOne(ticket){
       +d.moves.map(m=>{// v0.67: read the machine code; the German patterns remain only for journals written before v0.67.
         const bad=/^\[(SL_WORSE|SL_GONE|TP_SHORTER)\]/.test(m.tag||'')
                   || /ERHOEHT|unbegrenzt|abgekuerzt|abgekürzt/i.test(m.tag||'');
-        return `<tr><td class="mono">${esc((m.time||'').slice(11))}</td><td class="mono">${esc(m.raw[11])}</td>
-          <td class="mono">${esc(m.raw[12])}</td><td class="${bad?'neg':'pos'}">${esc(m.tag||'')}</td></tr>`;}).join('')
+        return `<tr><td class="mono num">${esc((m.time||'').slice(11))}</td><td class="mono num">${esc(m.raw[11])}</td>
+          <td class="mono num">${esc(m.raw[12])}</td><td class="${bad?'neg':'pos'}">${esc(m.tag||'')}</td></tr>`;}).join('')
       +'</tbody></table></div>';
   }
   $('view').innerHTML=h;

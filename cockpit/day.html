@@ -57,6 +57,19 @@
   .bd-test{background:#eef1f6;color:#6b7688}.bd-prot{background:var(--red-bg);color:#b42121}
   .net-pos{color:var(--green)}.net-neg{color:var(--red)}
   .empty{padding:24px;text-align:center;color:var(--txt3)}
+  /* ==== v0.73: Rechts-nach-links (Persisch) ====
+     Diese Seite hatte KEINE einzige RTL-Regel, obwohl applyI18n() ihr
+     dir="rtl" setzt - die Sprache war da, das Layout nicht. Folge: Zahlen
+     liefen im RTL-Fluss mit, und ein Gebilde aus zwei Zahlengruppen mit
+     einem neutralen Trenner dazwischen kippt dabei. Aus "0 / 2" wurde auf
+     dem Schirm "2 / 0" - im Wochen-Report waren alle vier Zeilen der Woche
+     vertauscht, Siege als Niederlagen. Die Daten waren richtig, nur die
+     Darstellung log.
+     `isolate` statt `embed`: isolate kappt die Wechselwirkung mit dem
+     umgebenden Text ganz, embed laesst sie teilweise zu. */
+  html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
+  html[dir="rtl"] .num,html[dir="rtl"] .mono,html[dir="rtl"] .v,
+  html[dir="rtl"] .n,html[dir="rtl"] .cnt{direction:ltr;unicode-bidi:isolate}
 </style>
 </head>
 <body>
@@ -92,7 +105,12 @@
   document.documentElement.dataset.theme=saved; })();
 const $=id=>document.getElementById(id);
 const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
-const eur=v=>(v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+// v0.73-fix: Der Betrag kommt schon isoliert zurueck (U+2066/U+2069,
+//   unsichtbar, in LTR wirkungslos). Ohne das wanderte unter RTL das
+//   Vorzeichen ans andere Ende, sobald der Behaelter nicht zufaellig von
+//   der CSS-Regel erfasst war - derselbe Betrag sah auf einer Seite an
+//   zwei Stellen verschieden aus.
+const eur=v=>ltr((v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}));
 // Defuse foreign text (broker symbols, free journal tags) before innerHTML.
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
@@ -133,7 +151,9 @@ async function load(){
     const time=(r.time||'').replace(/^\d{4}\.\d{2}\.\d{2}\s*/,'');
     const sym=r.symbol&&r.symbol!=='-'?r.symbol+(r.dir&&r.dir!=='-'?' '+r.dir:''):'';
     const isMan=(r.event||'').toUpperCase()==='CLOSE_MAN';
-    return `<tr${isMan?' style="background:var(--amber-bg)"':''}><td>${esc(time)}</td><td><span class="badge ${badgeFor(r.event)}">${isMan?esc(t('journal.badge.manual')):esc(r.event||'')}</span></td><td>${esc(sym)}</td><td>${nt}</td>
+    // v0.73-fix: Zeit und Netto in einen LTR-Kontext. "21:52:31" ist drei
+    //   Zahlengruppen mit Doppelpunkten - genau das Gebilde, das unter RTL kippt.
+    return `<tr${isMan?' style="background:var(--amber-bg)"':''}><td class="num">${esc(time)}</td><td><span class="badge ${badgeFor(r.event)}">${isMan?esc(t('journal.badge.manual')):esc(r.event||'')}</span></td><td>${esc(sym)}</td><td class="num">${nt}</td>
       <td style="white-space:normal;color:var(--txt2)">${esc((r.tag||'').slice(0,80))}</td></tr>`;}).join('');
 }
 load();

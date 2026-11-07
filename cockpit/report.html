@@ -25,6 +25,21 @@
   .pos{color:var(--green)}.neg{color:var(--red)}
   .note{color:var(--txt2);font-size:13px;background:#f6f8fb;border-radius:9px;padding:12px 15px;margin-top:8px}
   .printbtn{position:fixed;top:16px;right:16px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:9px;padding:9px 16px;font:600 13px/1 inherit}
+  /* ==== v0.73: Rechts-nach-links (Persisch) ====
+     Diese Seite hatte KEINE einzige RTL-Regel, obwohl applyI18n() ihr
+     dir="rtl" setzt - die Sprache war da, das Layout nicht. Folge: Zahlen
+     liefen im RTL-Fluss mit, und ein Gebilde aus zwei Zahlengruppen mit
+     einem neutralen Trenner dazwischen kippt dabei. Aus "0 / 2" wurde auf
+     dem Schirm "2 / 0" - im Wochen-Report waren alle vier Zeilen der Woche
+     vertauscht, Siege als Niederlagen. Die Daten waren richtig, nur die
+     Darstellung log.
+     `isolate` statt `embed`: isolate kappt die Wechselwirkung mit dem
+     umgebenden Text ganz, embed laesst sie teilweise zu. */
+  html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
+  html[dir="rtl"] .num,html[dir="rtl"] .mono,html[dir="rtl"] .v,
+  html[dir="rtl"] .n,html[dir="rtl"] .cnt{direction:ltr;unicode-bidi:isolate}
+  /* Der Druckknopf klebte fest an right:16px - unter RTL gehoert er nach links. */
+  html[dir="rtl"] .printbtn{right:auto;left:16px}
   @media print{ .printbtn{display:none} body{font-size:12.5px} .wrap{padding:0} }
 </style>
 </head>
@@ -52,7 +67,12 @@
 <script>
 const $=id=>document.getElementById(id);
 const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
-const eur=v=>(v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+// v0.73-fix: Der Betrag kommt schon isoliert zurueck (U+2066/U+2069,
+//   unsichtbar, in LTR wirkungslos). Ohne das wanderte unter RTL das
+//   Vorzeichen ans andere Ende, sobald der Behaelter nicht zufaellig von
+//   der CSS-Regel erfasst war - derselbe Betrag sah auf einer Seite an
+//   zwei Stellen verschieden aus.
+const eur=v=>ltr((v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}));
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
 // v0.73: Das war die DRITTE Regelnamen-Tabelle im Projekt (Dashboard,
@@ -73,9 +93,12 @@ async function load(){
   // Das Erstelldatum stand fest auf 'de-DE'. Im englischen und persischen
   //   Report erschien damit ein deutsch formatiertes Datum.
   const loc=LANG==='fa'?'fa-IR':LANG==='en'?'en-GB':'de-DE';
+  // v0.73-fix: Der Zeitraum sind ZWEI Daten mit einem Gedankenstrich dazwischen -
+  //   dieselbe Falle wie bei G/V. Er wird darum als EIN Stueck zusammengebaut und
+  //   isoliert eingesetzt, nicht als zwei Platzhalter.
   $('head').textContent=acct
-    +(last7.length?t('report.head.span',{from:last7[0],to:last7[last7.length-1]}):t('report.head.noDays'))
-    +t('report.head.created',{when:new Date().toLocaleString(loc)});
+    +(last7.length?t('report.head.span',{span:ltr(last7[0]+' – '+last7[last7.length-1])}):t('report.head.noDays'))
+    +t('report.head.created',{when:ltr(new Date().toLocaleString(loc))});
   let net=0,tr=0,bl=0,w=0,l=0,f=0,man=0;
   for(const d of last7){ const c=cal[d]; net+=c.net||0; tr+=c.closes||0; bl+=c.blocks||0; w+=c.wins||0; l+=c.losses||0; f+=c.fills||0; man+=c.manual||0; }
   // v0.45-fix (Verify): discipline = panel trades/(panel trades+blocks) — identical to the dashboard.
@@ -88,10 +111,13 @@ async function load(){
      <div class="kpi"><div class="l">${esc(t('day.kpi.blocks'))}</div><div class="v">${bl}</div></div>
      <div class="kpi"><div class="l">${esc(t('hero.discipline'))}</div><div class="v">${disc}%</div></div>`;
   $('days').innerHTML=last7.map(d=>{ const c=cal[d];
-    return `<tr><td>${esc(d)}</td><td class="${(c.net||0)>=0?'pos':'neg'}">${eur(c.net||0)}</td><td>${c.closes||0}</td><td>${c.wins||0} / ${c.losses||0}</td><td${c.manual?' style="color:var(--amber);font-weight:700"':''}>${c.manual||0}</td><td>${c.blocks||0}</td></tr>`; }).join('')
+    // v0.73-fix: class="num" auf JEDE Zahlenspalte. Ohne das drehte die
+    //   Spalte "G / V" unter RTL - 5 Siege und 0 Verluste erschienen als
+    //   "0 / 5". Das Datum ebenso: auch 2026.11.06 ist ein Zahlengebilde.
+    return `<tr><td class="num">${esc(d)}</td><td class="num ${(c.net||0)>=0?'pos':'neg'}">${eur(c.net||0)}</td><td class="num">${c.closes||0}</td><td class="num">${c.wins||0} / ${c.losses||0}</td><td class="num"${c.manual?' style="color:var(--amber);font-weight:700"':''}>${c.manual||0}</td><td class="num">${c.blocks||0}</td></tr>`; }).join('')
     || `<tr><td colspan="6" style="color:var(--txt3)">${esc(t('report.days.empty'))}</td></tr>`;
   $('rules').innerHTML=(a.rules||[]).map(r=>
-    `<tr><td>${esc(r.id)} · ${esc(ruleName(r.id))}</td><td>${r.count}×</td><td>${r.blocked||0}×</td><td>${r.closed||0}×</td></tr>`).join('')
+    `<tr><td>${esc(r.id)} · ${esc(ruleName(r.id))}</td><td class="num">${r.count}×</td><td class="num">${r.blocked||0}×</td><td class="num">${r.closed||0}×</td></tr>`).join('')
     || `<tr><td colspan="4" style="color:var(--txt3)">${esc(t('report.rules.empty'))}</td></tr>`;
   const top=(a.rules||[])[0];
   // v0.45-fix (Verify): "sehr diszipliniert" (very disciplined) must NOT appear when trading happened past the panel —
