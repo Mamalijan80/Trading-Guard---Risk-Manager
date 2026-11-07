@@ -362,21 +362,23 @@
     <span class="brand"><b>MAMAL</b><span>·TRADING</span></span>
     <span id="pill" class="pill" style="border-color:var(--line)"><span class="dot"></span><span id="pillTx">…</span></span>
     <span class="grow"></span>
-    <select id="langSel" class="hbtn" title="Sprache / Language / زبان" style="cursor:pointer">
+    <select id="langSel" class="hbtn" data-i18n-title="header.btn.lang.title" title="Sprache / Language / زبان" style="cursor:pointer">
       <option value="de">DE</option><option value="en">EN</option><option value="fa">فا</option>
     </select>
-    <button id="themeBtn" class="hbtn" title="Hell/Dunkel umschalten">🌙</button>
-    <button id="notifBtn" class="hbtn" title="Benachrichtigungen (Cooldown vorbei, Sperre, Ziel erreicht)">🔔</button>
-    <button id="tradesBtn" class="hbtn" title="Trade-Akte: Einzelheiten, SL/TP-Chronik und Screenshots je Trade">📁</button>
-    <button id="reportBtn" class="hbtn" title="Open weekly report (printable)">📄</button>
+    <button id="themeBtn" class="hbtn" data-i18n-title="header.btn.theme.title" title="Hell/Dunkel umschalten">🌙</button>
+    <button id="notifBtn" class="hbtn" data-i18n-title="header.btn.notif.title" title="Benachrichtigungen (Cooldown vorbei, Sperre, Ziel erreicht)">🔔</button>
+    <button id="tradesBtn" class="hbtn" data-i18n-title="header.btn.trades.title" title="Trade-Akte: Einzelheiten, SL/TP-Chronik und Screenshots je Trade">📁</button>
+    <!-- v0.73-fix: stand englisch in der deutschen Oberflaeche, obwohl
+         header.btn.report.title auf Deutsch in der Tabelle liegt. -->
+    <button id="reportBtn" class="hbtn" data-i18n-title="header.btn.report.title" title="Wochen-Report öffnen (druckbar)">📄</button>
     <!-- v0.72: Zugang verwalten. Bewusst ein Link und keine Schaltflaeche: die Seite liegt
          serverseitig und muss auch erreichbar sein, wenn das Dashboard-Skript nicht laeuft. -->
     <a id="pwBtn" class="hbtn" href="/passwort" style="text-decoration:none"
-       title="Passwort setzen, ändern oder prüfen">🔑</a>
+       data-i18n-title="header.btn.pw.title" title="Passwort setzen, ändern oder prüfen">🔑</a>
     <select id="acctSel" class="chip" style="display:none;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:4px 8px;font:inherit"></select>
-    <button id="acctDel" class="hbtn" style="display:none" title="Dieses Konto aus der Liste entfernen — nur wenn es keine Daten mehr liefert">🗑</button>
+    <button id="acctDel" class="hbtn" style="display:none" data-i18n-title="header.btn.acctDel.title" title="Dieses Konto aus der Liste entfernen — nur wenn es keine Daten mehr liefert">🗑</button>
     <span id="chip" class="chip">—</span>
-    <div class="eq"><div class="l">KAPITAL</div><div class="v" id="equity">—</div></div>
+    <div class="eq"><div class="l" data-i18n="header.equity.label">KAPITAL</div><div class="v" id="equity">—</div></div>
   </header>
 
   <div id="banner" style="display:none" class="banner"></div>
@@ -412,38 +414,39 @@
       </div>
     </div>
 
-    <h2>Neue Position</h2>
+    <h2 data-i18n="h2.newPosition">Neue Position</h2>
     <div class="ocard" id="orderCard">
       <div class="orow">
         <div class="ofield">
-          <label for="oSym">Symbol</label>
+          <label for="oSym" data-i18n="order.label.symbol">Symbol</label>
           <select id="oSym"></select>
         </div>
         <div class="ofield">
-          <label for="oSL">Stop-Preis</label>
-          <input id="oSL" type="text" inputmode="decimal" autocomplete="off" placeholder="z. B. 43900,00">
+          <label for="oSL" data-i18n="order.label.stop">Stop-Preis</label>
+          <input id="oSL" type="text" inputmode="decimal" autocomplete="off"
+                 data-i18n-ph="order.ph.stop" placeholder="z. B. 43900,00">
         </div>
       </div>
       <div class="oquote" id="oQuote">—</div>
       <div class="owarn" id="oWarn" style="display:none"></div>
       <div class="orelay" id="oRelay" style="display:none"></div>
       <div class="obtns">
-        <button class="obtn buy"  id="oBuy">Kaufen</button>
-        <button class="obtn sell" id="oSell">Verkaufen</button>
+        <button class="obtn buy"  id="oBuy"  data-i18n="order.dir.buy">Kaufen</button>
+        <button class="obtn sell" id="oSell" data-i18n="order.dir.sell">Verkaufen</button>
       </div>
-      <div class="onote">Die <b>Positionsgröße rechnet der EA</b> aus deinem Risiko pro Trade und
+      <div class="onote" data-i18n-html="order.note">Die <b>Positionsgröße rechnet der EA</b> aus deinem Risiko pro Trade und
         dem Stopabstand — hier wird nichts gerechnet. Das Ziel entsteht aus dem Stopabstand und
         deinem CRV. Alle Regeln prüft der EA vor der Ausführung, genau wie beim Klick aufs Panel.</div>
     </div>
 
-    <h2>Offene Positionen</h2>
+    <h2 data-i18n="h2.openPositions">Offene Positionen</h2>
     <div class="phead">
       <span class="psum" id="posSum">—</span>
       <span style="flex:1"></span>
-      <button id="flatBtn" class="pbtn danger" style="display:none">Alles schließen</button>
+      <button id="flatBtn" class="pbtn danger" style="display:none" data-i18n="flat.label">Alles schließen</button>
     </div>
     <div class="pgrid" id="posGrid"></div>
-    <div class="pnone" id="posNone">Keine offene Position.</div>
+    <div class="pnone" id="posNone" data-i18n="pos.none">Keine offene Position.</div>
     <div id="cmdMsg"></div>
 
     <h2 data-i18n="h2.challenge">Challenge-Fortschritt</h2>
@@ -463,7 +466,7 @@
     <h2 data-i18n="h2.stats">Trade-Statistik</h2>
     <div class="card statgrid" id="stats"></div>
 
-    <h2>Dein Edge · wo &amp; wann du wirklich Geld machst</h2>
+    <h2 data-i18n="h2.edge">Dein Edge · wo &amp; wann du wirklich Geld machst</h2>
     <div class="card edgecard">
       <div class="verdict" id="edgeVerdict">…</div>
       <div class="egrid" id="edgeGrid"></div>
@@ -482,7 +485,7 @@
       <div class="totrow" id="totrow"></div>
     </div>
 
-    <h2>Calendar · profit / loss per day <span style="text-transform:none;font-weight:500;color:var(--txt3)">— click a day for details</span></h2>
+    <h2 data-i18n="h2.calendar">Kalender · Gewinn / Verlust pro Tag <span style="text-transform:none;font-weight:500;color:var(--txt3)" data-i18n="h2.calendar.hint">— Tag anklicken für Details</span></h2>
     <div class="months" id="months"></div>
 
     <h2 data-i18n="h2.rules">Wo stehe ich · aktive Regeln (live)</h2>
@@ -539,6 +542,18 @@ function applyLang(){
     }
     if(!done) el.insertBefore(document.createTextNode(v+' '), el.firstChild);
   });
+  // v0.73-fix: applyLang setzte nur textContent. Drei Sorten Text blieben damit
+  //   unerreichbar und fuer immer deutsch, egal was die Tabelle sagt:
+  //     data-i18n-ph    -> placeholder (Eingabefelder)
+  //     data-i18n-title -> title (die Knoepfe der Kopfzeile)
+  //     data-i18n-html  -> innerHTML (Texte mit <b>; nur aus DIESER Tabelle,
+  //                        nie aus der EA-JSON und nie aus einer Eingabe)
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const v=t(el.dataset.i18nPh); if(v) el.placeholder=v; });
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{
+    const v=t(el.dataset.i18nTitle); if(v) el.title=v; });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
+    const v=t(el.dataset.i18nHtml); if(v) el.innerHTML=v; });
   const ls=$('langSel'); if(ls) ls.value=LANG;
   // Redraw everything so the dynamic texts switch over too
   prevS=null; g_forceRedraw=true; tick(); loadAnalytics(); loadEquity();
@@ -953,9 +968,10 @@ function paintQuote(st){
   const q=(st&&st.quotes)||{}, sy=$('oSym').value, d=q[sy];
   const box=$('oQuote'), warn=$('oWarn');
   if(!d){ box.textContent='—'; warn.style.display='none'; return; }
-  box.innerHTML='Geld <b>'+esc(fmtPrice(d.bid,d.dg))+'</b>'
-              +'<span>Brief <b>'+esc(fmtPrice(d.ask,d.dg))+'</b></span>'
-              +'<span>Spread <b>'+esc(((d.ask-d.bid)/(d.pt||1)).toFixed(0))+'</b> Punkte</span>';
+  box.innerHTML=esc(t('quote.bid'))+' <b>'+esc(fmtPrice(d.bid,d.dg))+'</b>'
+              +'<span>'+esc(t('quote.ask'))+' <b>'+esc(fmtPrice(d.ask,d.dg))+'</b></span>'
+              +'<span>'+esc(t('quote.spread'))+' <b>'+esc(((d.ask-d.bid)/(d.pt||1)).toFixed(0))+'</b> '
+              +esc(t('unit.points.price'))+'</span>';
   const sl=parseNum($('oSL').value);
   if(isNaN(sl)||sl<=0){ warn.style.display='none'; return; }
   // Auf welcher Seite der Stop steht, entscheidet die Richtung — beide koennen nicht gleich-
@@ -963,9 +979,9 @@ function paintQuote(st){
   const okBuy=sl<d.bid, okSell=sl>d.ask;
   const dist=Math.min(Math.abs(d.ask-sl),Math.abs(sl-d.bid))/(d.pt||1);
   if(!okBuy&&!okSell){
-    warn.style.display=''; warn.textContent='Dieser Stop liegt mitten im Spread — er passt weder zu Kaufen noch zu Verkaufen.';
+    warn.style.display=''; warn.textContent=t('quote.warn.inSpread');
   } else if(d.stp>0 && dist<d.stp){
-    warn.style.display=''; warn.textContent='Nur '+dist.toFixed(0)+' Punkte Abstand — der Broker verlangt mindestens '+d.stp+'. Der EA würde ablehnen.';
+    warn.style.display=''; warn.textContent=t('quote.warn.tooClose',{dist:dist.toFixed(0),min:d.stp});
   } else { warn.style.display='none'; }
 }
 $('oSym').addEventListener('change',()=>paintQuote(LASTSTATE));
@@ -973,15 +989,14 @@ $('oSL').addEventListener('input',()=>paintQuote(LASTSTATE));
 function placeOrder(isBuy){
   const sy=$('oSym').value, sl=parseNum($('oSL').value);
   const q=(LASTSTATE&&LASTSTATE.quotes)||{}, d=q[sy];
-  if(!sy||!d){ cmdMsg('bad','Kein Kurs für dieses Symbol.'); return; }
-  if(isNaN(sl)||sl<=0){ cmdMsg('bad','Bitte einen Stop-Preis eintragen.'); return; }
-  if(isBuy && sl>=d.bid){ cmdMsg('bad','Für einen Kauf muss der Stop UNTER dem Kurs liegen.'); return; }
-  if(!isBuy && sl<=d.ask){ cmdMsg('bad','Für einen Verkauf muss der Stop ÜBER dem Kurs liegen.'); return; }
-  const dir=isBuy?'Kaufen':'Verkaufen';
+  if(!sy||!d){ cmdMsg('bad',t('order.err.noQuote')); return; }
+  if(isNaN(sl)||sl<=0){ cmdMsg('bad',t('order.err.noStop')); return; }
+  if(isBuy && sl>=d.bid){ cmdMsg('bad',t('order.err.buyStop')); return; }
+  if(!isBuy && sl<=d.ask){ cmdMsg('bad',t('order.err.sellStop')); return; }
+  const dir=t(isBuy?'order.dir.buy':'order.dir.sell');
   // Die Rueckfrage nennt alles, was die Order ausmacht. Ein "Wirklich?" ohne Zahlen ist beim
   //   zweiten Mal nur noch ein Klick.
-  if(!confirm(dir+' '+sy+'\n\nStop-Preis: '+fmtPrice(sl,d.dg)+'\nKurs jetzt: '+fmtPrice(isBuy?d.ask:d.bid,d.dg)
-             +'\n\nDie Größe rechnet der EA aus deinem Risiko. Alle Regeln werden vorher geprüft.')) return;
+  if(!confirm(t('order.confirm',{dir:dir,sym:sy,sl:fmtPrice(sl,d.dg),px:fmtPrice(isBuy?d.ask:d.bid,d.dg)}))) return;
   sendCmd(isBuy?'buy':'sell',sy,String(sl),dir+' '+sy);
 }
 $('oBuy').addEventListener('click',()=>placeOrder(true));
@@ -998,31 +1013,30 @@ function cmdMsg(kind,text){ $('cmdMsg').innerHTML='<div class="cmsg '+kind+'">'+
 // Position eroeffnet, und das Risiko waere doppelt gewesen.
 const CMD_ARMED_SEC=120;
 async function sendCmd(cmd,sym,a1,label){
-  if(CMDBUSY){ cmdMsg('bad',label+' — nicht abgesetzt: ein anderer Befehl wartet noch auf das Terminal.'); return; }
+  if(CMDBUSY){ cmdMsg('bad',t('cmd.busy',{label:label})); return; }
   CMDBUSY=true;
   document.querySelectorAll('.pbtn,.endday,.obtn').forEach(b=>b.disabled=true);
   try{
-    cmdMsg('wait',label+' — wird abgesetzt…');
+    cmdMsg('wait',t('cmd.sending',{label:label}));
     const qs='acct='+encodeURIComponent(ACCT||'')+'&cmd='+encodeURIComponent(cmd)
             +(sym?'&sym='+encodeURIComponent(sym):'')+(a1?'&a1='+encodeURIComponent(a1):'');
     const r=await fetch('/cmd/send?'+qs,{method:'POST'});
-    const j=await r.json().catch(()=>({ok:false,error:'Unerwartete Antwort ('+r.status+')'}));
-    if(!j.ok){ cmdMsg('bad',label+' — nicht abgesetzt: '+j.error); return; }
-    cmdMsg('wait',label+' — abgesetzt, wartet auf das Terminal…');
+    const j=await r.json().catch(()=>({ok:false,error:t('cmd.badResponse',{status:r.status})}));
+    if(!j.ok){ cmdMsg('bad',t('cmd.refused',{label:label,error:j.error})); return; }
+    cmdMsg('wait',t('cmd.queued',{label:label}));
     for(let i=0;i<CMD_ARMED_SEC+5;i++){
-      if(i===20) cmdMsg('wait',label+' — noch keine Rückmeldung. Läuft MetaTrader, und ist der EA auf dem Chart aktiv?');
-      else if(i>20 && i%10===0) cmdMsg('wait',label+' — wartet weiter; der Befehl bleibt noch '
-        +Math.max(0,CMD_ARMED_SEC-i)+' s gültig. Bitte nicht erneut senden, solange er scharf ist.');
+      if(i===20) cmdMsg('wait',t('cmd.noReply',{label:label}));
+      else if(i>20 && i%10===0) cmdMsg('wait',t('cmd.stillWaiting',
+        {label:label,sec:Math.max(0,CMD_ARMED_SEC-i)}));
       await new Promise(r2=>setTimeout(r2,1000));
       const sr=await fetch('/cmd/status?acct='+encodeURIComponent(ACCT||'')+'&id='+encodeURIComponent(j.id));
       const sj=await sr.json().catch(()=>null);
       if(!sj||!sj.ok) continue;
-      if(sj.status==='done'){ cmdMsg('good',label+' — erledigt'+(sj.info?': '+sj.info:'')); tick(); return; }
-      if(sj.status==='failed'||sj.status==='expired'){ cmdMsg('bad',label+' — abgelehnt'+(sj.info?': '+sj.info:'')); tick(); return; }
+      if(sj.status==='done'){ cmdMsg('good',t('cmd.done',{label:label})+(sj.info?': '+sj.info:'')); tick(); return; }
+      if(sj.status==='failed'||sj.status==='expired'){ cmdMsg('bad',t('cmd.failed',{label:label})+(sj.info?': '+sj.info:'')); tick(); return; }
     }
-    cmdMsg('bad',label+' — nicht ausgeführt. Der Befehl ist inzwischen verfallen und kann nicht '
-          +'mehr auslösen; jetzt ist ein neuer Versuch gefahrlos.');
-  }catch(e){ cmdMsg('bad',label+' — Fehler: '+e.message); }
+    cmdMsg('bad',t('cmd.expired',{label:label}));
+  }catch(e){ cmdMsg('bad',t('cmd.error',{label:label,msg:e.message})); }
   finally{ CMDBUSY=false; document.querySelectorAll('.pbtn,.endday,.obtn').forEach(b=>b.disabled=false); }
 }
 $('posGrid').addEventListener('click',function(ev){
@@ -1032,17 +1046,17 @@ $('posGrid').addEventListener('click',function(ev){
   //   auf der sie stehen — PanelClose(true,…) und PanelBreakEven(true) arbeiten chartweit.
   //   Die Rueckfrage muss das sagen, sonst verspricht die Karte etwas anderes als der EA tut.
   const frage={
-    close:'Diese Position schließen?\n\n'+sym+', Ticket '+a1+'.',
-    half: 'Von ALLEN Positionen in '+sym+' die Hälfte schließen?\n\nDas gilt symbolweit, nicht nur für diese Karte.',
-    be:   'Bei ALLEN Positionen in '+sym+' den Stop auf Einstand ziehen?\n\nDas gilt symbolweit, nicht nur für diese Karte.'
+    close:t('pos.confirm.close',{sym:sym,ticket:a1}),
+    half: t('pos.confirm.half',{sym:sym}),
+    be:   t('pos.confirm.be',{sym:sym})
   }[cmd];
-  const was={close:'Position schließen',half:'Hälfte schließen',be:'Break-even'}[cmd]||cmd;
-  if(frage && !confirm(frage+'\n\nDer EA führt das aus, sobald er den Befehl sieht.')) return;
+  const was={close:t('pos.label.close'),half:t('pos.label.half'),be:t('pos.label.be')}[cmd]||cmd;
+  if(frage && !confirm(frage+t('pos.confirm.tail'))) return;
   sendCmd(cmd,sym,a1,was+' ('+sym+')');
 });
 $('flatBtn').addEventListener('click',function(){
-  if(!confirm('ALLE offenen Positionen schließen?\n\nDas gilt kontoweit, nicht nur fuer dieses Symbol.')) return;
-  sendCmd('flat','','','Alles schließen');
+  if(!confirm(t('flat.confirm'))) return;
+  sendCmd('flat','','',t('flat.label'));
 });
 
 // ==== v0.39: Dark Mode ====
