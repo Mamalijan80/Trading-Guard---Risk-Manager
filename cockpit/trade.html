@@ -117,7 +117,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESC[c]);
 //   Vorzeichen ans andere Ende, sobald der Behaelter nicht zufaellig von
 //   der CSS-Regel erfasst war - derselbe Betrag sah auf einer Seite an
 //   zwei Stellen verschieden aus.
-const eur=v=>ltr((v>=0?'+':'−')+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+const eur=v=>ltr((v>=0?'+':'−')+Math.abs(v).toLocaleString(numLoc(),{minimumFractionDigits:2,maximumFractionDigits:2}));
 const Q=new URLSearchParams(location.search);
 const ACCT=Q.get('acct')||localStorage.getItem('mamalAcct')||'';
 const AQ=(x)=>{const p=[];if(ACCT)p.push('acct='+encodeURIComponent(ACCT));if(x)p.push(x);return p.length?'?'+p.join('&'):'';};

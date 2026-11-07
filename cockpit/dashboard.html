@@ -590,16 +590,29 @@ function applyLang(){
 let g_forceRedraw=false;
 
 const $ = id => document.getElementById(id);
-const de = (n,d=2)=> (n==null||isNaN(n)) ? '—' : Number(n).toFixed(d).replace('.',',');
+// v0.73: Zahlenformat nach Sprache. Vorher stand ueberall fest 'de-DE', und
+//   in der englischen Ansicht las sich "+€165,94" wie 165 TAUSEND - Faktor 1000
+//   bei einem Geldbetrag. Persisch bekommt bewusst das englische Format und
+//   KEIN 'fa-IR': das liefert persische Ziffern, und das Projekt haelt Zahlen
+//   durchgehend lateinisch (dieselbe Entscheidung wie beim Kalender).
+const numLoc = () => LANG === 'de' ? 'de-DE' : 'en-GB';
+//   Das Dezimalzeichen der aktiven Sprache, aus der Sprache selbst abgeleitet
+//   statt fest verdrahtet: die Zahl 1,5 formatiert und die Ziffern abgeschnitten
+//   ergibt "," bzw. "." - je nachdem, welche Sprache gerade gilt.
+const decSep = () => (1.5).toLocaleString(numLoc()).slice(1, -1) || '.';
+// de() behaelt bewusst die Form OHNE Tausendertrennung - es formatiert fast nur
+//   Prozentwerte; eine Gruppierung waere auch im Deutschen eine Aenderung.
+//   Getauscht wird allein das Dezimalzeichen.
+const de = (n,d=2)=> (n==null||isNaN(n)) ? '—' : Number(n).toFixed(d).replace('.',decSep());
 const clamp = x => Math.max(0, Math.min(1, x));
 const money = (v,ccy)=>{ if(!/^[A-Z]{3}$/.test(ccy||'')) ccy='';   // v0.39-fix: never put foreign text from the JSON into innerHTML unfiltered
-  const s=ccy==='EUR'?'€':ccy==='USD'?'$':ccy==='GBP'?'£':(ccy?ccy+' ':''); return ltr(s+Math.round(v).toLocaleString('de-DE')); };
+  const s=ccy==='EUR'?'€':ccy==='USD'?'$':ccy==='GBP'?'£':(ccy?ccy+' ':''); return ltr(s+Math.round(v).toLocaleString(numLoc())); };
 // v0.73-fix: Der Betrag kommt schon isoliert zurueck (U+2066/U+2069,
 //   unsichtbar, in LTR wirkungslos). Ohne das wanderte unter RTL das
 //   Vorzeichen ans andere Ende, sobald der Behaelter nicht zufaellig von
 //   der CSS-Regel erfasst war - derselbe Betrag sah auf einer Seite an
 //   zwei Stellen verschieden aus.
-const eur = v => ltr((v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+const eur = v => ltr((v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString(numLoc(),{minimumFractionDigits:2,maximumFractionDigits:2}));
 // Defuse foreign text (broker symbols, EA strings, free-form journal tags) before innerHTML.
 const ESCMAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ESCMAP[c]);
@@ -932,12 +945,12 @@ $('acctDel').addEventListener('click',async function(){
 const PTYPE={0:'Long',1:'Short'};
 function fmtMoney(v,ccy){
   const n=Number(v)||0;
-  return (n>0?'+':'')+n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(ccy||'');
+  return ltr((n>0?'+':'')+n.toLocaleString(numLoc(),{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(ccy||''));
 }
 function fmtPrice(v,dg){
   const n=Number(v)||0;
   if(!n) return '—';
-  return n.toLocaleString('de-DE',{minimumFractionDigits:dg||2,maximumFractionDigits:dg||2});
+  return ltr(n.toLocaleString(numLoc(),{minimumFractionDigits:dg||2,maximumFractionDigits:dg||2}));
 }
 function renderPositions(st){
   const grid=$('posGrid'), none=$('posNone'), sum=$('posSum'), flat=$('flatBtn');

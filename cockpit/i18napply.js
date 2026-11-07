@@ -108,6 +108,17 @@ function applyI18n() {
 //   Wahl; diese Funktion ist fuer Text, der in einen Satz eingesetzt wird.
 const ltr = s => '\u2066' + s + '\u2069';
 
+// v0.73: Zahlenformat nach Sprache. Vorher stand ueberall fest 'de-DE', und
+//   in der englischen Ansicht las sich "+€165,94" wie 165 TAUSEND - Faktor 1000
+//   bei einem Geldbetrag. Persisch bekommt bewusst das englische Format und
+//   KEIN 'fa-IR': das liefert persische Ziffern, und das Projekt haelt Zahlen
+//   durchgehend lateinisch (dieselbe Entscheidung wie beim Kalender).
+const numLoc = () => LANG === 'de' ? 'de-DE' : 'en-GB';
+//   Das Dezimalzeichen der aktiven Sprache, aus der Sprache selbst abgeleitet
+//   statt fest verdrahtet: die Zahl 1,5 formatiert und die Ziffern abgeschnitten
+//   ergibt "," bzw. "." - je nachdem, welche Sprache gerade gilt.
+const decSep = () => (1.5).toLocaleString(numLoc()).slice(1, -1) || '.';
+
 function ruleName(id) { return t('rules.' + id + '.name') || id; }
 
 document.addEventListener('DOMContentLoaded', applyI18n);

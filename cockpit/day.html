@@ -119,13 +119,13 @@
 (function(){ const saved=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
   document.documentElement.dataset.theme=saved; })();
 const $=id=>document.getElementById(id);
-const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
+const de=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',decSep());
 // v0.73-fix: Der Betrag kommt schon isoliert zurueck (U+2066/U+2069,
 //   unsichtbar, in LTR wirkungslos). Ohne das wanderte unter RTL das
 //   Vorzeichen ans andere Ende, sobald der Behaelter nicht zufaellig von
 //   der CSS-Regel erfasst war - derselbe Betrag sah auf einer Seite an
 //   zwei Stellen verschieden aus.
-const eur=v=>ltr((v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+const eur=v=>ltr((v>=0?'+':'−')+'€'+Math.abs(v).toLocaleString(numLoc(),{minimumFractionDigits:2,maximumFractionDigits:2}));
 // Defuse foreign text (broker symbols, free journal tags) before innerHTML.
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
