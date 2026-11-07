@@ -772,7 +772,7 @@ function renderWeak(a){
 
 // ---- Kalender ----
 function renderCalendar(a){
-  const cal=a.calendar||{}; const dates=Object.keys(cal).sort(); if(!dates.length){ $('months').innerHTML='<div class="empty">noch keine Tage</div>'; return; }
+  const cal=a.calendar||{}; const dates=Object.keys(cal).sort(); if(!dates.length){ $('months').innerHTML=`<div class="empty">${esc(t('calendar.empty'))}</div>`; return; }
   // Monate von first..last
   const [fy,fm]=dates[0].split('.').map(Number); const [ly,lm]=dates[dates.length-1].split('.').map(Number);
   const blocks=[];
@@ -791,7 +791,7 @@ function renderCalendar(a){
       const cls=info.net>0.005?'pos':info.net<-0.005?'neg':'flat';
       const nt=info.closes? (info.net>=0?'+':'−')+de(Math.abs(info.net),0)+'€' : '';
       const bb=info.blocks? `<div class="b">⚠ ${info.blocks}</div>`:'';
-      const mm2=info.manual? `<div class="b" style="color:var(--amber)" title="${info.manual} manuelle Trades (am Panel vorbei)">✋ ${info.manual}</div>`:'';   // v0.44
+      const mm2=info.manual? `<div class="b" style="color:var(--amber)" title="${esc(t('calendar.manual.title',{n:info.manual}))}">✋ ${info.manual}</div>`:'';   // v0.44
       cells+=`<div class="cell act ${cls}${wknd}" onclick="openDay('${key}')"><div class="d">${d}</div>
         <div class="n">${nt}</div>${bb}${mm2}</div>`;
     }
@@ -811,7 +811,7 @@ function renderJournal(rows){
   const tb=$('journal');
   const keep=(rows||[]).filter(r=>['OPEN','CLOSE','CLOSE_MAN','BLOCKED'].includes((r.event||'').toUpperCase())
     || (r.event||'').toUpperCase().indexOf('PROTECT')>=0 || (r.tag||'').match(/SPERRE|Cooldown|Ziel|GESPERRT/i));
-  if(!keep.length){ tb.innerHTML='<tr><td colspan="5" class="empty">noch keine Ereignisse</td></tr>'; return; }
+  if(!keep.length){ tb.innerHTML=`<tr><td colspan="5" class="empty">${esc(t('journal.empty'))}</td></tr>`; return; }
   tb.innerHTML=keep.slice(0,60).map(r=>{
     const net=Number(r.net)||0;
     const nt=net!==0?`<span class="${net>0?'net-pos':'net-neg'}">${net>0?'+':''}${de(net)}</span>`:'<span style="color:var(--txt3)">—</span>';
@@ -831,8 +831,8 @@ let anaTimer=0;
 let failStreak=0; const FAIL_LIMIT=3;
 function showOffline(){
   const bn=$('banner'); bn.style.display='block'; bn.className='banner red';
-  bn.textContent='Verbindung zum Cockpit-Server verloren — Anzeige veraltet.';
-  $('stand').innerHTML='<span class="off">●</span> Server offline? · keine Antwort vom Cockpit-Server';
+  bn.textContent=t('banner.offline');
+  $('stand').innerHTML=`<span class="off">●</span> ${esc(t('foot.serverOffline'))}`;
 }
 function fetchFail(){ if(++failStreak>=FAIL_LIMIT) showOffline(); }
 // v0.38: multi-account — the selection stays stored in the browser; all queries run with ?acct=
@@ -857,7 +857,7 @@ function renderAccounts(list){
   const cur=ACCT;
   // Sort stably by account number — otherwise the freshness sorting rebuilds the dropdown every 1.5s.
   const opts=[...list].sort((a,b)=>String(a.account).localeCompare(String(b.account),undefined,{numeric:true}));
-  const html=opts.map(a=>`<option value="${esc(a.account)}"${String(a.account)===cur?' selected':''}>Konto ${esc(a.account)}${a.historic?' · nur Historie':(a.profile?' · '+esc(a.profile):'')}</option>`).join('');
+  const html=opts.map(a=>`<option value="${esc(a.account)}"${String(a.account)===cur?' selected':''}>${esc(t('acct.option',{0:a.account}))}${esc(a.historic?t('acct.option.historic'):(a.profile?t('acct.option.profile',{0:a.profile}):''))}</option>`).join('');
   if(sel.dataset.h!==html){ sel.innerHTML=html; sel.dataset.h=html; }
   sel.style.display='';
   // Der Papierkorb erscheint nur bei einem Konto, das nichts mehr liefert. Ein Knopf, der bei
@@ -871,18 +871,16 @@ $('acctSel').addEventListener('change',function(){ ACCT=this.value; localStorage
 // loeschen?" ohne Nummer ist beim zweiten Mal nur noch ein Klick.
 $('acctDel').addEventListener('click',async function(){
   const nr=ACCT; if(!nr) return;
-  if(!confirm('Konto '+nr+' aus dem Cockpit entfernen?\n\nAuf dem Relay werden die Daten dieses '
-             +'Kontos samt Equity-Verlauf gelöscht. Das lässt sich nicht rückgängig machen.\n\n'
-             +'Liefert das Konto später wieder, taucht es von selbst wieder auf.')) return;
+  if(!confirm(t('acct.forget.confirm',{acct:nr}))) return;
   this.disabled=true;
   try{
     const r=await fetch('/cmd/forget?acct='+encodeURIComponent(nr),{method:'POST'});
-    const j=await r.json().catch(()=>({ok:false,error:'Unerwartete Antwort ('+r.status+')'}));
-    if(!j.ok){ alert(j.error||'Hat nicht geklappt.'); return; }
+    const j=await r.json().catch(()=>({ok:false,error:t('cmd.badResponse',{status:r.status})}));
+    if(!j.ok){ alert(j.error||t('acct.forget.failed')); return; }
     ACCT=''; localStorage.removeItem('mamalAcct'); prevS=null;
-    alert(j.hinweis||('Konto '+nr+' entfernt.'));
+    alert(j.hinweis||t('acct.forget.done',{acct:nr}));
     tick(); loadAnalytics(); loadEquity();
-  }catch(e){ alert('Hat nicht geklappt: '+e.message); }
+  }catch(e){ alert(t('acct.forget.failedWith',{msg:e.message})); }
   finally{ this.disabled=false; }
 });
 
@@ -928,9 +926,9 @@ function renderPositions(st){
         +'<span>Ziel<i>'+esc(fmtPrice(o.tp,dg))+'</i></span>'
       +'</div>'
       +'<div class="pact">'
-        +'<button class="pbtn danger" data-cmd="close" data-sym="'+esc(o.sym)+'" data-a1="'+esc(o.t)+'">Schließen</button>'
-        +'<button class="pbtn" data-cmd="half" data-sym="'+esc(o.sym)+'">Hälfte</button>'
-        +'<button class="pbtn" data-cmd="be" data-sym="'+esc(o.sym)+'">Break-even</button>'
+        +'<button class="pbtn danger" data-cmd="close" data-sym="'+esc(o.sym)+'" data-a1="'+esc(o.t)+'">'+esc(t('pos.btn.close'))+'</button>'
+        +'<button class="pbtn" data-cmd="half" data-sym="'+esc(o.sym)+'">'+esc(t('pos.btn.half'))+'</button>'
+        +'<button class="pbtn" data-cmd="be" data-sym="'+esc(o.sym)+'">'+esc(t('pos.label.be'))+'</button>'
       +'</div></div>';
   }).join('');
   if(grid.dataset.h!==html){ grid.innerHTML=html; grid.dataset.h=html; }
@@ -1097,11 +1095,11 @@ function checkTransitions(s){
   if(prevS){
     // v0.39-fix (Verify): "wieder handeln" (trade again) only when NOTHING really blocks any more (same logic as the banner) —
     // otherwise the toast reported "frei" (free) while e.g. the weekly limit was still locking.
-    if(prevS.cooldown && !s.cooldown && blockReason(s)==='') notifyMsg('Cooldown vorbei — du darfst wieder handeln.');
-    if(!prevS.dayLock && s.dayLock)   notifyMsg('Daily loss lock active — done for today.');
-    if(!prevS.hardLock && s.hardLock) notifyMsg('MAX-VERLUST-Sperre aktiv.');
-    if(!prevS.weekLock && s.weekLock) notifyMsg('Wochenlimit erreicht — diese Woche ist beendet.');
-    if(!prevS.targetHit && s.targetHit) notifyMsg('Tagesziel erreicht — Gewinn gesichert.');
+    if(prevS.cooldown && !s.cooldown && blockReason(s)==='') notifyMsg(t('notif.cooldownOver'));
+    if(!prevS.dayLock && s.dayLock)   notifyMsg(t('notif.dayLock'));
+    if(!prevS.hardLock && s.hardLock) notifyMsg(t('notif.hardLock'));
+    if(!prevS.weekLock && s.weekLock) notifyMsg(t('notif.weekLock'));
+    if(!prevS.targetHit && s.targetHit) notifyMsg(t('notif.targetHit'));
   }
   prevS=s;
 }
@@ -1118,22 +1116,22 @@ function buildLock(s){
   const now=Date.now();
   if(s.cooldown && s.cooldownSec>0){
     const tot=Math.max(s.cooldownSec,(s.cooldownMin||45)*60);
-    return {kind:'COOLDOWN — Zwangspause nach Verlusten',
-            why:`Nach ${s.cooldownAfter} Verlusten in Folge pausiert das Tool ${s.cooldownMin} Minuten. Neue Einstiege sind gesperrt.`,
+    return {kind:t('lock.kind.cooldown'),
+            why:t('lock.why.cooldown',{n:s.cooldownAfter,min:s.cooldownMin}),
             endMs:now+s.cooldownSec*1000, totalSec:tot, crit:false};
   }
   const sn=srvNow(s);
-  if(s.hardLock) return {kind:'MAX-VERLUST-SPERRE', why:'Die harte Gesamt-Verlustgrenze ist erreicht. Keine neuen Trades.', endMs:0, totalSec:0, crit:true};
+  if(s.hardLock) return {kind:t('lock.kind.maxloss'), why:t('lock.why.maxloss'), endMs:0, totalSec:0, crit:true};
   if(s.weekLock){
     // bis Sonntag 24:00 Serverzeit
     const d=new Date(sn||now); const dow=(d.getUTCDay()+6)%7; const end=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+(7-dow),0,0,0);
-    return {kind:'WOCHENSPERRE', why:'Das Wochen-Verlustlimit ist erreicht — diese Woche keine neuen Trades.',
+    return {kind:t('lock.kind.week'), why:t('lock.why.week'),
             endMs:now+Math.max(0,end-sn), totalSec:7*86400, crit:true};
   }
   if(s.dayLock || s.targetHit){
     const d=new Date(sn||now); const end=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1,0,0,0);
-    return {kind:s.targetHit?'TAGESZIEL ERREICHT — Feierabend':'TAGESSPERRE',
-            why:s.targetHit?'Dein Tagesziel ist erreicht. Gewinn sichern — morgen weiter.':'The daily loss limit is reached. Locked until the next trading day.',
+    return {kind:t(s.targetHit?'lock.kind.target':'lock.kind.day'),
+            why:t(s.targetHit?'lock.why.target':'lock.why.day'),
             endMs:now+Math.max(0,end-sn), totalSec:86400, crit:!s.targetHit};
   }
   return null;
@@ -1148,11 +1146,12 @@ function paintLock(){
   if(!LOCK){ box.style.display='none'; return; }
   box.style.display='flex'; box.classList.toggle('crit',!!LOCK.crit);
   $('lmKind').textContent=LOCK.kind; $('lmWhy').textContent=LOCK.why;
-  if(!LOCK.endMs){ $('lmVal').textContent='—'; $('lmUntil').textContent='bis manuell aufgehoben'; $('lmBar').style.width='100%'; return; }
+  if(!LOCK.endMs){ $('lmVal').textContent='—'; $('lmUntil').textContent=t('lock.until.manual'); $('lmBar').style.width='100%'; return; }
   const rest=LOCK.endMs-Date.now();
-  if(rest<=0){ $('lmVal').textContent='00:00'; $('lmUntil').textContent='expiring…'; $('lmBar').style.width='0%'; return; }
+  if(rest<=0){ $('lmVal').textContent='00:00'; $('lmUntil').textContent=t('lock.expiring'); $('lmBar').style.width='0%'; return; }
   $('lmVal').textContent=hhmmss(rest);
-  $('lmUntil').textContent='frei um '+new Date(LOCK.endMs).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' (lokal)';
+  $('lmUntil').textContent=t('lock.freeAt',{0:new Date(LOCK.endMs)
+    .toLocaleTimeString(LANG==='fa'?'fa-IR':LANG==='en'?'en-GB':'de-DE',{hour:'2-digit',minute:'2-digit'})});
   $('lmBar').style.width=(LOCK.totalSec>0?clamp(rest/1000/LOCK.totalSec)*100:100).toFixed(1)+'%';
 }
 setInterval(paintLock,1000);   // smooth clock between the polls
@@ -1175,21 +1174,20 @@ function renderGauges(s){
   const maxFloor =(s.initBal>0 && s.maxLoss>0)?   s.initBal*(1-s.maxLoss/100):null;
   const weekFloor=(s.weekBase>0 && s.weekLimit>0)?s.weekBase*(1-s.weekLimit/100):null;
   $('gauges').innerHTML=
-    gauge('Heute noch verlierbar', dayFloor!=null?s.equity-dayFloor:null, s.dailyDD, s.dailyLimit,
-      `Tageslimit ${de(s.dailyLimit)}% · verbraucht ${de(s.dailyDD)}%`)
-   +gauge('Bis Max-Verlust', maxFloor!=null?s.equity-maxFloor:null, s.totalDD, s.maxLoss,
-      `Max ${de(s.maxLoss)}% · verbraucht ${de(s.totalDD)}%`)
-   +gauge('Diese Woche noch verlierbar', weekFloor!=null?s.equity-weekFloor:null, s.weekDD, s.weekLimit,
-      `Wochenlimit ${de(s.weekLimit)}% · verbraucht ${de(s.weekDD)}%`);
+    gauge(t('gauge.dayRemain'), dayFloor!=null?s.equity-dayFloor:null, s.dailyDD, s.dailyLimit,
+      t('gauge.sub.day',{lim:de(s.dailyLimit),used:de(s.dailyDD)}))
+   +gauge(t('gauge.maxRemain'), maxFloor!=null?s.equity-maxFloor:null, s.totalDD, s.maxLoss,
+      t('gauge.sub.max',{lim:de(s.maxLoss),used:de(s.totalDD)}))
+   +gauge(t('gauge.weekRemain'), weekFloor!=null?s.equity-weekFloor:null, s.weekDD, s.weekLimit,
+      t('gauge.sub.week',{lim:de(s.weekLimit),used:de(s.weekDD)}));
 }
 // v0.73: ueber die Warteschlange wie jeder andere Befehl. Vorher meldete dieser Knopf Erfolg,
 //   sobald eine Datei geschrieben war — ob der EA sie je gesehen hat, erfuhr man nie. Jetzt
 //   sagt die Quittung, ob die Sperre wirklich steht. Bei einer Selbstsperre ist das der
 //   Unterschied zwischen Schutz und dem Gefuehl von Schutz.
 $('enddayBtn').addEventListener('click',()=>{
-  if(!confirm('Tag wirklich beenden?\n\nDer EA blockt neue Trades bis Server-Mitternacht.'
-             +' Das lässt sich NICHT zurücknehmen.')) return;
-  sendCmd('endday','','','Tag beenden');
+  if(!confirm(t('endday.confirm')+'\n\n'+t('endday.note'))) return;
+  sendCmd('endday','','',t('endday.confirm').replace(/\?$/,''));
 });
 $('reportBtn').addEventListener('click',()=>window.open('/report.html'+AQ(),'_blank'));
 $('tradesBtn').addEventListener('click',()=>window.open('/trade.html'+AQ(),'_blank'));   // v0.62: Trade-Akte
@@ -1198,7 +1196,7 @@ $('tradesBtn').addEventListener('click',()=>window.open('/trade.html'+AQ(),'_bla
 let CH_T=parseFloat(localStorage.getItem('mamalChTarget'))||10;
 function renderChallenge(s){
   const base=s.initBal>0?s.initBal:0;
-  if(!base){ $('challenge').innerHTML='<span class="gnote">Noch keine Kontobasis bekannt.</span>'; return; }
+  if(!base){ $('challenge').innerHTML=`<span class="gnote">${esc(t('challenge.noBase'))}</span>`; return; }
   const profEur=s.equity-base, profPct=profEur/base*100;
   const tgtEur=base*CH_T/100, remEur=tgtEur-profEur, f=clamp(profPct/CH_T);
   const days=LASTA?Object.values(LASTA.calendar||{}).filter(d=>(d.fills||0)>0||(d.closes||0)>0).length:0;
@@ -1208,12 +1206,12 @@ function renderChallenge(s){
   const col=done?'var(--green)':profEur<0?'var(--red)':'var(--accent)';
   $('challenge').innerHTML=`
     <div style="display:flex;gap:20px;align-items:baseline;flex-wrap:wrap">
-      <div><span class="glab" style="font-size:11px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase">Fortschritt zum Ziel</span>
+      <div><span class="glab" style="font-size:11px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase">${esc(t('challenge.progressLabel'))}</span>
         <div style="font:700 26px/1.2 var(--mono);color:${col}">${profPct>=0?'+':''}${de(profPct)}% <span style="font-size:15px;color:var(--txt3)">/ ${de(CH_T,0)}%</span></div></div>
-      <div class="gnote">${done?'🎉 Ziel erreicht!':`noch ${money(Math.max(0,remEur),CCY)} bis zum Ziel`}
-        · Handelstage: <b>${days}</b>${days<4?' (FTMO verlangt min. 4)':''}
-        ${proj?` · bei deinem Schnitt (~${money(avg,CCY)}/Tag) noch ~<b>${proj}</b> Handelstage`:''}</div>
-      <span style="margin-left:auto">Ziel:
+      <div class="gnote">${done?esc(t('challenge.done')):esc(t('challenge.remaining',{0:money(Math.max(0,remEur),CCY)}))}
+        · ${esc(t('challenge.tradingDays'))} <b>${days}</b>${days<4?' '+esc(t('challenge.ftmoMin')):''}
+        ${proj?esc(t('challenge.projection',{0:money(avg,CCY),1:proj})):''}</div>
+      <span style="margin-left:auto">${esc(t('challenge.targetLabel'))}
         <button class="hbtn ${CH_T===10?'on':''}" onclick="setChT(10)">10%</button>
         <button class="hbtn ${CH_T===5?'on':''}" onclick="setChT(5)">5%</button>
         <button class="hbtn ${CH_T!==10&&CH_T!==5?'on':''}" onclick="setChTCustom()">…</button></span>
@@ -1235,10 +1233,10 @@ function renderAcctGrid(list){
     const colr=a.statusColor==='red'?'var(--red)':a.statusColor==='amber'?'var(--amber)':a.statusColor==='blue'?'var(--accent)':'var(--green)';   // v0.62: blue = decision due (R23), otherwise it fakes green
     const dayRem=(a.dayBase>0&&a.dailyLimit>0)?a.equity-a.dayBase*(1-a.dailyLimit/100):null;
     return `<div class="acard ${String(a.account)===cur?'sel':''}" onclick="pickAcct('${String(a.account).replace(/\D/g,'')}')">
-      <div style="display:flex;align-items:center;gap:8px"><span class="an">Konto ${esc(a.account)}</span>
-        <span style="margin-left:auto;font-size:11px;color:${live?colr:'var(--txt3)'}">● ${live?esc(a.status||''):'offline'}</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="an">${esc(t('acct.option',{0:a.account}))}</span>
+        <span style="margin-left:auto;font-size:11px;color:${live?colr:'var(--txt3)'}">● ${live?esc(a.status||''):esc(t('acct.card.offline'))}</span></div>
       <div class="ae">${typeof a.equity==='number'?money(a.equity,a.ccy):'—'}</div>
-      <div class="as">${esc(a.profile||'')}${dayRem!=null?` · heute noch ${money(Math.max(0,dayRem),a.ccy)} Puffer`:''}</div></div>`;
+      <div class="as">${esc(a.profile||'')}${dayRem!=null?esc(t('acct.card.buffer',{0:money(Math.max(0,dayRem),a.ccy)})):''}</div></div>`;
   }).join('');
   $('acctGrid').innerHTML=cards; w.style.display='block';
 }
@@ -1252,7 +1250,7 @@ function renderTilt(rows){
   for(const r of rows){ const ts=parseSrv(r.time); if(ts>newest) newest=ts; }
   const n=rows.filter(r=>String(r.event||'').trim().toUpperCase()==='BLOCKED'&&newest-parseSrv(r.time)<=10*60*1000).length;   // v0.39-fix: same normalization as in the journal
   const el=$('tilt');
-  if(n>=4){ el.style.display='block'; el.textContent=`🚨 Tilt-Radar: ${n} Ablehnungen in 10 Minuten — steh auf, hol Wasser, komm in 15 Minuten wieder.`; }
+  if(n>=4){ el.style.display='block'; el.textContent=t('tilt.msg',{n:n}); }
   else el.style.display='none';
 }
 
@@ -1295,42 +1293,47 @@ function renderTrend(a){
   for(const d of act.slice(-30)){
     const c=cal[d], at=(c.fills||0)+(c.blocks||0), ratio=at?c.fills/at:0;
     const col=(c.manual||0)>0?'var(--amber)':(c.blocks===0?'var(--green)':ratio>=0.5?'var(--amber)':'var(--red)');
-    bars+=`<div class="tb" style="height:${Math.max(8,ratio*100)}%;background:${col}" title="${esc(d)} — ${c.fills} Trades / ${c.blocks} Blocks${(c.manual||0)?' · '+c.manual+' manuell':''} (${Math.round(ratio*100)}%)"></div>`;
+    bars+=`<div class="tb" style="height:${Math.max(8,ratio*100)}%;background:${col}" title="${esc(t('trend.bar.title',{date:d,fills:c.fills,blocks:c.blocks})+((c.manual||0)?t('trend.bar.title.manual',{n:c.manual}):'')+t('trend.barTooltip.ratio',{0:Math.round(ratio*100)}))}"></div>`;
   }
-  $('discTrend').innerHTML=bars||'<span class="gnote">Noch keine aktiven Tage.</span>';
+  $('discTrend').innerHTML=bars||`<span class="gnote">${esc(t('trend.empty'))}</span>`;
   let now=0; for(let i=act.length-1;i>=0;i--){ if(clean(act[i])) now++; else break; }
   let best=0,run=0; for(const d of act){ if(clean(d)){ run++; if(run>best)best=run; } else run=0; }
-  $('streakNow').textContent=now+(now===1?' Tag':' Tage'); $('streakNow').style.color=now>0?'var(--green)':'var(--txt2)';
-  $('streakBest').textContent='Rekord: '+best+(best===1?' Tag':' Tage');
+  const dayCount=n=>t(n===1?'trend.streak.dayOne':'trend.streak.days',{0:n});
+  $('streakNow').textContent=dayCount(now); $('streakNow').style.color=now>0?'var(--green)':'var(--txt2)';
+  $('streakBest').textContent=t('trend.streak.record',{0:dayCount(best)});
 }
 
 // ==== v0.39: Trade-Statistik ====
 function renderStats(a){
   const st=a.stats||{}; const n=(st.winN||0)+(st.lossN||0);
-  if(!n){ $('stats').innerHTML='<div class="stat"><div class="l">Noch keine geschlossenen Trades</div><div class="v">—</div></div>'; return; }
+  if(!n){ $('stats').innerHTML=`<div class="stat"><div class="l">${esc(t('stats.empty'))}</div><div class="v">—</div></div>`; return; }
   const pf=st.profitFactor==null?'∞':de(st.profitFactor);
   const bh=st.netByHour||[]; let bi=-1,bv=0,wi=-1,wv=0;
   bh.forEach((v,h)=>{ if(v>bv){bv=v;bi=h;} if(v<wv){wv=v;wi=h;} });
   $('stats').innerHTML=
-    `<div class="stat"><div class="l">Trefferquote</div><div class="v">${Math.round((st.winRate||0)*100)}%</div><div class="gnote">${st.winN}G / ${st.lossN}V</div></div>
-     <div class="stat"><div class="l">Ø Gewinn</div><div class="v net-pos">${eur(st.avgWin||0)}</div></div>
-     <div class="stat"><div class="l">Ø Verlust</div><div class="v net-neg">${eur(st.avgLoss||0)}</div></div>
-     <div class="stat"><div class="l">Profit-Factor</div><div class="v">${pf}</div></div>
-     <div class="stat"><div class="l">Expectancy / Trade</div><div class="v ${st.expectancy>=0?'net-pos':'net-neg'}">${eur(st.expectancy||0)}</div></div>
-     <div class="stat"><div class="l">Beste Stunde</div><div class="v">${bi>=0?bi+':00':'—'}</div><div class="gnote">${bi>=0?eur(bv):''}</div></div>
-     <div class="stat"><div class="l">Weakest hour</div><div class="v">${wi>=0?wi+':00':'—'}</div><div class="gnote">${wi>=0?eur(wv):''}</div></div>
+    `<div class="stat"><div class="l">${esc(t('stats.winRate'))}</div><div class="v">${Math.round((st.winRate||0)*100)}%</div><div class="gnote">${esc(t('stats.winLoss',{w:st.winN,l:st.lossN}))}</div></div>
+     <div class="stat"><div class="l">${esc(t('stats.avgWin'))}</div><div class="v net-pos">${eur(st.avgWin||0)}</div></div>
+     <div class="stat"><div class="l">${esc(t('stats.avgLoss'))}</div><div class="v net-neg">${eur(st.avgLoss||0)}</div></div>
+     <div class="stat"><div class="l">${esc(t('stats.profitFactor'))}</div><div class="v">${pf}</div></div>
+     <div class="stat"><div class="l">${esc(t('stats.expectancy'))}</div><div class="v ${st.expectancy>=0?'net-pos':'net-neg'}">${eur(st.expectancy||0)}</div></div>
+     <div class="stat"><div class="l">${esc(t('stats.bestHour'))}</div><div class="v">${bi>=0?bi+':00':'—'}</div><div class="gnote">${bi>=0?eur(bv):''}</div></div>
+     <div class="stat"><div class="l">${esc(t('stats.worstHour'))}</div><div class="v">${wi>=0?wi+':00':'—'}</div><div class="gnote">${wi>=0?eur(wv):''}</div></div>
      ${(function(){   // v0.52: entry timing within the candle — early/middle/late
         const th=(a.stats&&a.stats.thirds)||[0,0,0], tn=(a.stats&&a.stats.thirdNet)||[0,0,0];
         const ges=th[0]+th[1]+th[2];
         if(!ges) return '';
-        const lbl=['early','mittig','late'], col=['var(--good)','var(--warn)','var(--crit)'];
+        // Vorher: lbl=['early','mittig','late'], eingesetzt als ${lbl[i]}es Drittel.
+        //   Auf dem Schirm stand damit "earlyes Drittel" und "latees Drittel" --
+        //   zwei Sprachen und eine kaputte Beugung in einem Wort.
+        const lbl=[t('stats.third.early'),t('stats.third.mid'),t('stats.third.late')],
+              col=['var(--good)','var(--warn)','var(--crit)'];
         let best=0; for(let i=1;i<3;i++) if(tn[i]>tn[best]) best=i;
-        const bars=th.map((n,i)=>`<span style="color:${col[i]}" title="${lbl[i]}es Drittel: ${n} Einstiege, ${eur(tn[i])}">${n}</span>`).join('<span style="color:var(--txt3)"> · </span>');
-        return `<div class="stat"><div class="l">Einstieg in der Kerze</div><div class="v" style="font-size:17px">${bars}</div>
-          <div class="gnote">early · middle · late — best results in <b style="color:${col[best]}">${lbl[best]}</b> (${eur(tn[best])})</div></div>`;
+        const bars=th.map((n,i)=>`<span style="color:${col[i]}" title="${esc(t('stats.third.tooltip',{third:lbl[i],n:n,net:eur(tn[i])}))}">${n}</span>`).join('<span style="color:var(--txt3)"> · </span>');
+        return `<div class="stat"><div class="l">${esc(t('stats.third.label'))}</div><div class="v" style="font-size:17px">${bars}</div>
+          <div class="gnote">${t('stats.third.note',{third:`<b style="color:${col[best]}">${esc(lbl[best])}</b>`,net:eur(tn[best])})}</div></div>`;
      })()}
-     <div class="stat"><div class="l">Davon manuell</div><div class="v" style="color:${(a.totals&&a.totals.manualN)?'var(--amber)':'var(--txt2)'}">${(a.totals&&a.totals.manualN)||0}</div>
-       <div class="gnote">${(a.totals&&a.totals.manualN)?eur(a.totals.manualNet||0)+' · am Panel vorbei':'keine erkannt (ab EA v0.44, laufender Tag)'}</div></div>`;
+     <div class="stat"><div class="l">${esc(t('stats.manual'))}</div><div class="v" style="color:${(a.totals&&a.totals.manualN)?'var(--amber)':'var(--txt2)'}">${(a.totals&&a.totals.manualN)||0}</div>
+       <div class="gnote">${esc((a.totals&&a.totals.manualN)?t('stats.manual.note',{net:eur(a.totals.manualNet||0)}):t('stats.manual.none'))}</div></div>`;
 }
 
 async function loadAnalytics(){ try{ const a=await (await fetch('/analytics'+AQ())).json(); LASTA=a; renderCoach(a); renderWeak(a); renderCalendar(a); renderTrend(a); renderStats(a); if(LASTSTATE) renderChallenge(LASTSTATE); }catch(e){ fetchFail(); } }
@@ -1356,13 +1359,13 @@ async function tick(){
       //   line ~934 then re-picks the live one. The dropdown still allows going back.
       const live=(j.accounts||[]).find(a=>a&&a.ageMs!=null&&a.ageMs<20000);
       if(ACCT&&live&&String(live.account)!==ACCT){
-        $('offlineWhy').textContent='Konto '+ACCT+' liefert keine Daten mehr — Konto '+live.account+' ist live. Wird umgeschaltet…';
+        $('offlineWhy').textContent=t('offline.switching',{old:ACCT,live:live.account});
         if(++deadSel>=3){ deadSel=0; ACCT=''; localStorage.removeItem('mamalAcct'); prevS=null; loadAnalytics(); loadEquity(); }
       } else {
         deadSel=0;
-        $('offlineWhy').textContent=ACCT?('Gewähltes Konto: '+ACCT+' — kein anderes Konto liefert gerade Daten.'):'';
+        $('offlineWhy').textContent=ACCT?t('offline.chosen',{acct:ACCT}):'';
       }
-      $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML='<span class="off">● keine Verbindung zu MT4</span>'; failStreak=0; return; }
+      $('content').style.display='none'; $('offline').style.display='block'; st.innerHTML=`<span class="off">${esc(t('foot.noMt4'))}</span>`; failStreak=0; return; }
     LASTSTATE=j.state; ISRELAY=!!j.relay;
     renderState(j.state,j.ageMs);
     renderGauges(j.state); renderChallenge(j.state); checkTransitions(j.state);
