@@ -379,21 +379,42 @@ function readAck(dir, id) {
 // Aufraeumen: quittierte und alte Zeilen aus der Warteschlange nehmen. Der EA loescht nie —
 // er vermerkt nur, was er erledigt hat — also muss es hier passieren, und zwar unteilbar,
 // damit der EA nie eine halbe Datei liest.
+//
+// DAS WETTRENNEN, UM DAS ES HIER GEHT: zwischen dem Lesen und dem Umbenennen kann appendCmd
+// eine Zeile anhaengen. Die stuende dann in der alten Datei, die gerade ersetzt wird — der
+// Befehl waere lautlos verschwunden, und zwar genau die Sorte Verlust, gegen die diese ganze
+// Warteschlange gebaut ist. Anhaengen aendert die Laenge der Datei; ist sie beim zweiten
+// Hinsehen eine andere, wird dieser Durchgang verworfen. In dreissig Sekunden ist wieder einer.
 function sweepCmdQueue(dir) {
   const qf = path.join(dir, CMDQ_FILE);
-  let raw = '';
-  try { raw = fs.readFileSync(qf, 'latin1'); } catch (e) { return; }
-  let ack = '';
-  try { ack = fs.readFileSync(path.join(dir, ACK_FILE), 'latin1'); } catch (e) { /* keine */ }
+  let raw = '', lenBefore = 0;
+  try { lenBefore = fs.statSync(qf).size; raw = fs.readFileSync(qf, 'latin1'); } catch (e) { return; }
+
+  // Quittierte IDs exakt vergleichen, nicht als Teilstring: ein Treffer irgendwo in einer
+  //   Begruendung wuerde einen Befehl aus der Warteschlange werfen, den niemand quittiert hat.
+  const acked = new Set();
+  try {
+    for (const l of fs.readFileSync(path.join(dir, ACK_FILE), 'latin1').split(/\r?\n/)) {
+      const i = l.indexOf(';');
+      if (i > 0) acked.add(l.slice(0, i));
+    }
+  } catch (e) { /* noch keine Quittungen */ }
+
   const cutoff = Math.floor(Date.now() / 1000) - 15 * 60;
-  const keep = raw.split(/\r?\n/).filter(l => {
+  const lines = raw.split(/\r?\n/).filter(x => x.length > 2);
+  const keep = lines.filter(l => {
     const c = l.split('|');
     if (c.length < 6) return false;
-    if (ack.indexOf(c[0] + ';') >= 0) return false;            // quittiert
+    if (acked.has(c[0])) return false;                          // quittiert
     return (Number(c[5]) || 0) >= cutoff;                       // und nicht uralt
   });
-  if (keep.length === raw.split(/\r?\n/).filter(x => x.length > 2).length) return;   // nichts zu tun
-  const tmp = qf + '.neu';
+  if (keep.length === lines.length) return;                     // nichts zu tun
+
+  let lenNow = 0;
+  try { lenNow = fs.statSync(qf).size; } catch (e) { return; }
+  if (lenNow !== lenBefore) return;                             // jemand hat angehaengt — naechste Runde
+
+  const tmp = qf + '.neu.' + process.pid;
   fs.writeFileSync(tmp, keep.length ? keep.join('\r\n') + '\r\n' : '', 'latin1');
   fs.renameSync(tmp, qf);
 }

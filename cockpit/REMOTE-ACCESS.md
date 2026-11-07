@@ -95,6 +95,93 @@ there were no login at all.
 
 ---
 
+# Trading from the browser
+
+The cockpit can place and manage orders. Everything below exists because of one property of
+the EA, and it is worth stating first: **R22 closes any position carrying a foreign magic
+number, account-wide, within seconds, regardless of any lock.** A second terminal, a bridge,
+the broker's web platform, the MetaTrader phone app — each of them would have its position
+closed at market moments after opening, paying spread and slippage for the attempt.
+
+So there is exactly one route that survives, and the design did not choose it:
+
+```
+browser  ──▶  cockpit  ──▶  mamal_cmdq.txt  ──▶  the EA's own DoEntry  ──▶  OrderSend
+                 ▲                                        │
+                 └──────────  mamal_ack.csv  ◀────────────┘
+```
+
+## The queue, and why it is not a single file
+
+`mamal_cmd.txt` had exactly one slot, which the server overwrote. Two commands inside one EA
+cycle and one was gone — harmless for "end the day", unacceptable for "close EURUSD", where
+the dashboard would report success and nothing anywhere would say otherwise.
+
+One line per command: `id|cmd|symbol|a1|a2|issued`. **Exactly one writer per file:** the
+cockpit writes only the queue, the EA writes only the receipts. There is no write conflict to
+resolve, which is the whole reason the files are split that way.
+
+| Rule | Why |
+|---|---|
+| marked done **before** executing | a crash mid-order loses the command instead of repeating it. For opening that is the only correct direction: a missing order is visible at once, a doubled one may never be noticed |
+| nothing is deleted | deleting the file as a receipt made a failed READ indistinguishable from "no command". The EA only marks what it did; the cockpit clears the line once it has seen the receipt |
+| read with share flags | without `FILE_SHARE_READ\|FILE_SHARE_WRITE` the open fails as soon as the server touches the same file — the journal already learned this in v0.44 |
+| older than `InpCmdMaxAgeSec` (120 s) expires | a command that waited out a dead terminal must not fill on Monday at a price nobody saw |
+| symbol-bound commands run in the instance holding that symbol | the master sits on whichever of the six charts it happens to sit on. A "close EURUSD" from it would have hit GBPJPY — the most expensive bug this design can produce |
+
+Commands: `endday`, `flat`, `closesym`, `half`, `be`, `close <ticket>`, `buy <stop>`,
+`sell <stop>`. The whitelist lives in one place in the server and nothing outside it reaches
+the file. **The channel cannot loosen a rule** — it can set a lock, never shorten one.
+
+## What an order carries, and what it does not
+
+It carries a **symbol** and a **stop price**. That is all.
+
+It does not carry a position size: `CalcLot()` derives that from your risk per trade and the
+stop distance, in the EA, where it always has. Computing it in two places means computing it
+differently in two places sooner or later, and that is the one number whose correctness
+justifies the entire tool.
+
+It does not carry a target either: the target still comes from the stop distance and `InpRR`,
+or an order from the browser could undercut the reward-to-risk ratio R8 exists to enforce.
+
+And it may never inherit the chart's stop line. That line can be two days old; the size hangs
+off the stop distance, so the position would be sized against a distance nobody meant — and R1
+would close it again seconds later.
+
+`DoEntry` gained exactly one parameter for this, the stop price. Between the top of that
+function and the single `OrderSend` there are nineteen checks, and a browser order walks all
+of them. **A rejection names the rule**: the journal's reason travels back in the receipt, so
+the browser says "refused: R3 daily budget" instead of a button that quietly did nothing.
+
+## Three states, and the third always gives a reason
+
+Sent → waiting for the terminal → done or refused. A button that merely stops spinning does
+not tell you whether anything happened, and in a risk tool "you believe you are protected and
+are not" is the worst failure there is. Receipts carry the ticket, the price and the reason.
+
+The success signal is the ticket `DoEntry` actually opened, held in an ordinary variable
+belonging to that one instance. It is deliberately **not** the fill counter: that lives in a
+GlobalVariable shared by all six instances, so a click on another chart's panel in the same
+second would have acknowledged a failed remote order as done.
+
+## What this needs to work at all
+
+The command file has to land in a `MQL4/Files` folder a MetaTrader actually reads. On a relay
+it lands in a container instead, and the push agent beside MT4 only ever sends — it never
+fetches. Both `/cmd/send` and the self-lock therefore refuse on a relay instance and say so,
+rather than writing into the void and reporting success.
+
+That restriction disappears by itself once MetaTrader and the cockpit sit on the same machine,
+which is the point of moving to a VPS: the command becomes a local file again, and the round
+trip drops from five to fifteen seconds to one or two.
+
+**Not from a US address.** FTMO allows VPN and VPS without restriction on IP addresses or the
+number of devices, confirmed in writing on 05.11.2026, but no US IPs on MT4/MT5/cTrader. The
+classic forex VPS is New York; choose London, Frankfurt or Amsterdam.
+
+---
+
 # Relay mode — the cockpit in a container
 
 A container has no MetaTrader and no MQL4 folder, so the cockpit there has nothing to read.
