@@ -681,14 +681,14 @@ function renderState(s,ageMs){
 // ---- Coach: Disziplin-Hero + Edge + Stunden ----
 const SESS=['Nacht','Vormittag','Nachmittag'];
 function renderCoach(a){
-  const d=a.discipline||{fills:0,blocks:0,attempts:0,ratio:0}; const t=a.totals||{};
+  const d=a.discipline||{fills:0,blocks:0,attempts:0,ratio:0}; const tot=a.totals||{};
   const pct=Math.round((d.ratio||0)*100);
   $('hero').innerHTML=`<div><div class="lab">Disziplin</div><div class="big">${pct}%</div>
       <div class="dg"><i style="width:${Math.max(2,pct)}%"></i></div></div>
     <div class="sub"><b>${d.fills} Trades aus ${d.attempts} Versuchen.</b> ${d.blocks}× hat dich eine Regel gestoppt${pct>0&&pct<30?' — dein Konto lebt gerade von deiner Disziplin, nicht vom P/L.':'.'}
-      ${(t.manualN||0)?`<div style="color:var(--amber);margin-top:4px">✋ ${t.manualN} Trade(s) liefen am Panel vorbei (${eur(t.manualNet||0)}) — im Netto enthalten, aber ohne Regelschutz.</div>`:''}</div>
-    <div class="net"><div class="lab">Netto gesamt</div><div class="v ${(t.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(t.netTotal||0)}</div>
-      <div class="lab" style="margin-top:4px">${t.tradesTotal||0} Trades · ${t.days||0} Tage</div></div>`;
+      ${(tot.manualN||0)?`<div style="color:var(--amber);margin-top:4px">✋ ${tot.manualN} Trade(s) liefen am Panel vorbei (${eur(tot.manualNet||0)}) — im Netto enthalten, aber ohne Regelschutz.</div>`:''}</div>
+    <div class="net"><div class="lab">Netto gesamt</div><div class="v ${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</div>
+      <div class="lab" style="margin-top:4px">${tot.tradesTotal||0} Trades · ${tot.days||0} Tage</div></div>`;
 
   const edge=a.edge||[], v=a.verdict||{};
   $('edgeVerdict').innerHTML= edge.length
@@ -736,11 +736,11 @@ function renderWeak(a){
       <div class="wtrack"><i style="width:${w}%;background:${rankColor(i)}"></i></div>
       <div class="wcnt">${r.count}×</div></div>`;
   }).join('');
-  const t=a.totals||{};
+  const tot=a.totals||{};
   $('totrow').innerHTML=`<span>Zeitraum: <b>${esc((a.range&&a.range.first)||'—')} – ${esc((a.range&&a.range.last)||'—')}</b></span>
-    <span>Handelstage: <b>${t.days||0}</b></span><span>Trades: <b>${t.tradesTotal||0}</b></span>
-    <span>Regel-Blocks: <b>${t.blocksTotal||0}</b></span>
-    <span>Netto gesamt: <b class="${(t.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(t.netTotal||0)}</b></span>`;
+    <span>Handelstage: <b>${tot.days||0}</b></span><span>Trades: <b>${tot.tradesTotal||0}</b></span>
+    <span>Regel-Blocks: <b>${tot.blocksTotal||0}</b></span>
+    <span>Netto gesamt: <b class="${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</b></span>`;
 }
 
 // ---- Kalender ----
@@ -914,9 +914,9 @@ function renderPositions(st){
 // Groesse, das Ziel und jede Regel bleiben im EA. Was hier gepruft wird, ist nur dazu da,
 // einen offensichtlichen Vertipper abzufangen, BEVOR er als abgelehnte Order im Journal steht.
 function parseNum(x){
-  const t=String(x||'').trim().replace(/\s/g,'').replace(',','.');
-  if(!/^-?\d*\.?\d+$/.test(t)) return NaN;
-  return parseFloat(t);
+  const raw=String(x||'').trim().replace(/\s/g,'').replace(',','.');
+  if(!/^-?\d*\.?\d+$/.test(raw)) return NaN;
+  return parseFloat(raw);
 }
 function renderOrder(st){
   const q=(st&&st.quotes)||{}, sel=$('oSym');
@@ -1046,8 +1046,8 @@ $('flatBtn').addEventListener('click',function(){
 });
 
 // ==== v0.39: Dark Mode ====
-(function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-  document.documentElement.dataset.theme=t; })();
+(function(){ const saved=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.theme=saved; })();
 $('themeBtn').addEventListener('click',()=>{ const h=document.documentElement;
   h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'; localStorage.setItem('mamalTheme',h.dataset.theme); });
 
@@ -1113,8 +1113,8 @@ function buildLock(s){
   return null;
 }
 function hhmmss(ms){
-  const t=Math.max(0,Math.round(ms/1000));
-  const h=Math.floor(t/3600), m=Math.floor(t%3600/60), sec=t%60;
+  const secs=Math.max(0,Math.round(ms/1000));
+  const h=Math.floor(secs/3600), m=Math.floor(secs%3600/60), sec=secs%60;
   return (h>0?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
 }
 function paintLock(){
@@ -1223,7 +1223,7 @@ function parseSrv(t){ const m=String(t||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+
   return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]):0; }
 function renderTilt(rows){
   rows=rows||[]; let newest=0;
-  for(const r of rows){ const t=parseSrv(r.time); if(t>newest) newest=t; }
+  for(const r of rows){ const ts=parseSrv(r.time); if(ts>newest) newest=ts; }
   const n=rows.filter(r=>String(r.event||'').trim().toUpperCase()==='BLOCKED'&&newest-parseSrv(r.time)<=10*60*1000).length;   // v0.39-fix: same normalization as in the journal
   const el=$('tilt');
   if(n>=4){ el.style.display='block'; el.textContent=`🚨 Tilt-Radar: ${n} Ablehnungen in 10 Minuten — steh auf, hol Wasser, komm in 15 Minuten wieder.`; }

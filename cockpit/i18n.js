@@ -13,8 +13,27 @@
 // NOT INVESTMENT ADVICE. Trading leveraged products can lead to total
 // loss. This tool enforces rules, it makes no market decision
 // and takes no responsibility for trading results.
-// Automatically generated from the translation tables — do not edit by hand.
 // Sprachen: de (Original), en, fa (Persisch, RTL).
+//
+// DIESE DATEI *IST* DIE TABELLE — sie wird von Hand bearbeitet.
+//   Hier stand früher "Automatically generated — do not edit by hand". Es gibt
+//   keinen Generator; es gab nie einen im Verlauf. Der Satz hat genau die eine
+//   Stelle gesperrt, an der Übersetzen überhaupt möglich ist.
+//
+// REGEL AUS v0.61 (Dauerschleife, kritischster Fund der Übersetzung):
+//   Ein automatischer Ersetzungslauf, der deutsche Literale im Code durch
+//   Aufrufe ersetzen sollte, ersetzte auch die Texte INNERHALB dieser Tabelle.
+//   22 Einträge hatten danach einen Aufruf als "Übersetzung" -> die Funktion
+//   rief sich selbst, ohne Grenze -> Stapelüberlauf mitten im Zeichnen. Kein
+//   Compilerfehler, keine Warnung: die Rekursion ist syntaktisch einwandfrei.
+//   Also: Diese Tabelle ist der ENDPUNKT. Jeder Massenlauf (Skript, IDE-
+//   Umbenennung, Regex über mehrere Dateien) muss sie ausdrücklich AUSNEHMEN.
+//   Ein t(...) im Wert eines Eintrags ist per Definition ein Fehler und mit
+//   `node scratchpad/xref.js` in einer Zeile nachweisbar.
+//
+// Ein fehlender Schlüssel fällt auf Deutsch zurück (siehe t() im Dashboard),
+// nie auf Leertext — eine Lücke zeigt sich also als deutscher Satz, nicht als
+// leere Oberfläche.
 window.MAMAL_I18N = {
  "de": {
   "app.title": "Mamal-Trading · Cockpit",
