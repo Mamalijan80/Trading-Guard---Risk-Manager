@@ -58,6 +58,11 @@ BUILT = ['rules.%s.name' % i for i in RULE_IDS] \
 CARD_IDS = ['R1', 'R2', 'R3', 'R4', 'R4b', 'R5', 'R6', 'R7', 'R12', 'R13', 'R18']
 BUILT += ['rule.%s.desc' % i for i in CARD_IDS]
 
+# Die Bildsorten der Trade-Akte holt kindLabel() ueber 'trade.kind.'+kind.
+#   Die Namen kommen aus den Screenshot-Dateien, die der EA schreibt.
+SHOT_KINDS = ['open', 'close', 'slmove', 'tpmove']
+BUILT += ['trade.kind.%s' % k for k in SHOT_KINDS]
+
 # insight.<id> gibt es absichtlich nur fuer einen Teil der Regeln: wo keine
 #   Einsicht hinterlegt ist, zeigt die Seite zu Recht nichts. Geprueft wird
 #   darum nur, dass eine vorhandene deutsche Einsicht auch en/fa hat.
@@ -78,6 +83,13 @@ RECURSION = re.compile(r"""\bt\(\s*['"`]""")
 #   Ohne diese Unterscheidung meldete der Pruefer ewig t('rules.') und
 #   t('insight.') als fehlend -- zwei Geister, die niemand beheben kann.
 CALL = re.compile(r"""(?:^|[^A-Za-z0-9_$.])t\(\s*(['"`])([^'"`]+)\1\s*(\+?)""")
+
+# `t` als Variable oder als Parameter -- beides verdeckt die Uebersetzer-
+#   funktion in seinem Gueltigkeitsbereich.
+SHADOW_VAR = re.compile(r'\b(?:const|let|var)\s+t\s*=')
+SHADOW_ARG = re.compile(r'(?:function\s+[A-Za-z0-9_$]*\s*\(\s*t\s*[,)]'   # function f(t)
+                        r'|\(\s*t\s*\)\s*=>'                              # (t) =>
+                        r'|(?<![A-Za-z0-9_$.])t\s*=>)')                   # t =>
 
 
 def load_table():
@@ -167,6 +179,26 @@ def main():
             if have != want:
                 findings.append('%s/%s hat %d Glieder, erwartet %d'
                                 % (lang, key, have, want))
+
+    # ---- 4b. Verdeckung von t() -------------------------------------------
+    #   Heisst irgendwo eine Variable oder ein Parameter `t`, ist die
+    #   Uebersetzerfunktion in diesem Gueltigkeitsbereich unerreichbar und
+    #   jeder Aufruf darin stirbt als "t is not a function" -- syntaktisch
+    #   einwandfrei, Seite halb leer. Genau so blieb die Trade-Liste leer:
+    #   dort hiess der PARAMETER von netUnknown() t, weshalb die Suche nach
+    #   `const t=` ihn nicht fand. Beide Formen werden jetzt gesucht.
+    for name in PAGES:
+        path = os.path.join(HERE, name)
+        if not os.path.exists(path):
+            continue
+        text = io.open(path, encoding='utf-8', newline='').read()
+        for i, line in enumerate(text.split('\n'), 1):
+            if line.lstrip().startswith('//'):
+                continue
+            for rx, what in ((SHADOW_VAR, 'Variable'), (SHADOW_ARG, 'Parameter')):
+                if rx.search(line):
+                    findings.append('%s:%d verdeckt t() als %s: %s'
+                                    % (name, i, what, line.strip()[:70]))
 
     # ---- 5. Die Dauerschleife aus v0.61 -----------------------------------
     for lang in langs:

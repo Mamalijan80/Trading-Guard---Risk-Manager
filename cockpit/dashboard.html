@@ -1243,7 +1243,10 @@ function renderAcctGrid(list){
 function pickAcct(a){ ACCT=String(a); localStorage.setItem('mamalAcct',ACCT); prevS=null; tick(); loadAnalytics(); loadEquity(); }   // v0.39-fix: prevS-Reset gegen falsche Kontowechsel-Benachrichtigungen
 
 // ==== v0.39: tilt radar (cluster of rejections within 10 minutes, server time base) ====
-function parseSrv(t){ const m=String(t||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+// v0.73: Parameter umbenannt. Er hiess `t` und haette die Uebersetzerfunktion
+//   hier verdeckt -- noch ruft sie in dieser Funktion niemand, aber genau so
+//   ist die Trade-Liste in trade.html gestorben.
+function parseSrv(ts){ const m=String(ts||'').match(/^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
   return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]):0; }
 function renderTilt(rows){
   rows=rows||[]; let newest=0;

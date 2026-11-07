@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mamal-Trading · Trade-Akte</title>
+<title data-i18n="trade.pageTitle">Mamal-Trading · Trade-Akte</title>
 <style>
   :root{
     --bg:#f5f5f7; --card:#ffffff; --card2:#fafafc;
@@ -70,13 +70,17 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="back"><a href="/">← back to the cockpit</a></div>
+  <div class="back"><a href="/" data-i18n="nav.back">← zurück zum Cockpit</a></div>
   <div id="view"></div>
 </div>
 <div id="lb"><img id="lbimg" alt=""></div>
+<script src="/i18n.js"></script>
+<script src="/i18napply.js"></script>
 <script>
-(function(){ const t=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-  document.documentElement.dataset.theme=t; })();
+// v0.73: `t` umbenannt -- i18napply.js bringt t() mit, eine lokale Variable
+//   desselben Namens wuerde die Funktion in diesem Block verdecken.
+(function(){ const saved=localStorage.getItem('mamalTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.theme=saved; })();
 const $=id=>document.getElementById(id);
 const ESC={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESC[c]);
@@ -84,68 +88,88 @@ const eur=v=>(v>=0?'+':'−')+Math.abs(v).toLocaleString('de-DE',{minimumFractio
 const Q=new URLSearchParams(location.search);
 const ACCT=Q.get('acct')||localStorage.getItem('mamalAcct')||'';
 const AQ=(x)=>{const p=[];if(ACCT)p.push('acct='+encodeURIComponent(ACCT));if(x)p.push(x);return p.length?'?'+p.join('&'):'';};
-const KIND={open:['EINSTIEG','b-open'],close:['AUSSTIEG','b-close'],slmove:['SL VERSCHOBEN','b-move'],tpmove:['TP VERSCHOBEN','b-move']};
+const KIND_CLS={open:'b-open',close:'b-close',slmove:'b-move',tpmove:'b-move'};
+const kindLabel=k=>t('trade.kind.'+k)||String(k).toUpperCase();
+// Die drei Drittel: kurz fuer die Liste (geteilt mit dem Dashboard), lang
+//   fuer die Einzelansicht. Vorher waren das zwei verschieden HALB
+//   uebersetzte Listen -- ['','early','mittig','late'] in der Liste und
+//   ['','first third (early)','mittleres Drittel','last third (late)'] in
+//   der Einzelansicht. Dieselben drei Drittel, zwei Sprachmischungen.
+const third3      = () => ['', t('stats.third.early'), t('stats.third.mid'), t('stats.third.late')];
+const third3long  = () => ['', t('trade.third.long.early'), t('trade.third.long.mid'), t('trade.third.long.late')];
 
 // v0.65: only claim "offen" (open) when that is plausible. Up to EA v0.64 the close line carried no ticket,
 //   so for older entries the result stays unassignable — which is something else than "still running".
-function netUnknown(t){
-  const ts = t ? Date.parse(String(t).replace(/\./g,'-').replace(' ','T')) : NaN;
-  return (Number.isFinite(ts) && Date.now()-ts > 6*3600*1000) ? 'unbekannt' : 'offen';
+// v0.73-fix: Der Parameter hiess `t` und verdeckte damit die Uebersetzer-
+//   funktion t() IN DIESER Funktion. Das t('trade.net.unknown') darin rief
+//   also eine Zeichenkette auf -> "t is not a function", die Trade-Liste
+//   blieb LEER. Dieselbe Fehlerklasse wie die sechs verdeckten t im
+//   Dashboard, nur als Parameter -- und darum von der Suche nach `const t=`
+//   nicht gefunden. Der Browser hat es gefunden, nicht der Pruefer.
+function netUnknown(when){
+  const ts = when ? Date.parse(String(when).replace(/\./g,'-').replace(' ','T')) : NaN;
+  return t((Number.isFinite(ts) && Date.now()-ts > 6*3600*1000) ? 'trade.net.unknown' : 'trade.net.open');
 }
 $('lb').onclick=()=>{$('lb').style.display='none'};
 function zoom(src){ $('lbimg').src=src; $('lb').style.display='flex'; }
 
 async function renderList(){
-  let rows; try{ rows=await (await fetch('/trades'+AQ())).json(); }catch(e){ $('view').innerHTML='<div class="empty">Server nicht erreichbar.</div>'; return; }
-  if(!rows.length){ $('view').innerHTML='<h2>Trades</h2><div class="card empty">Noch keine Trades mit Ticket-Bezug aufgezeichnet.<br><small>Die Akte entsteht ab EA v0.47 mit jedem Panel-Trade.</small></div>'; return; }
-  const T3=['','early','mittig','late'], C3=['','var(--green)','var(--amber)','var(--red)'];
-  $('view').innerHTML='<h2>Trades · Akte</h2><div class="card"><table><thead><tr>'
-    +'<th>Zeit</th><th>Symbol</th><th>Richtung</th><th>Kerze</th><th>SL/TP bewegt</th><th>Bilder</th><th>Netto</th></tr></thead><tbody>'
+  let rows; try{ rows=await (await fetch('/trades'+AQ())).json(); }catch(e){ $('view').innerHTML=`<div class="empty">${esc(t('net.serverUnreachable'))}</div>`; return; }
+  if(!rows.length){ $('view').innerHTML=`<h2>${esc(t('trade.h2.listPlain'))}</h2><div class="card empty">${esc(t('trade.list.empty'))}<br><small>${esc(t('trade.list.emptySub'))}</small></div>`; return; }
+  const T3=third3(), C3=['','var(--green)','var(--amber)','var(--red)'];
+  $('view').innerHTML=`<h2>${esc(t('trade.h2.list'))}</h2><div class="card"><table><thead><tr>`
+    +`<th>${esc(t('journal.th.time'))}</th><th>${esc(t('journal.th.symbol'))}</th><th>${esc(t('trade.th.dir'))}</th>`
+    +`<th>${esc(t('trade.th.candle'))}</th><th>${esc(t('trade.th.moved'))}</th><th>${esc(t('trade.th.images'))}</th>`
+    +`<th>${esc(t('journal.th.net'))}</th></tr></thead><tbody>`
     +rows.map(r=>`<tr class="click" onclick="location.href='/trade.html${AQ('ticket='+r.ticket)}'">
         <td class="mono">${esc((r.time||'').slice(5,16))}</td><td>${esc(r.symbol||'')}</td><td>${esc(r.dir||'')}</td>
         <td style="color:${C3[r.third||0]}">${T3[r.third||0]||'—'}</td>
         <td${r.moves?' class="warn"':''}>${r.moves||'—'}</td><td>${r.shots||'—'}</td>
-        <td class="${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?'title="matched by symbol and order — not ticket-exact"':(r.backfilled?'title="aus der MT4-Kontohistorie nachgetragen"':'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
+        <td class="${r.net==null?'':(r.net>=0?'pos':'neg')}" ${r.inferred?`title="${esc(t('trade.title.inferred'))}"`:(r.backfilled?`title="${esc(t('trade.title.backfilled'))}"`:'')}>${r.net==null?netUnknown(r.time):(r.inferred?'≈ ':'')+eur(r.net)}</td></tr>`).join('')
     +'</tbody></table></div>';
 }
 
 async function renderOne(ticket){
-  let d; try{ d=await (await fetch('/trade'+AQ('ticket='+ticket))).json(); }catch(e){ $('view').innerHTML='<div class="empty">Server nicht erreichbar.</div>'; return; }
-  if(!d.ok){ $('view').innerHTML=`<div class="card empty">${esc(d.error||'nicht gefunden')}</div>`; return; }
+  let d; try{ d=await (await fetch('/trade'+AQ('ticket='+ticket))).json(); }catch(e){ $('view').innerHTML=`<div class="empty">${esc(t('net.serverUnreachable'))}</div>`; return; }
+  if(!d.ok){ $('view').innerHTML=`<div class="card empty">${esc(d.error||t('trade.notFound'))}</div>`; return; }
   const o=d.open, s=d.stats;
   const netTxt=s.net==null?netUnknown(o?o.time:null):(s.inferred?'≈ ':'')+eur(s.net);
   const netCls=s.net==null?'':(s.net>=0?'pos':'neg');
-  const T3=['','first third (early)','mittleres Drittel','last third (late)'];
+  const T3=third3long();
   let h=`<div class="card hero">
-      <div class="net"><div style="font-size:10.5px;letter-spacing:.08em;color:var(--txt3)">ERGEBNIS</div>
+      <div class="net"><div style="font-size:10.5px;letter-spacing:.08em;color:var(--txt3)">${esc(t('trade.result'))}</div>
         <div class="v ${netCls}">${netTxt}</div></div>
-      <div class="t">${esc(o?o.dir:'')} ${esc(o?o.symbol:'')} · Ticket ${esc(d.ticket)}</div>
-      <div class="s">${esc(o?o.time:'')}${o?' · '+esc(o.raw[9])+' Lot · Einstieg '+esc(o.raw[10]):''}</div>
+      <div class="t">${esc(o?o.dir:'')} ${esc(o?o.symbol:'')} · ${esc(t('trade.hero.ticket',{ticket:d.ticket}))}</div>
+      <div class="s">${esc(o?o.time:'')}${o?esc(t('trade.hero.lotEntry',{lot:o.raw[9],price:o.raw[10]})):''}</div>
     </div>
-    <h2>Kennzahlen</h2>
+    <h2>${esc(t('trade.h2.kpis'))}</h2>
     <div class="card kpis">
-      <div class="kpi"><div class="l">Geplantes Risiko</div><div class="v">${s.plannedRisk?s.plannedRisk.toFixed(2):'—'}</div></div>
-      <div class="kpi"><div class="l">SL/TP bewegt</div><div class="v ${s.moves?'warn':''}">${s.moves}</div></div>
-      <div class="kpi"><div class="l">davon riskanter</div><div class="v ${s.slWorse?'neg':''}">${s.slWorse}</div></div>
-      <div class="kpi"><div class="l">davon sicherer</div><div class="v ${s.slBetter?'pos':''}">${s.slBetter}</div></div>
-      <div class="kpi"><div class="l">Einstieg in Kerze</div><div class="v" style="font-size:14px">${T3[s.third||0]||'—'}</div></div>
+      <div class="kpi"><div class="l">${esc(t('trade.kpi.plannedRisk'))}</div><div class="v">${s.plannedRisk?s.plannedRisk.toFixed(2):'—'}</div></div>
+      <div class="kpi"><div class="l">${esc(t('trade.th.moved'))}</div><div class="v ${s.moves?'warn':''}">${s.moves}</div></div>
+      <div class="kpi"><div class="l">${esc(t('trade.kpi.riskier'))}</div><div class="v ${s.slWorse?'neg':''}">${s.slWorse}</div></div>
+      <div class="kpi"><div class="l">${esc(t('trade.kpi.safer'))}</div><div class="v ${s.slBetter?'pos':''}">${s.slBetter}</div></div>
+      <div class="kpi"><div class="l">${esc(t('trade.kpi.third'))}</div><div class="v" style="font-size:14px">${esc(T3[s.third||0]||'—')}</div></div>
     </div>
-    <h2>Zusammenfassung</h2>
+    <h2>${esc(t('trade.h2.summary'))}</h2>
     <div class="card sum"><ul>${d.summary.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
 
   if(d.shots.length){
-    h+='<h2>Screenshots · Vorher / Nachher</h2><div class="shots">'
-      +d.shots.map(sh=>{const k=KIND[sh.kind]||[sh.kind.toUpperCase(),'b-close'];
+    // Das Aufnahmedatum stand fest auf 'de-DE' und erschien so auch in der
+    //   englischen und persischen Ansicht.
+    const loc=LANG==='fa'?'fa-IR':LANG==='en'?'en-GB':'de-DE';
+    h+=`<h2>${esc(t('trade.h2.shots'))}</h2><div class="shots">`
+      +d.shots.map(sh=>{const lab=kindLabel(sh.kind), cls=KIND_CLS[sh.kind]||'b-close';
         const src='/shot/'+encodeURIComponent(sh.file)+AQ();
-        return `<div class="shot"><img loading="lazy" src="${src}" onclick="zoom('${src}')" alt="${esc(k[0])}">
-          <div class="cap"><span class="badge ${k[1]}">${esc(k[0])}</span>
-          <span class="mono">${new Date(sh.ts*1000).toLocaleString('de-DE')}</span></div></div>`;}).join('')
+        return `<div class="shot"><img loading="lazy" src="${src}" onclick="zoom('${src}')" alt="${esc(lab)}">
+          <div class="cap"><span class="badge ${cls}">${esc(lab)}</span>
+          <span class="mono">${new Date(sh.ts*1000).toLocaleString(loc)}</span></div></div>`;}).join('')
       +'</div>';
-  } else h+='<h2>Screenshots</h2><div class="card empty">Keine Bilder zu diesem Trade.<br><small>InpScreenshots muss im EA aktiv sein.</small></div>';
+  } else h+=`<h2>${esc(t('trade.h2.shotsPlain'))}</h2><div class="card empty">${esc(t('trade.shots.empty'))}<br><small>${esc(t('trade.shots.emptySub'))}</small></div>`;
 
   if(d.moves.length){
-    h+='<h2>Chronik der Verschiebungen</h2><div class="card"><table><thead><tr>'
-      +'<th>Zeit</th><th>SL</th><th>TP</th><th>Bewertung</th></tr></thead><tbody>'
+    h+=`<h2>${esc(t('trade.h2.moves'))}</h2><div class="card"><table><thead><tr>`
+      +`<th>${esc(t('journal.th.time'))}</th><th>${esc(t('trade.th.sl'))}</th><th>${esc(t('trade.th.tp'))}</th>`
+      +`<th>${esc(t('trade.th.rating'))}</th></tr></thead><tbody>`
       +d.moves.map(m=>{// v0.67: read the machine code; the German patterns remain only for journals written before v0.67.
         const bad=/^\[(SL_WORSE|SL_GONE|TP_SHORTER)\]/.test(m.tag||'')
                   || /ERHOEHT|unbegrenzt|abgekuerzt|abgekürzt/i.test(m.tag||'');
