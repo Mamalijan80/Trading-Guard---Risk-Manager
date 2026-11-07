@@ -324,6 +324,11 @@
   .obtn:hover:not(:disabled){opacity:.88}
   .onote{margin-top:11px;font-size:12px;color:var(--txt3);line-height:1.5}
   .owarn{margin-top:11px;font-size:12.5px;color:var(--crit);line-height:1.45;font-weight:600}
+  /* v0.73-fix: Der Relay-Hinweis lief vorher ueber .owarn und stand damit in Alarmrot
+     und fett — am Handy sah die Karte kaputt aus, obwohl nur das Handeln fehlt. Eine
+     Zustandsbeschreibung ist keine Warnung. */
+  .orelay{margin-top:11px;font-size:12.5px;color:var(--txt2);line-height:1.5;
+    background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
   @media(max-width:520px){ .pgrid{grid-template-columns:1fr} .ofield{min-width:100%} }
   /* ==== v0.39: Multi-Konto-Grid ==== */
   .agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:12px}
@@ -421,6 +426,7 @@
       </div>
       <div class="oquote" id="oQuote">—</div>
       <div class="owarn" id="oWarn" style="display:none"></div>
+      <div class="orelay" id="oRelay" style="display:none"></div>
       <div class="obtns">
         <button class="obtn buy"  id="oBuy">Kaufen</button>
         <button class="obtn sell" id="oSell">Verkaufen</button>
@@ -914,22 +920,6 @@ function parseNum(x){
 }
 function renderOrder(st){
   const q=(st&&st.quotes)||{}, sel=$('oSym');
-  // v0.73-fix: Auf einem Relay (die gehostete Ansicht) wird jeder Befehl abgelehnt — dort liegt
-  //   kein MetaTrader, der die Warteschlange liest. Vorher standen "Kaufen" und "Verkaufen"
-  //   trotzdem voll bedienbar da. Ein Knopf, der nicht handeln KANN, darf nicht aussehen wie
-  //   einer, der es kann: das ist derselbe Fehler wie eine Quittung, die "erledigt" sagt,
-  //   ohne etwas getan zu haben — nur eine Stufe frueher.
-  if(ISRELAY){
-    $('orderCard').style.display='';
-    ['oBuy','oSell','oSym','oSL'].forEach(id=>{ const e=$(id); if(e) e.disabled=true; });
-    $('oQuote').textContent='—';
-    const w=$('oWarn'); w.style.display='';
-    w.textContent='Diese Ansicht ist eine Fernkopie — sie zeigt an, kann aber nichts ausloesen. '
-                 +'Befehle gehen nur am Cockpit neben MetaTrader. Laufen beide auf derselben '
-                 +'Maschine (VPS), ist das dasselbe Fenster.';
-    return;
-  }
-  ['oBuy','oSell','oSym','oSL'].forEach(id=>{ const e=$(id); if(e) e.disabled=false; });
   // Nur Symbole, auf denen wirklich eine EA-Instanz sitzt. Die Marktuebersicht kennt vierzig,
   // zustaendig sind sechs — ein Befehl auf die uebrigen wuerde von niemandem ausgefuehrt.
   const act=(st&&Array.isArray(st.active)&&st.active.length)?st.active:null;
@@ -945,6 +935,19 @@ function renderOrder(st){
     sel.value=(keep&&q[keep])?keep:((st&&q[st.symbol])?st.symbol:syms[0]);
   }
   paintQuote(st);
+
+  // v0.73-fix: Auf einem Relay lehnt /cmd/send jeden Befehl ab — dort liegt kein MetaTrader,
+  //   der die Warteschlange liest. Ein Knopf, der nicht handeln KANN, darf nicht aussehen wie
+  //   einer, der es kann; das ist derselbe Fehler wie eine Quittung, die "erledigt" meldet,
+  //   ohne etwas getan zu haben, nur eine Stufe frueher.
+  //   Erster Versuch war ein frueher Ausstieg: der liess die Symbolauswahl LEER und den
+  //   Hinweis in Alarmrot stehen — die Karte sah defekt aus, obwohl nur das Handeln fehlt.
+  //   Also ANZEIGEN ja, AUSLOESEN nein: Kurse und Symbolwahl bleiben nutzbar (am Handy ist
+  //   genau das der Wert dieser Ansicht), gesperrt wird nur, was eine Order ausloesen wuerde.
+  const rl=$('oRelay');
+  ['oBuy','oSell','oSL'].forEach(id=>{ const e=$(id); if(e) e.disabled=ISRELAY; });
+  if(ISRELAY){ rl.style.display=''; rl.textContent=t('order.relay'); $('oWarn').style.display='none'; }
+  else rl.style.display='none';
 }
 function paintQuote(st){
   const q=(st&&st.quotes)||{}, sy=$('oSym').value, d=q[sy];
@@ -1232,7 +1235,7 @@ async function loadEquity(){
   try{
     const pts=await (await fetch('/equity'+AQ()+(AQ()?'&':'?')+'n=2000')).json();
     const svg=$('eqChart'); const W=1000,H=190; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-    if(!pts||pts.length<2){ svg.innerHTML=`<text x="20" y="30" fill="var(--txt3)" font-size="13">No equity data yet — it appears automatically once the EA is running.</text>`; $('eqCap').textContent=''; return; }
+    if(!pts||pts.length<2){ svg.innerHTML=`<text x="20" y="30" fill="var(--txt3)" font-size="13">${esc(t('eq.empty'))}</text>`; $('eqCap').textContent=''; return; }
     const eqs=pts.map(p=>p.eq);
     const floor=(LASTSTATE&&LASTSTATE.dayBase>0&&LASTSTATE.dailyLimit>0)?LASTSTATE.dayBase*(1-LASTSTATE.dailyLimit/100):null;
     let mn=Math.min(...eqs), mx=Math.max(...eqs);
@@ -1247,7 +1250,11 @@ async function loadEquity(){
         <text x="8" y="${(Y(floor)-6).toFixed(1)}" fill="var(--red)" font-size="11">Daily-Loss-Grenze ${money(floor,CCY)}</text>`;
     svg.innerHTML=svgIn;
     const span=(last.t-pts[0].t)/3600000;
-    $('eqCap').textContent=`— ${pts.length} Punkte · ${span<48?de(span,1)+' h':de(span/24,1)+' Tage'} · zuletzt ${money(last.eq,CCY)}`;
+    // v0.73-fix: stand fest auf Deutsch und erschien so auch in der englischen und der
+    //   persischen Ansicht ("2000 Punkte · zuletzt") — direkt neben einer uebersetzten
+    //   Ueberschrift, was wie ein halb geladener Text aussieht.
+    const spanTxt=span<48?de(span,1)+' '+t('eq.unit.h'):de(span/24,1)+' '+t('eq.unit.d');
+    $('eqCap').textContent=`— ${pts.length} ${t('eq.unit.points')} · ${spanTxt} · ${t('eq.cap.last')} ${money(last.eq,CCY)}`;
   }catch(e){ /* Kurve ist Komfort */ }
 }
 
