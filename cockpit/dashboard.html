@@ -145,7 +145,7 @@
   .rn{font-weight:600;font-size:15px}
   .rs{margin-left:auto;font:700 12px/1 var(--mono)}
   .ex{color:var(--txt2);font-size:13px;margin:6px 0 12px}
-  .val{font:600 14px/1 var(--mono);margin-bottom:8px}.val b{font-size:18px}.val .lim{color:var(--txt3);font-weight:500}
+  .val{font:600 14px/1 var(--mono);margin-bottom:8px}.val b{font-size:18px}.val .lim,.val .xtra{color:var(--txt3);font-weight:500}
   .bar{height:8px;border-radius:5px;background:var(--line2);overflow:hidden;position:relative}
   .bar i{display:block;height:100%;border-radius:5px;transition:width .4s}
   .bar .mark{position:absolute;top:-2px;width:2px;height:12px;background:var(--txt3);opacity:.6}
@@ -242,8 +242,18 @@
      .lim (die Grenze hinter dem Schraegstrich) und jede Tabellenzelle des
      Journals. `isolate` statt `embed`, weil isolate die Wechselwirkung mit dem
      umgebenden persischen Text ganz kappt. */
+  /* .xtra traegt den Zusatz der Karte ("noch 2,00% frei" / "2,00% آزاد") -
+     persische Prosa, die unter direction:ltr zerfaellt. Sieht aus wie .lim,
+     wird aber bewusst NICHT isoliert. */
   html[dir="rtl"] .mono,html[dir="rtl"] .v,html[dir="rtl"] .lm-val,
-  html[dir="rtl"] .num,html[dir="rtl"] .lim,html[dir="rtl"] .big,
+  /* v0.73-fix (zweiter Anlauf): .lim ist RAUS und .val drin. In .lim steht
+     mal eine Zahl ("/ 2,00%"), mal persische PROSA (der Cooldown-Zustand
+     "hiç vaghfe-i fa'al nist"). Isoliert man .lim, zerfaellt der Satz; laesst
+     man beides ungeschuetzt, kippt das Zahlenpaar. Beides geloest, indem der
+     BEHAELTER .val das LTR-Isolat wird: die Reihenfolge Istwert - Trenner -
+     Grenze steht dann fest, und jede persische Insel darin rendert fuer sich
+     richtig. Gemessen an R3 und R5, die beide vorher jumbelten. */
+  html[dir="rtl"] .num,html[dir="rtl"] .val,html[dir="rtl"] .big,
   html[dir="rtl"] .cnt,html[dir="rtl"] .wcnt,html[dir="rtl"] .n,
   html[dir="rtl"] .ae,html[dir="rtl"] .c{direction:ltr;unicode-bidi:isolate}
 
@@ -627,10 +637,14 @@ function meter(id,name,ex,cur,lim,unit,opts){
   const mk=opts.warnAt&&lim>0?clamp(opts.warnAt/lim)*100:null;
   const v=opts.count?`<b>${cur}</b><span class="lim"> / ${lim}</span>`
     :`<b>${de(cur)}${unit}</b><span class="lim"> / ${de(lim)}${unit}</span>`;
+  // v0.73-fix: inset-inline-start statt left. Die Fuellung des Balkens waechst
+  //   unter RTL vom RECHTEN Rand, die Warnmarke sass aber bei X% vom LINKEN -
+  //   beide massen von gegenueberliegenden Enden, die Marke stand gespiegelt.
+  //   In LTR ist inset-inline-start mit left identisch.
   return `<div class="rc"><div class="top"><span class="rid">${id}</span><span class="rn">${name}</span>
     <span class="rs ${col}">${status}</span></div><div class="ex">${ex}</div>
-    <div class="val ${col}">${v}${opts.extra?`<span class="lim">  ${opts.extra}</span>`:''}</div>
-    <div class="bar">${mk!=null?`<span class="mark" style="left:${mk}%"></span>`:''}<i class="${bg}" style="width:${clamp(f)*100}%"></i></div></div>`;
+    <div class="val ${col}">${v}${opts.extra?`<span class="xtra">  ${opts.extra}</span>`:''}</div>
+    <div class="bar">${mk!=null?`<span class="mark" style="inset-inline-start:${mk}%"></span>`:''}<i class="${bg}" style="width:${clamp(f)*100}%"></i></div></div>`;
 }
 function progress(id,name,ex,cur,lim,unit,done){
   const f=lim>0?clamp(cur/lim):0; const status=done?t('progress.status.done'):cur<0?t('progress.status.negative'):t('progress.status.running');
@@ -788,7 +802,9 @@ function renderWeak(a){
       <div class="wcnt">${r.count}×</div></div>`;
   }).join('');
   const tot=a.totals||{};
-  $('totrow').innerHTML=`<span>${t('totals.range',{0:esc((a.range&&a.range.first)||'—'),1:esc((a.range&&a.range.last)||'—')})}</span>
+  // v0.73-fix: Zwei Daten mit Gedankenstrich - gemessen erschienen sie
+  //   VERTAUSCHT (Ende zuerst). Jetzt ein isoliertes Stueck, wie im Report.
+  $('totrow').innerHTML=`<span>${t('totals.range',{span:ltr(esc((a.range&&a.range.first)||'—')+' – '+esc((a.range&&a.range.last)||'—'))})}</span>
     <span>${t('totals.days',{0:tot.days||0})}</span><span>${t('totals.trades',{0:tot.tradesTotal||0})}</span>
     <span>${t('totals.blocks',{0:tot.blocksTotal||0})}</span>
     <span>${t('totals.net',{0:`<b class="${(tot.netTotal||0)>=0?'net-pos':'net-neg'}">${eur(tot.netTotal||0)}</b>`})}</span>`;
@@ -1175,7 +1191,7 @@ function paintLock(){
   if(rest<=0){ $('lmVal').textContent='00:00'; $('lmUntil').textContent=t('lock.expiring'); $('lmBar').style.width='0%'; return; }
   $('lmVal').textContent=hhmmss(rest);
   $('lmUntil').textContent=t('lock.freeAt',{0:new Date(LOCK.endMs)
-    .toLocaleTimeString(LANG==='fa'?'fa-IR':LANG==='en'?'en-GB':'de-DE',{hour:'2-digit',minute:'2-digit'})});
+    .toLocaleTimeString(LANG==='fa'?'fa-IR-u-ca-gregory-nu-latn':LANG==='en'?'en-GB':'de-DE',{hour:'2-digit',minute:'2-digit'})});
   $('lmBar').style.width=(LOCK.totalSec>0?clamp(rest/1000/LOCK.totalSec)*100:100).toFixed(1)+'%';
 }
 setInterval(paintLock,1000);   // smooth clock between the polls
@@ -1231,7 +1247,10 @@ function renderChallenge(s){
   $('challenge').innerHTML=`
     <div style="display:flex;gap:20px;align-items:baseline;flex-wrap:wrap">
       <div><span class="glab" style="font-size:11px;letter-spacing:.08em;color:var(--txt3);text-transform:uppercase">${esc(t('challenge.progressLabel'))}</span>
-        <div style="font:700 26px/1.2 var(--mono);color:${col}">${profPct>=0?'+':''}${de(profPct)}% <span style="font-size:15px;color:var(--txt3)">/ ${de(CH_T,0)}%</span></div></div>
+        <!-- v0.73-fix: class="num". Gemessen stand hier "-1,81% / 10%" als
+             "1,81%-10%/" auf dem Schirm - wer das liest, haelt das ZIEL fuer
+             das Erreichte und die Challenge fuer bestanden. -->
+        <div class="num" style="font:700 26px/1.2 var(--mono);color:${col}">${profPct>=0?'+':''}${de(profPct)}% <span style="font-size:15px;color:var(--txt3)">/ ${de(CH_T,0)}%</span></div></div>
       <div class="gnote">${done?esc(t('challenge.done')):esc(t('challenge.remaining',{0:money(Math.max(0,remEur),CCY)}))}
         · ${esc(t('challenge.tradingDays'))} <b>${days}</b>${days<4?' '+esc(t('challenge.ftmoMin')):''}
         ${proj?esc(t('challenge.projection',{0:money(avg,CCY),1:proj})):''}</div>
@@ -1286,7 +1305,15 @@ async function loadEquity(){
   try{
     const pts=await (await fetch('/equity'+AQ()+(AQ()?'&':'?')+'n=2000')).json();
     const svg=$('eqChart'); const W=1000,H=190; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-    if(!pts||pts.length<2){ svg.innerHTML=`<text x="20" y="30" fill="var(--txt3)" font-size="13">${esc(t('eq.empty'))}</text>`; $('eqCap').textContent=''; return; }
+    // v0.73-fix: SVG-Ankerfalle. direction:rtl vererbt sich vom body ins SVG;
+    //   bei text-anchor:start sitzt der Anker dann an der RECHTEN Textkante und
+    //   der Satz wird von x=20 nach LINKS aus der viewBox gezeichnet. Auf
+    //   Persisch war dieser Hinweis unsichtbar - die Karte sah einfach leer aus,
+    //   statt zu sagen, dass noch keine Daten da sind. Also den Anker unter RTL
+    //   ans andere Ende legen. (Kein direction="ltr": der Satz ist persische
+    //   Prosa und wuerde dabei Wort fuer Wort umgedreht.)
+    const rtl=document.documentElement.dir==='rtl';
+    if(!pts||pts.length<2){ svg.innerHTML=`<text x="${rtl?W-20:20}" y="30" fill="var(--txt3)" font-size="13">${esc(t('eq.empty'))}</text>`; $('eqCap').textContent=''; return; }
     const eqs=pts.map(p=>p.eq);
     const floor=(LASTSTATE&&LASTSTATE.dayBase>0&&LASTSTATE.dailyLimit>0)?LASTSTATE.dayBase*(1-LASTSTATE.dailyLimit/100):null;
     let mn=Math.min(...eqs), mx=Math.max(...eqs);
@@ -1298,7 +1325,7 @@ async function loadEquity(){
     let svgIn=`<path d="${path}" fill="none" stroke="${up?'var(--green)':'var(--red)'}" stroke-width="2"/>`;
     if(floor!=null&&floor>mn&&floor<mx)
       svgIn+=`<line x1="0" y1="${Y(floor).toFixed(1)}" x2="${W}" y2="${Y(floor).toFixed(1)}" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="7 6" opacity=".8"/>
-        <text x="8" y="${(Y(floor)-6).toFixed(1)}" fill="var(--red)" font-size="11">Daily-Loss-Grenze ${money(floor,CCY)}</text>`;
+        <text x="${rtl?W-8:8}" y="${(Y(floor)-6).toFixed(1)}" fill="var(--red)" font-size="11">${esc(t('eq.dayFloor',{x:money(floor,CCY)}))}</text>`;
     svg.innerHTML=svgIn;
     const span=(last.t-pts[0].t)/3600000;
     // v0.73-fix: stand fest auf Deutsch und erschien so auch in der englischen und der
@@ -1405,7 +1432,10 @@ async function tick(){
     const portTx='localhost:'+esc(srvPort)+(mism
       ? ` <span class="stale" title="The EA panel button opens localhost:${esc(j.state.port)} — nothing is running there. Set InpCockpitPort to ${esc(srvPort)}.">⚠ EA input ${esc(j.state.port)}</span>`
       : '');
-    st.innerHTML=`<span class="${cls}">●</span> Stand ${esc(j.state.srvtime)} · ${txt} · EA v${esc(j.state.v||'?')} · Profil ${esc(j.state.profile)}${j.state.funded?' (FUNDED)':''} · ${portTx}`;
+    // v0.73-fix: Die Fusszeile wurde inline gebaut und stand darum in JEDER
+    //   Sprache auf Deutsch, waehrend foot.status uebersetzt in der Tabelle lag
+    //   und nie abgerufen wurde.
+    st.innerHTML=`<span class="${cls}">●</span> ${t('foot.status',{0:ltr(esc(j.state.srvtime)),1:txt,2:esc(j.state.v||'?'),3:esc(j.state.profile)})}${j.state.funded?' (FUNDED)':''} · ${portTx}`;
   }catch(e){ fetchFail(); }
   if(ok) failStreak=0;
   try{ const jr=await (await fetch('/journal'+AQ())).json(); renderJournal(jr); renderTilt(jr); }catch(e){ fetchFail(); }

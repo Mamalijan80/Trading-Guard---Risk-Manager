@@ -87,7 +87,12 @@
      `isolate` statt `embed`: isolate kappt die Wechselwirkung mit dem
      umgebenden Text ganz, embed laesst sie teilweise zu. */
   html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
-  html[dir="rtl"] .num,html[dir="rtl"] .mono,html[dir="rtl"] .v,
+  /* .v ist hier BEWUSST NICHT dabei: auf diesen Seiten steht in .v auch
+     persische Prosa (die Trades-Kachel "13 Siege / 7 Verluste · 5 manuell",
+     das Drittel im Klartext). Die auf direction:ltr zu zwingen zerreisst
+     sie. Betraege isolieren sich ohnehin selbst (eur/money), eine einzelne
+     Zahl braucht keine Hilfe - nur ZAHLENPAARE brauchen class="num". */
+  html[dir="rtl"] .num,html[dir="rtl"] .mono,
   html[dir="rtl"] .n,html[dir="rtl"] .cnt{direction:ltr;unicode-bidi:isolate}
 </style>
 </head>
@@ -184,7 +189,11 @@ async function renderOne(ticket){
   if(d.shots.length){
     // Das Aufnahmedatum stand fest auf 'de-DE' und erschien so auch in der
     //   englischen und persischen Ansicht.
-    const loc=LANG==='fa'?'fa-IR':LANG==='en'?'en-GB':'de-DE';
+  // v0.73-fix: 'fa-IR' allein liefert den JALALI-Kalender und persische
+  //   Ziffern. Daneben stehen die gregorianischen EA-Daten in lateinischen
+  //   Ziffern - auf dem Schirm stand Jahr 1405 neben Jahr 2026, und niemand
+  //   erkennt, dass das derselbe Tag ist. Also gregorianisch erzwingen.
+    const loc=LANG==='fa'?'fa-IR-u-ca-gregory-nu-latn':LANG==='en'?'en-GB':'de-DE';
     h+=`<h2>${esc(t('trade.h2.shots'))}</h2><div class="shots">`
       +d.shots.map(sh=>{const lab=kindLabel(sh.kind), cls=KIND_CLS[sh.kind]||'b-close';
         const src='/shot/'+encodeURIComponent(sh.file)+AQ();

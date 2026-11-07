@@ -46,7 +46,12 @@
      `isolate` statt `embed`: isolate kappt die Wechselwirkung mit dem
      umgebenden Text ganz, embed laesst sie teilweise zu. */
   html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
-  html[dir="rtl"] .num,html[dir="rtl"] .mono,html[dir="rtl"] .v,
+  /* .v ist hier BEWUSST NICHT dabei: auf diesen Seiten steht in .v auch
+     persische Prosa (die Trades-Kachel "13 Siege / 7 Verluste · 5 manuell",
+     das Drittel im Klartext). Die auf direction:ltr zu zwingen zerreisst
+     sie. Betraege isolieren sich ohnehin selbst (eur/money), eine einzelne
+     Zahl braucht keine Hilfe - nur ZAHLENPAARE brauchen class="num". */
+  html[dir="rtl"] .num,html[dir="rtl"] .mono,
   html[dir="rtl"] .n,html[dir="rtl"] .cnt{direction:ltr;unicode-bidi:isolate}
   /* Der Druckknopf klebte fest an right:16px - unter RTL gehoert er nach links. */
   html[dir="rtl"] .printbtn{right:auto;left:16px}
@@ -62,7 +67,7 @@
   <div class="kpis" id="kpis"></div>
 
   <h2 data-i18n="report.h2.days">Letzte 7 aktive Handelstage</h2>
-  <table><thead><tr><th data-i18n="report.th.day">Tag</th><th data-i18n="journal.th.net">Netto</th><th data-i18n="day.kpi.trades">Trades</th><th data-i18n="report.th.wl">G / V</th><th data-i18n="day.kpi.manual">davon manuell</th><th data-i18n="day.kpi.blocks">Regel-Blocks</th></tr></thead>
+  <table><thead><tr><th data-i18n="report.th.day">Tag</th><th data-i18n="journal.th.net">Netto</th><th data-i18n="day.kpi.trades">Trades</th><th class="num" data-i18n="report.th.wl">G / V</th><th data-i18n="day.kpi.manual">davon manuell</th><th data-i18n="day.kpi.blocks">Regel-Blocks</th></tr></thead>
     <tbody id="days"></tbody></table>
 
   <h2 data-i18n="report.h2.rules">Regel-Eingriffe (gesamt)</h2>
@@ -102,7 +107,11 @@ async function load(){
   const acct=s.account?t('acct.chip',{0:s.account}):'';
   // Das Erstelldatum stand fest auf 'de-DE'. Im englischen und persischen
   //   Report erschien damit ein deutsch formatiertes Datum.
-  const loc=LANG==='fa'?'fa-IR':LANG==='en'?'en-GB':'de-DE';
+  // v0.73-fix: 'fa-IR' allein liefert den JALALI-Kalender und persische
+  //   Ziffern. Daneben stehen die gregorianischen EA-Daten in lateinischen
+  //   Ziffern - auf dem Schirm stand Jahr 1405 neben Jahr 2026, und niemand
+  //   erkennt, dass das derselbe Tag ist. Also gregorianisch erzwingen.
+  const loc=LANG==='fa'?'fa-IR-u-ca-gregory-nu-latn':LANG==='en'?'en-GB':'de-DE';
   // v0.73-fix: Der Zeitraum sind ZWEI Daten mit einem Gedankenstrich dazwischen -
   //   dieselbe Falle wie bei G/V. Er wird darum als EIN Stueck zusammengebaut und
   //   isoliert eingesetzt, nicht als zwei Platzhalter.

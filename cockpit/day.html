@@ -78,7 +78,12 @@
      `isolate` statt `embed`: isolate kappt die Wechselwirkung mit dem
      umgebenden Text ganz, embed laesst sie teilweise zu. */
   html[dir="rtl"] table th,html[dir="rtl"] table td{text-align:right}
-  html[dir="rtl"] .num,html[dir="rtl"] .mono,html[dir="rtl"] .v,
+  /* .v ist hier BEWUSST NICHT dabei: auf diesen Seiten steht in .v auch
+     persische Prosa (die Trades-Kachel "13 Siege / 7 Verluste · 5 manuell",
+     das Drittel im Klartext). Die auf direction:ltr zu zwingen zerreisst
+     sie. Betraege isolieren sich ohnehin selbst (eur/money), eine einzelne
+     Zahl braucht keine Hilfe - nur ZAHLENPAARE brauchen class="num". */
+  html[dir="rtl"] .num,html[dir="rtl"] .mono,
   html[dir="rtl"] .n,html[dir="rtl"] .cnt{direction:ltr;unicode-bidi:isolate}
 </style>
 </head>
