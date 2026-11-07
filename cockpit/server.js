@@ -1396,7 +1396,7 @@ function handler(req, res) {
   //   und waren deutsch, mit englischen Einsprengseln. Feste Erlaubnisliste,
   //   kein aus dem Pfad gebauter Dateiname: sonst waere das hier ein Leseloch
   //   in den ganzen Ordner.
-  if (p === '/i18n.js' || p === '/i18napply.js') {
+  if (p === '/i18n.js' || p === '/i18napply.js' || p === '/regeln.js') {
     const file = p.slice(1);
     return fs.readFile(path.join(__dirname, file), (err, buf) => {
       if (err) { res.writeHead(404); return res.end(file + ' fehlt'); }
@@ -1404,6 +1404,7 @@ function handler(req, res) {
       res.end(buf);
     });
   }
+  if (p === '/regeln.html') return sendFile(res, 'regeln.html');   // v0.74: Regeln in einfacher Sprache
   if (p === '/day.html')    return sendFile(res, 'day.html');
   if (p === '/report.html') return sendFile(res, 'report.html');   // v0.39: druckbarer Wochen-Report
   if (p === '/favicon.ico') { res.writeHead(204); return res.end(); }
