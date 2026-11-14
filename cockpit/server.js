@@ -839,6 +839,16 @@ function tradeDossier(ticket, acct) {
     //   result could therefore never be attributed to its entry — the file claimed for EVERY trade
     //   "noch offen" (still open). For entries from that period this can no longer be repaired from the journal; better
     //   journal; naming that honestly beats going on claiming "open".
+    // v0.74: Diese Schwelle ist UNGEFAEHR, und das ist Absicht. open.time ist die
+    //   Zeit des BROKER-Servers; ohne Zeitzonen-Angabe liest Date.parse sie als
+    //   LOKALE Zeit und vergleicht sie dann mit Date.now(). Die sechs Stunden sind
+    //   damit um den Versatz zwischen Rechner und Broker verschoben - bei FTMO
+    //   typisch ein bis zwei Stunden. Nicht repariert, weil die Schwelle nur
+    //   zwischen zwei ERKLAERSAETZEN entscheidet, nicht ueber eine Regel; ein
+    //   Fehler von zwei Stunden bei sechs aendert fuer den Leser nichts.
+    //   Beim Umzug auf einen Server aber zu beachten: laeuft der auf einer anderen
+    //   Zeitzone als der PC, liest dieselbe Trade-Akte dort anders. Darum beide
+    //   Maschinen auf dieselbe Zeitzone stellen.
     const openTs = open && open.time ? Date.parse(open.time.replace(/\./g, '-').replace(' ', 'T')) : NaN;
     const stale  = Number.isFinite(openTs) && (Date.now() - openTs > 6 * 3600 * 1000);
     S.push(stale
