@@ -247,6 +247,22 @@ Die `.set`-Dateien sehen gleich aus. Lädst du die des falschen Kontos, stehen
 `InpInitialBalance` und die Tagesbasis falsch — **R4b rechnet die Max-Verlust-Sperre dann gegen
 eine Basis, die es auf diesem Konto nie gab.** Benenne sie nach der Kontonummer.
 
+### 3.4b Wenn der Zustand NICHT mitkommt (bewusster Neustart)
+Entscheidung vom 15.11.2026: Journal, Equity-Reihen und Screenshots bleiben auf dem PC, der VPS
+startet frisch. Das ist zulässig — es sind Aufzeichnungen, keine Schutzfunktion. **Dann muss aber
+`InpInitialBalance` im Preset stehen.** Ohne `gvariables.dat` leitet der EA die R4b-Basis sonst
+aus der **Einzahlungshistorie** ab und fällt auf den **aktuellen Kontostand** zurück, wenn die
+Historie im Terminal nicht vollständig sichtbar ist (siehe 4.7). Bei Konto 421052619 wäre die
+Basis dann 10.338 statt 10.000 — die Max-Verlust-Sperre also um 338 EUR zu locker.
+
+Im Paket liegt dafür `MQL4\Presets\Mamal_Konto421052619.set` mit `InpInitialBalance=10000`.
+
+> **Beide Zustandsdateien gemeinsam weglassen oder gemeinsam mitnehmen.** `MamalTrading_Lockstate.dat`
+> allein weglassen geht nicht sauber: der EA merkt sich in `RG_LS_SEEN`, dass die Datei auf diesem
+> Konto schon existiert hat, und wertet ihr **Fehlen** danach als Manipulation. Fehlt die
+> GlobalVariable-Datei `gvariables.dat` mit, ist diese Erinnerung ebenfalls weg und der Start ist
+> ein echter Erststart.
+
 ### 3.5 Starten
 Immer die Verknüpfung auf die `terminal.exe` im **jeweiligen** Ordner. Zweimal dieselbe starten
 holt nur das erste Fenster nach vorn — es sieht aus wie „läuft schon", aber ein Konto ist
@@ -328,6 +344,12 @@ Konten. Mitkopiert erscheinen sie als **Geisterkonten** im Umschalter.
 Im Terminal-Fenster Reiter **Kontohistorie → Rechtsklick → „Gesamte Historie"**. Steht dort ein
 kurzer Zeitraum, sieht der EA geschlossene Tickets nicht mehr — und der Sichtbarkeits-Wächter
 wertet das als Problem.
+
+**Zweiter, wichtigerer Grund bei einem Neustart ohne `gvariables.dat`:** aus dieser Historie liest
+der EA die **Einzahlung** und damit die R4b-Basis. Steht der Reiter auf einem kurzen Zeitraum,
+findet er sie nicht und nimmt den aktuellen Kontostand — eine zu hohe Basis, also eine zu lockere
+Verlustsperre. Das Preset aus 3.4b fängt das ab, aber **beides** zusammen ist der sichere Weg:
+erst Historie auf „Gesamte Historie", dann Preset laden, dann im Panel die Basis ablesen.
 
 ---
 
