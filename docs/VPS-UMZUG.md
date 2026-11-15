@@ -69,9 +69,17 @@ Das betrifft nur einen Erklärsatz, keine Regel — aber wenn VPS und PC verschi
 haben, liest dieselbe Akte auf beiden Maschinen anders. Gleiche Zeitzone, gleiche Anzeige.
 
 ### 1.6 Windows-Updates ZUERST, Software danach
-Updates vollständig durchziehen (meist zwei bis drei Runden mit Neustart), **bevor** MT4 und Node
-installiert werden. Ein Anbieter-Image ist Monate alt; so passieren die Neustarts, solange noch
-nichts läuft, was dabei ausfällt.
+Updates vollständig durchziehen, **bevor** MT4 und Node installiert werden. So passieren die
+Neustarts, solange noch nichts läuft, was dabei ausfällt.
+
+> **Konkret für diese Maschine (Stand 15.11.2026):** Contabo liefert Windows Server 2025 als
+> **Build 26100.1742** aus — das ist die Erstausgabe vom **1. November 2024**. Aktuelle Stände
+> liegen bei 26100.3xxxx. Es fehlt also **rund ein Jahr** an Updates. Das sind nicht zwei bis
+> drei Runden, sondern eher vier bis sechs, mit Neustarts dazwischen, und es dauert.
+>
+> Nach jeder Runde erneut „Nach Updates suchen" — Windows zeigt erst nach einem Neustart, was als
+> Nächstes fällig ist. Fertig bist du, wenn zweimal hintereinander nichts mehr kommt.
+> `winver` zeigt danach eine deutlich höhere Build-Nummer als 1742.
 
 ### 1.7 RDP absichern — was wirkt und was nicht
 **Wirkt:**
@@ -154,8 +162,23 @@ Die Datei liegt im Repo und findet `server.js` neben sich — kein Pfad einzutra
 
 ### 2.6 Windows-Update zähmen
 `gpedit.msc` → Computerkonfiguration → Administrative Vorlagen → Windows-Komponenten →
-Windows Update → **Automatische Updates konfigurieren = Aktiviert, Option 7** („herunterladen,
-aber zum Installieren und Neustarten nachfragen"). Danach `gpupdate /force`.
+Windows Update → **Manage end user experience** → **Automatische Updates konfigurieren =
+Aktiviert**.
+
+Dann in der Auswahlliste nachsehen, was dein Build anbietet:
+
+| Option | Bedeutung | Verfügbar |
+|---|---|---|
+| **7** | herunterladen, zum Installieren **und** zum Neustarten nachfragen | Microsoft belegt sie für Server 2016/2019; die Richtlinienseite endet bei 2022. **Für Server 2025 nicht belegt** — nachsehen, ob sie in der Liste steht. |
+| **2** | vor dem Herunterladen **und** vor dem Installieren nachfragen | überall vorhanden |
+
+**Nimm 7, wenn sie da ist — sonst 2.** Beide verhindern, was hier zählt: dass sich die Maschine
+unbeaufsichtigt neu startet. Option 2 ist etwas strenger (sie fragt schon vor dem Laden).
+
+Danach `gpupdate /force`.
+
+> **Nachgeprüft am 15.11.2026:** Für Server 2025 ließ sich Option 7 nicht belegen. Steht sie bei
+> dir in der Liste, sag Bescheid — dann halte ich es hier fest.
 
 **„Aktive Stunden" reichen nicht:** Sie gelten täglich und dürfen höchstens 18 Stunden umfassen —
 24/5 lässt sich damit nicht abdecken.
