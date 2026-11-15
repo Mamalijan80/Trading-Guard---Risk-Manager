@@ -187,40 +187,51 @@ Danach `gpupdate /force`.
 
 Ein frisch bereitgestellter Contabo-Server steht auf Build **26100.1742** (RTM). Wer dort
 "install all updates" klickt, installiert unter anderem **KB5122871** (Build 26100.33438) —
-und Microsoft fuehrt dazu ein bekanntes Problem:
+und Microsoft führt dazu ein bekanntes Problem:
 
 > *"Remote Desktop Services might stop responding after September 2026 security update"* —
-> RDP-Verbindungen brechen nach einigen Minuten ab, Anmeldeprobleme, Haengen bei
+> RDP-Verbindungen brechen nach einigen Minuten ab, Anmeldeprobleme, Hängen bei
 > "Please wait for the Remote Desktop Configuration".
 > Quelle: <https://support.microsoft.com/en-us/help/5122871>
 
 **Das Bild:** Anmeldung per RDP wird angenommen, dann schwarzer Bildschirm, dann
-*"Your Remote Desktop Services session has ended"*. Die Maschine laeuft, nur der Fernzugang
+*"Your Remote Desktop Services session has ended"*. Die Maschine läuft, nur der Fernzugang
 ist tot.
 
-**Behoben in jedem Update ab dem 14.09.2026** (KB5129235 und spaeter). Wer den ganzen Stapel
+**Behoben in jedem Update ab dem 14.09.2026** (KB5129235 und später). Wer den ganzen Stapel
 auf einmal durchlaufen laesst, kommt ueber dieses Loch hinweg — wer mittendrin stehenbleibt,
 sitzt darin fest.
 
 **Der Ausweg und zugleich die Lehre:** ohne zweiten Zugang ist man an dieser Stelle blind.
 Bei Contabo gibt es **VNC** (Kundenbereich -> Manage -> *VNC Password*, dann *VNC Information*);
-das haengt am Wirtsystem und braucht weder RDP noch einen laufenden Netzwerkdienst im Gast.
-Dafuer ist ein VNC-Betrachter auf dem eigenen PC noetig — es gibt **keine** Browser-Konsole.
+das hängt am Wirtsystem und braucht weder RDP noch einen laufenden Netzwerkdienst im Gast.
+Dafuer ist ein VNC-Betrachter auf dem eigenen PC nötig — es gibt **keine** Browser-Konsole.
 **Diesen Zugang einrichten, BEVOR man ihn braucht**, und das VNC-Passwort in den
 Passwortmanager legen.
 
 > **Niemals hart aus- und einschalten, solange "Working on updates" oder "Undoing changes"
-> auf dem Bildschirm steht.** Windows raeumt beim Herunterfahren eine Update-Transaktion auf;
+> auf dem Bildschirm steht.** Windows räumt beim Herunterfahren eine Update-Transaktion auf;
 > ein Stromschlag mitten darin hinterlaesst einen halb angewandten Komponentenspeicher.
-> Reihenfolge, wenn etwas haengt: erst gar nichts, dann die Sitzung sauber **abmelden**, dann
+> Reihenfolge, wenn etwas hängt: erst gar nichts, dann die Sitzung sauber **abmelden**, dann
 > aus dem Betriebssystem heraus neu starten, dann *shutdown* + *start*, und *stop* ganz zuletzt.
 
-> **Ebenfalls nicht hilfreich:** immer wieder neu per RDP verbinden. Jeder Versuch haengt bei
-> dieser Stoerung eine weitere Sitzung auf dem Server auf, und Windows Server erlaubt nur zwei.
+> **Ebenfalls nicht hilfreich:** immer wieder neu per RDP verbinden. Jeder Versuch hängt bei
+> dieser Störung eine weitere Sitzung auf dem Server auf, und Windows Server erlaubt nur zwei.
 
 **Erster, kostenloser Handgriff bei schwarzem RDP-Bild:** im schwarzen Fenster **Strg+Alt+Ende**
-(nicht Strg+Alt+Entf — das faengt der eigene PC ab). Kommt der Windows-Sicherheitsbildschirm,
-lebt die Sitzung: Task-Manager -> Datei -> *Neue Aufgabe ausfuehren* -> `explorer.exe`.
+(nicht Strg+Alt+Entf — das fängt der eigene PC ab). Kommt der Windows-Sicherheitsbildschirm,
+lebt die Sitzung: Task-Manager -> Datei -> *Neue Aufgabe ausführen* -> `explorer.exe`.
+
+**Zweiter kostenloser Handgriff:** die Verwaltungssitzung ansteuern. Sie geht an einem Teil des
+hängenden Sitzungs-Hosts vorbei und kommt manchmal durch, wenn die normale Verbindung abbricht:
+
+```powershell
+mstsc /v:<IP-des-Servers> /admin
+```
+
+**Und das Zeitfenster nutzen:** die Störung setzt erst nach einigen Minuten Betrieb ein. Direkt
+nach einem Neustart ist die Chance am größten. Also neu starten, **sofort** verbinden und als
+Allererstes Windows Update starten — nichts anderes öffnen, kein Explorer-Bummel.
 
 ### 2.7 Samstags-Ritual
 Jeden Samstag bei geschlossenem Markt: Updates suchen, installieren, dann
