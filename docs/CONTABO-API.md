@@ -174,7 +174,7 @@ Die eine Abfrage, die wirklich etwas bringt, ist der Status — zusammen mit dem
 
 ```powershell
 # ...und tut sie auch etwas? (Cockpit über deinen VPN-Zugang)
-(Invoke-RestMethod "http://<vps>:8730/state?acct=421052619").state | Select-Object account, status, equity, posCount
+(Invoke-RestMethod "http://<vps>:8730/state?acct=<Kontonummer>").state | Select-Object account, status, equity, posCount
 ```
 
 Die erste Zeile beantwortet „ist der Rechner an", die zweite „läuft der Schutz". **Beide braucht

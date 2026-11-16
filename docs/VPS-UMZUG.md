@@ -554,23 +554,40 @@ MQL4\Presets\<je Konto eine .set>
 ### 3.4 Presets nicht verwechseln
 Die `.set`-Dateien sehen gleich aus. Lädst du die des falschen Kontos, stehen
 `InpInitialBalance` und die Tagesbasis falsch — **R4b rechnet die Max-Verlust-Sperre dann gegen
-eine Basis, die es auf diesem Konto nie gab.** Benenne sie nach der Kontonummer.
+eine Basis, die es auf diesem Konto nie gab.** Benenne sie **neutral** (`A` und `B`) — der Dateiname wandert ins Paket, auf den
+Server und in jeden Snapshot, und eine Kontonummer hat dort nichts zu suchen.
 
 ### 3.4b Wenn der Zustand NICHT mitkommt (bewusster Neustart)
 Entscheidung vom 15.11.2026: Journal, Equity-Reihen und Screenshots bleiben auf dem PC, der VPS
 startet frisch. Das ist zulässig — es sind Aufzeichnungen, keine Schutzfunktion. **Dann muss aber
 `InpInitialBalance` im Preset stehen.** Ohne `gvariables.dat` leitet der EA die R4b-Basis sonst
 aus der **Einzahlungshistorie** ab und fällt auf den **aktuellen Kontostand** zurück, wenn die
-Historie im Terminal nicht vollständig sichtbar ist (siehe 4.7). Bei Konto 421052619 wäre die
-Basis dann 10.338 statt 10.000 — die Max-Verlust-Sperre also um 338 EUR zu locker.
+Historie im Terminal nicht vollständig sichtbar ist (siehe 4.7).
 
-Im Paket liegt dafür `MQL4\Presets\Mamal_Konto421052619.set` mit `InpInitialBalance=10000`.
+**Die gefährliche Richtung ist eine zu NIEDRIGE Basis, nicht eine zu hohe.** R4b zieht die
+Max-Verlust-Schwelle von der Basis ab. Eine zu hohe Basis legt die Sperre höher und löst damit
+**früher** aus — lästig, aber sicher. Eine zu niedrige Basis legt sie tiefer, und genau die
+liefert die automatische Herleitung, wenn du im Minus einsteigst: dann reißt du das echte Limit
+der Prop-Firma, während das Panel noch Luft anzeigt.
+
+> **Korrektur vom 17.11.2026:** Hier stand, im Paket liege ein fertiges Preset. **Es gibt keins.**
+> Im Repo liegt keine einzige `.set`-Datei, und `*.set` steht in `.gitignore` — es könnte dort
+> also auch gar keine geben. Du musst das Preset auf dem alten Rechner selbst erzeugen
+> (EA-Eigenschaften → Eingaben → *Speichern*), **bevor** du die Terminals dort schließt.
 
 > **Beide Zustandsdateien gemeinsam weglassen oder gemeinsam mitnehmen.** `MamalTrading_Lockstate.dat`
 > allein weglassen geht nicht sauber: der EA merkt sich in `RG_LS_SEEN`, dass die Datei auf diesem
 > Konto schon existiert hat, und wertet ihr **Fehlen** danach als Manipulation. Fehlt die
 > GlobalVariable-Datei `gvariables.dat` mit, ist diese Erinnerung ebenfalls weg und der Start ist
 > ein echter Erststart.
+
+> **Die Regel ist nicht symmetrisch** — das zählt, wenn unterwegs nur eine Datei zu retten ist:
+>
+> - `gvariables.dat` **ohne** `Lockstate.dat` → **verboten.** `RG_LS_SEEN` ist in deinem
+>   Live-Bestand gesetzt; das fehlende Lockstate gilt dann als Manipulation und sperrt den Tag.
+> - `Lockstate.dat` **allein** → zulässig und nützlich: Sperren, Cooldown und Basis kommen zurück.
+> - **beide** → der Normalfall.
+> - **keine** → zulässig, ein echter Erststart — dann muss `InpInitialBalance` ins Preset.
 
 ### 3.5 Starten
 Immer die Verknüpfung auf die `terminal.exe` im **jeweiligen** Ordner. Zweimal dieselbe starten
@@ -677,8 +694,8 @@ wertet das als Problem.
 
 **Zweiter, wichtigerer Grund bei einem Neustart ohne `gvariables.dat`:** aus dieser Historie liest
 der EA die **Einzahlung** und damit die R4b-Basis. Steht der Reiter auf einem kurzen Zeitraum,
-findet er sie nicht und nimmt den aktuellen Kontostand — eine zu hohe Basis, also eine zu lockere
-Verlustsperre. Das Preset aus 3.4b fängt das ab, aber **beides** zusammen ist der sichere Weg:
+findet er sie nicht und nimmt den **aktuellen Kontostand**. Stehst du dabei im Minus, ist die
+Basis zu **niedrig** — und damit die Verlustsperre zu locker, weil ihre Schwelle zu tief liegt. Das Preset aus 3.4b fängt das ab, aber **beides** zusammen ist der sichere Weg:
 erst Historie auf „Gesamte Historie", dann Preset laden, dann im Panel die Basis ablesen.
 
 ---

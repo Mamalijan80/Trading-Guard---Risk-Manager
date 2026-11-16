@@ -41,3 +41,6 @@ cockpit/cockpit-config.json
 
 # Lokale Zugangsdaten fuer das Relay — niemals ins Repo
 cockpit/.env.local
+
+# Notizen zu Anbietern - gehoeren nicht ins oeffentliche Repo
+hetzner.txt
