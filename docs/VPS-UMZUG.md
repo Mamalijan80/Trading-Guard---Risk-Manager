@@ -107,26 +107,225 @@ spürbar langsam wird, höchstens die `MQL4\Files`-Ordner und `cockpit\data` aus
 **Das Problem in einem Satz:** Nach einem Neustart ist niemand angemeldet. Dann startet
 MetaTrader nicht, das Cockpit nicht, und der Schutz ist weg — ohne dass es dir jemand sagt.
 
+### 2.0 Sicherungspunkt, BEVOR du etwas einrichtest
+
+Sobald die Maschine aktuell ist und noch nichts darauf läuft, ist der beste Moment für einen
+Snapshot: Kundenbereich → Instanz → **Snapshots** → anlegen, Name mit Datum
+(`2026-11-16 full updated`). Das geht im laufenden Betrieb.
+
+Vorher: **jeden Snapshot löschen, der vor dem 14.09.2026 entstanden ist.** Er belegt einen Platz
+und wäre ein Ein-Klick-Weg zurück in genau die Aussperrung von letzter Woche.
+
+> **Vier Dinge, die man über Contabo-Snapshots wissen muss:**
+>
+> 1. **Er verfällt nach 30 Tagen automatisch.** Das genaue Datum steht als *autoDeleteDate* im
+>    Panel. Ein heute angelegter Snapshot ist Mitte Dezember weg — ohne Mail, ohne Hinweis.
+>    **Trag dir das Datum in den Kalender.**
+> 2. **Die Anzahl hängt vom Tarif ab** (Cloud VPS 4: einer, VPS 6: zwei, ab VPS 8: drei). Bei
+>    einem einzigen Platz heißt ein neuer Snapshot: den alten vorher löschen.
+> 3. **Ein Rollback ist alles oder nichts.** Er setzt die gesamte Platte auf den Stand des
+>    Snapshots zurück, löscht **alle neueren Snapshots** mit, und stellt sogar die
+>    Hardware-Ausstattung des damaligen Tarifs wieder her. Einzelne Dateien lassen sich nicht
+>    herausholen.
+> 4. **Ein Snapshot ist kein Backup.** Contabo sagt das selbst; er lässt sich nicht
+>    herunterladen und liegt beim selben Anbieter.
+
+**Nur über das Panel zurückrollen, nie über die API.** Der Rollback-Aufruf nimmt einen leeren
+Rumpf entgegen — kein Bestätigungsfeld, keine Rückfrage. Ein versehentlicher Aufruf genügt.
+
 ### 2.1 Eigenen Benutzer für den Betrieb
+
+**Zuerst ein PowerShell-Fenster mit Administratorrechten.** Start öffnen, `powershell` tippen,
+den Treffer markieren, **Strg+Umschalt+Eingabe**. Oder aus einem offenen Fenster heraus:
+
 ```powershell
-net user trader <langes-eigenes-Passwort> /add
-net localgroup "Remote Desktop Users" trader /add
+Start-Process -FilePath "powershell" -Verb RunAs
 ```
+
+Dass es wirklich erhöht ist, beweist dieser Befehl — er muss `True` ausgeben:
+
+```powershell
+([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+```
+
+> **Warum `net user trader <passwort> /add` durchgefallen ist:** ohne Administratorrechte
+> antwortet es `System error 5 has occurred. Access is denied.` Microsofts eigene Seite zu
+> `net user` erwähnt die nötigen Rechte mit keinem Wort — deshalb steht man davor und sieht
+> keinen Grund.
+
+**Dann das Konto anlegen — in zwei Schritten, damit das Passwort nie in der Befehlszeile steht:**
+
+```powershell
+$Passwort = Read-Host 'Passwort fuer trader' -AsSecureString
+```
+
+```powershell
+New-LocalUser -Name 'trader' -Password $Passwort -PasswordNeverExpires -FullName 'Trading' -Description 'MT4 + Cockpit'
+```
+
+```powershell
+net user trader /logonpasswordchg:no
+```
+
+> **Warum nicht in einer Zeile mit dem Passwort darin:** Alles, was du in PowerShell tippst,
+> landet in `%APPDATA%\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt` — einer
+> Klartextdatei, die den Neustart überlebt. PSReadLine filtert zwar Zeilen mit `password`,
+> `token`, `key` oder `secret` heraus, aber `net user trader Geheim123 /add` enthält keins davon
+> und wird wörtlich mitgeschrieben.
+>
+> **Und die Zeichen-Falle:** `cmd` ersetzt alles zwischen zwei Prozentzeichen durch eine
+> Umgebungsvariable — **auch in Anführungszeichen**. Aus `Pa%USERNAME%ss` wird dein
+> Benutzername mitten im Passwort. Ein `^` verschwindet ersatzlos. Am `Read-Host`-Prompt
+> passiert nichts davon. **Aber:** Anführungszeichen, die du dort tippst, werden Teil des
+> Passworts.
+
+**`-PasswordNeverExpires` ist der wichtigste Teil der Zeile.** Ohne ihn erbt das Konto die
+Voreinstellung eines eigenständigen Servers: **42 Tage**. Rund sechs Wochen nach dem Einrichten
+startet die Maschine dann in den Anmeldebildschirm statt in dein Handelssystem — ohne Fehler,
+ohne Meldung, und ohne erkennbaren Zusammenhang zum Tag der Einrichtung.
+
+**Prüfen, nicht vertrauen.** Direkt nachlesen, ob der Haken wirklich sitzt:
+
+```powershell
+net user trader
+```
+
+In der Ausgabe muss stehen: `Password expires` → **`Never`**.
+
+> **Nicht `net accounts /maxpwage:unlimited` nehmen.** Das ist der naheliegende Griff und der
+> falsche: es ändert die Richtlinie für **alle** lokalen Konten, auch für den Administrator, und
+> wird von jeder später angewandten Sicherheitsvorlage stillschweigend zurückgesetzt. Der
+> Kontoschalter betrifft genau ein Konto und überlebt das.
+
+**Den Administrator nicht vergessen** — das ist dein einziger Schlüssel zur Maschine:
+
+```powershell
+Get-LocalUser -Name Administrator | Select-Object Name,PasswordExpires,PasswordLastSet
+```
+
+Steht bei `PasswordExpires` ein Datum, trag es in den Kalender. Läuft es ab, während du nicht
+hinsiehst, kommst du über RDP nicht mehr herein.
+
 **Nicht** in die Administratorengruppe. MT4 und Node brauchen zum *Laufen* keine Adminrechte.
 
-### 2.2 Automatische Anmeldung — mit Sysinternals, nicht per Registry
-[Autologon](https://download.sysinternals.com/files/AutoLogon.zip) herunterladen, als
-Administrator starten, Benutzer `trader`, Domain = Computername, Passwort, **Enable**.
+> **Korrektur gegenüber der ersten Fassung dieser Anleitung:** Hier stand
+> `net localgroup "Remote Desktop Users" trader /add`. **Diese Zeile ersatzlos streichen.**
+>
+> Erstens braucht `trader` sie nicht: die automatische Anmeldung läuft an der **Konsole**, und
+> die hängt an einem anderen Recht (*Allow log on locally*) als RDP (*Allow log on through
+> Remote Desktop Services*). Jedes lokale Konto hat das Konsolenrecht ohnehin.
+>
+> Zweitens ist es ein Sicherheitsgewinn, sie wegzulassen: das Passwort der automatischen
+> Anmeldung liegt als LSA-Geheimnis auf der Maschine und ist für jeden Administrator
+> wiederherstellbar. Ohne RDP-Recht lässt sich damit keine Fernsitzung öffnen.
+>
+> Drittens wäre die Zeile ohnehin zerbrechlich: Gruppennamen sind übersetzt — auf einem
+> deutschen Windows heißt sie `Remotedesktopbenutzer`. Brauchst du die Mitgliedschaft später
+> doch einmal, nimm die sprachunabhängige Form über die feste Kennung:
+>
+> ```powershell
+> Add-LocalGroupMember -SID "S-1-5-32-555" -Member "trader"
+> ```
 
+> **Nicht die Verknüpfung `Windows PowerShell (x86)` benutzen.** `New-LocalUser` und
+> `Add-LocalGroupMember` existieren dort schlicht nicht, und die Fehlermeldung sagt nichts
+> über den Grund.
+
+### 2.2 Automatische Anmeldung — die Reihenfolge entscheidet
+
+**Schritt 1: einmal von Hand als `trader` anmelden.** Nicht überspringen. Das beweist, dass das
+Passwort stimmt, und legt `C:\Users\trader` samt Autostart-Ordner überhaupt erst an — den
+brauchst du in 2.5. Danach wieder abmelden.
+
+> **Warum das zuerst kommt:** Autologon prüft **nichts**. Microsoft schreibt es selbst:
+> *„Autologon does not verify the submitted credentials, nor does it verify that the specified
+> user account is allowed to log on to the computer."* Ein Tippfehler im Passwort erzeugt keine
+> einzige Fehlermeldung — er zeigt sich erst beim nächsten Neustart als tote Maschine.
+
+**Schritt 2: die zwei stillen Blocker prüfen.** Ein Anmelde-Banner verhindert die automatische
+Anmeldung vollständig. Vier Abfragen, **jede einzeln in eine Zeile**:
+
+```powershell
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v legalnoticecaption
+```
+
+```powershell
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v legalnoticetext
+```
+
+```powershell
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v LegalNoticeCaption
+```
+
+```powershell
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v LegalNoticeText
+```
+
+Eine Fehlermeldung „nicht gefunden" ist das gewünschte Ergebnis. Ein vorhandener, aber **leerer**
+Wert stört ebenfalls nicht — nur ein Wert mit Text darin blockiert. Steht dort Text, kommt er
+vom Anbieter-Abbild, nicht von Windows: Microsofts Voreinstellung ist *nicht definiert*.
+
+Und der zweite Blocker, ein Countdown, der sich selbst herunterzählt:
+
+```powershell
+reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoLogonCount
+```
+
+Auch hier: **keine Zeile = gut.** Wird eine Zahl ausgegeben, muss der Wert weg, sonst hört die
+automatische Anmeldung nach so vielen Neustarts von selbst auf. Urteile danach, **ob eine Zeile
+erscheint** — nicht nach dem Wortlaut der Fehlermeldung, der ist übersetzt.
+
+**Schritt 3: erst jetzt Autologon.**
+[Autologon](https://download.sysinternals.com/files/AutoLogon.zip) herunterladen, **als
+Administrator** starten, Benutzer `trader`, Domain = **Computername**, Passwort, **Enable**.
+
+> **Niemals die Kommandozeilenform `autologon user domain password`.** Sie holt sich jede
+> Quoting-Falle zurück und schreibt das Passwort wörtlich in die PSReadLine-Datei. Dialog
+> ausfüllen, Enable drücken, fertig.
+>
 > **Warum nicht von Hand in der Registry:** Dort landet das Passwort als **Klartext**, lesbar
-> auch für die Gruppe „Authentifizierte Benutzer". Autologon legt es verschlüsselt ab.
+> auch für die Gruppe „Authentifizierte Benutzer". Autologon legt es als verschlüsseltes
+> LSA-Geheimnis ab.
 >
 > **Und warum ein eigener Benutzer statt Administrator:** Das hinterlegte Geheimnis ist dann
 > nicht das Admin-Passwort der Maschine. Wer es ausliest, hat MT4 — nicht alles.
 
-**Falle:** Meldest du dich später per VNC-Konsole als *Administrator* an, überschreibt Windows
-den hinterlegten Benutzernamen. Beim nächsten Neustart passt die Kombination nicht mehr und die
-automatische Anmeldung bleibt aus.
+**Schritt 4: beweisen, dass es wirklich die Maschine war.** Nach dem nächsten Neustart zwei
+Befehle — die Anmeldezeit muss im selben Minutenbereich liegen wie der Startzeitpunkt:
+
+```powershell
+query user
+```
+
+```powershell
+(Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+```
+
+Liegt `LOGON TIME` ein, zwei Minuten nach dem Hochfahren, hat sich niemand von Hand angemeldet —
+dann hat es funktioniert. Ohne diese Probe merkst du einen Fehlschlag erst an einem Wochenende,
+an dem du nicht da bist.
+
+**Drei Fallen für danach:**
+
+> **1. Konsolen-Anmeldung als anderer Benutzer.** Meldest du dich später per VNC-Konsole als
+> *Administrator* an, überschreibt Windows den hinterlegten Benutzernamen — Microsoft
+> beschreibt das wörtlich. Beim nächsten Neustart passt die Kombination nicht mehr.
+> Nach so einer Sitzung: Autologon einmal neu setzen.
+>
+> **2. Passwort geändert heißt Autologon neu.** Immer in dieser Richtung. Wer das Passwort
+> ändert, um ein Ablaufproblem zu „reparieren", macht das gespeicherte Geheimnis ungültig und
+> hält den Ablaufschutz dann für wirkungslos.
+>
+> **3. Niemals „Abmelden" — immer „Trennen".** Abmelden beendet **jedes** Programm der Sitzung:
+> beide Terminals und das Cockpit sind dann aus, bis zum nächsten Neustart. Der
+> sprachunabhängige Weg, eine RDP-Sitzung richtig zu verlassen:
+>
+> ```powershell
+> tsdiscon
+> ```
+
+**Wenn du einmal bewusst an der automatischen Anmeldung vorbei willst:** beim Hochfahren die
+**Umschalttaste** gedrückt halten — das unterdrückt sie für genau diesen Start.
 
 ### 2.3 MT4 so einstellen, dass es ohne Dialog wieder am Konto hängt
 In **jedem** Terminal als `trader`: Datei → Am Handelskonto anmelden, **„Kontoinformationen
@@ -165,23 +364,58 @@ Die Datei liegt im Repo und findet `server.js` neben sich — kein Pfad einzutra
 Windows Update → **Manage end user experience** → **Automatische Updates konfigurieren =
 Aktiviert**.
 
-Dann in der Auswahlliste nachsehen, was dein Build anbietet:
+Dann in der Auswahlliste:
 
-| Option | Bedeutung | Verfügbar |
-|---|---|---|
-| **7** | herunterladen, zum Installieren **und** zum Neustarten nachfragen | Microsoft belegt sie für Server 2016/2019; die Richtlinienseite endet bei 2022. **Für Server 2025 nicht belegt** — nachsehen, ob sie in der Liste steht. |
-| **2** | vor dem Herunterladen **und** vor dem Installieren nachfragen | überall vorhanden |
+| Option | Was sie wirklich tut |
+|---|---|
+| **7** | lädt **automatisch herunter**, fragt vor dem **Installieren** und vor dem **Neustarten** |
+| **2** | fragt schon vor dem **Herunterladen** und vor dem Installieren |
 
-**Nimm 7, wenn sie da ist — sonst 2.** Beide verhindern, was hier zählt: dass sich die Maschine
-unbeaufsichtigt neu startet. Option 2 ist etwas strenger (sie fragt schon vor dem Laden).
+**Nimm 7.** Microsoft empfiehlt sie ausdrücklich für Server: *„For server devices, leverage
+Configure Automatic Updates options 7 — notify to install and notify to reboot."* In der
+Richtlinienvorlage ist sie als *(Windows Server 2016 and later only)* markiert — also auch für
+Server 2025 vorgesehen.
+
+Die vollständige Beschriftung in der Liste lautet **„7 - Auto Download, Notify to install, Notify
+to Restart"** (deutsch: *„7 - Automatisch herunterladen, Zur Installation benachrichtigen, Zum
+Neustart benachrichtigen"*). Achte auf den ersten Teil: sie **lädt** ohne Rückfrage. Nur das
+Installieren und der Neustart warten auf dich. Wer das Herunterladen auch unterbinden will,
+nimmt 2.
 
 Danach `gpupdate /force`.
 
-> **Nachgeprüft am 15.11.2026:** Für Server 2025 ließ sich Option 7 nicht belegen. Steht sie bei
-> dir in der Liste, sag Bescheid — dann halte ich es hier fest.
+**Nachsehen, ob es wirklich gegriffen hat** — `gpupdate` meldet Erfolg in beiden Fällen, und ein
+im falschen Typ geschriebener Wert speichert sich ohne Fehler:
 
-**„Aktive Stunden" reichen nicht:** Sie gelten täglich und dürfen höchstens 18 Stunden umfassen —
-24/5 lässt sich damit nicht abdecken.
+```powershell
+reg query "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v AUOptions
+```
+
+Erwartet wird `REG_DWORD` mit dem Wert `0x7`.
+
+> **Korrektur zum 15.11.2026:** Hier stand, Option 7 ließe sich für Server 2025 nicht belegen.
+> Das war mein Eindruck aus dem damaligen Durchlauf, nicht der dokumentierte Stand — Microsoft
+> führt sie für Server 2016 und neuer. Prüf es auf deiner Maschine nach: steht sie in der Liste,
+> nimm sie. Steht sie wirklich nicht da, nimm 2 und sag mir Bescheid.
+
+> **Der gefährlichste einzelne Klick in diesem ganzen Dokument:** die Einstellung später wieder
+> auf **„Nicht konfiguriert"** zu stellen. Das ist nicht „aus", sondern **automatisch
+> herunterladen und installieren** — also genau das Verhalten, das dich letzte Woche ausgesperrt
+> hat. Auch **„Deaktiviert"** ist falsch: das nimmt dir zusätzlich die Benachrichtigung. Willst
+> du etwas rückgängig machen, geh auf *Aktiviert* mit einer anderen Zahl, nie auf *Nicht
+> konfiguriert*.
+
+**„Aktive Stunden" reichen nicht:** Sie sind ein einziges Tagesfenster von höchstens **18
+Stunden** — bleiben also jeden Tag mindestens sechs Stunden offen, auch an Handelstagen. Eine
+Handelswoche ist ein Block von rund 120 Stunden am Stück. Außerdem unterdrücken sie nur den
+**Neustart**, nicht die Installation.
+
+**„Updates anhalten" ist auch keine Lösung:** Es gibt die Funktion auf Server 2025
+(*Einstellungen → Windows Update → Updates anhalten*), aber sie läuft nach höchstens fünf Wochen
+von selbst ab und nimmt den Betrieb dann wieder auf. Eine Verzögerung, keine Regel.
+
+**Nur eine Schutzmaßnahme setzen, nicht mehrere.** Mehrere Neustart-Richtlinien gleichzeitig
+ergeben nicht mehr Schutz, sondern undefiniertes Verhalten — manche heben einander auf.
 
 ### 2.6b Die Falle beim allerersten Update-Durchlauf (erlebt am 15.11.2026)
 
@@ -201,6 +435,25 @@ ist tot.
 **Behoben in jedem Update ab dem 14.09.2026** (KB5129235 und später). Wer den ganzen Stapel
 auf einmal durchlaufen laesst, kommt ueber dieses Loch hinweg — wer mittendrin stehenbleibt,
 sitzt darin fest.
+
+**Der Stand, auf dem die Maschine seit dem 16.11.2026 sicher ist** (an der Microsoft-Quelle
+nachgesehen, nicht geschätzt):
+
+| Datum | Update | Build |
+|---|---|---|
+| 10.11.2026 | KB5131080 (regulärer Patchday) | 26100.33822 |
+| 13.11.2026 | KB5136489 (außer der Reihe) | 26100.33828 |
+
+Nachsehen, worauf du wirklich stehst:
+
+```powershell
+cmd /c ver
+```
+
+Zeigt die Zeile eine dieser beiden Zahlen — oder eine höhere —, liegt das Loch von KB5122871
+(26100.33438) hinter dir. **Urteile immer nach dieser Build-Nummer, nie nach dem
+Windows-Update-Fenster**, das „Sie sind auf dem neuesten Stand" auch dann anzeigt, wenn ein
+Update heruntergeladen, aber noch nicht angewendet ist.
 
 **Der Ausweg und zugleich die Lehre:** ohne zweiten Zugang ist man an dieser Stelle blind.
 Bei Contabo gibt es **VNC** (Kundenbereich -> Manage -> *VNC Password*, dann *VNC Information*);
@@ -346,6 +599,27 @@ MamalTrading_Lockstate.dat
 Mamal_*.png              (die Bildschirmfotos)
 ```
 **Code und Oberfläche sehen nach einem Klon vollständig aus. Der Zustand ist es nicht.**
+
+> **Vor dem Packen: den EA neu übersetzen.** Nachgesehen am 16.11.2026 in diesem Repo:
+> `ea/mt4/MamalTrading.ex4` ist vom **24.09.2026**, `ea/mt4/MamalTrading.mq4` vom
+> **07.11.2026** — die übersetzte Datei ist sechs Wochen älter als der Quelltext. MT4 lädt
+> ausschließlich die `.ex4`. Wer jetzt packt, nimmt den alten Stand mit auf den Server und
+> wundert sich dort über Verhalten, das im Quelltext längst korrigiert ist.
+>
+> Also: MetaEditor öffnen, `MamalTrading.mq4` laden, **F7**, auf **0 errors** warten — und erst
+> danach die `.ex4` ins Paket legen. Die im Protokoll gemeldete Version muss `0.73` sein.
+
+> **Diese beiden fehlen in der Liste oben, gehören aber dazu:**
+>
+> - `profiles\gvariables.dat` — weder im Repo noch von `.gitignore` erfasst; ein Klon bringt
+>   sie nicht mit. Siehe 4.3: ohne sie sperrt sich der EA.
+> - `cockpit/.env.local` — enthält das Cockpit-Passwort und den Relais-Token im Klartext.
+>   **Niemals committen, niemals in eine Cloud legen.** Sie wird nur beim Start gelesen: wer
+>   sie später ändert, muss den Cockpit-Prozess neu starten, sonst gilt weiter der alte Wert.
+>
+> **Ein Preset `.set` existiert im Repo derzeit nicht** (nachgesehen am 16.11.2026) — Abschnitt
+> 3.4b setzt eines voraus. Du musst es auf dem alten Rechner erst erzeugen: im EA-Dialog
+> *Speichern* drücken und die Datei mitnehmen.
 
 ### 4.3 Die zwei Dateien, die zusammen gehören
 `profiles\gvariables.dat` **und** `MQL4\Files\MamalTrading_Lockstate.dat` — **immer beide oder
