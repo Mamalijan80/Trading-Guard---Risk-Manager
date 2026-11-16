@@ -360,9 +360,15 @@ Die Datei liegt im Repo und findet `server.js` neben sich — kein Pfad einzutra
 > Konten", ohne dass ein Fehler erscheint.
 
 ### 2.6 Windows-Update zähmen
-`gpedit.msc` → Computerkonfiguration → Administrative Vorlagen → Windows-Komponenten →
-Windows Update → **Manage end user experience** → **Automatische Updates konfigurieren =
-Aktiviert**.
+
+> **Die Maschine läuft auf englischem Windows** (nachgesehen am 16.11.2026). Menüpfade stehen
+> deshalb hier auf Englisch, die deutsche Entsprechung in Klammern dahinter.
+
+`gpedit.msc` → **Computer Configuration → Administrative Templates → Windows Components →
+Windows Update → Manage end user experience → Configure Automatic Updates → Enabled**
+
+*(deutsch: Computerkonfiguration → Administrative Vorlagen → Windows-Komponenten →
+Windows Update → Benutzererfahrung verwalten → Automatische Updates konfigurieren → Aktiviert)*
 
 Dann in der Auswahlliste:
 
