@@ -5,6 +5,44 @@
 
 ---
 
+## Stand 21.11.2026 (Samstag) — die Entscheidungen sind gefallen
+
+| Frage | Antwort | Folge |
+|---|---|---|
+| Offene Positionen? | **keine** | Das Fenster ist harmlos. Kein Broker-Stop nötig, kein FULL CLOSE, keine Pending-Orders. |
+| Zustandsdateien? | **keine mitnehmen — echter Erststart** | Zulässig, kein Alarm (`:2445` *„genuine first start: create it, no alert"*). **Dafür ist `InpInitialBalance` im Preset ab jetzt der EINZIGE Träger der richtigen Basis.** |
+| Panel-Sprache? | **Englisch** | `InpLang = LANG_EN` im Preset (`:170-171`). |
+| Markt | **geschlossen** | Siehe den Kasten direkt darunter. |
+
+### ⚠ Die Wochenend-Regel: einrichten heute, SCHARFSCHALTEN bei Marktöffnung
+
+**Den EA erst anhängen und AutoTrading erst einschalten, wenn wieder Kurse ticken.**
+
+Begründung aus dem Quelltext selbst (`:328-332`):
+
+> *„After a restart in a tickless phase (weekend) `TimeCurrent()` returns the cache from the last
+> tick — an offset built from it makes `SrvTime()` lag by the whole tick gap (up to ~2.5 days):
+> expired locks re-activate themselves, SafeCloseAll closes at the Monday open."*
+
+Der Schutz dagegen (`:345-352`) greift nur, wenn bereits ein Offset **gespeichert** ist. Bei
+einem echten Erststart ist er das nicht: `:354` nimmt dann die Freitagszeit als Serverzeit an.
+Der EA liefe das ganze Wochenende rund zwei Tage in der Vergangenheit — Tagesschlüssel,
+nächste Server-Mitternacht und Schlussschwelle alle falsch gesetzt.
+
+Es kostet dich **nichts**: bei geschlossenem Markt gibt es nichts zu schützen.
+
+- **Heute:** Schritte 1–22 (alles bis einschließlich Kontoanmeldung und Historie)
+- **Bei Marktöffnung:** Schritte 23–33 (EA anhängen, prüfen, scharfschalten, Cockpit)
+
+### Und eine Eigenheit des Wochenendes
+
+Die Woche beginnt laut `InpWeekStartDay = 0` am **Sonntag** (`:164`). Ein heute gesetztes
+Wochenrisiko gilt für die **ablaufende** Woche. Nach dem Wochenwechsel musst du es **erneut**
+setzen, sonst bleiben BUY/SELL grau und jede Eröffnung ist blockiert (`:3345-3347`).
+Das ist der Schutz, der arbeitet — kein Fehler.
+
+---
+
 ## Die goldene Regel
 
 **Erster Befehl in jedem Fenster, bevor du irgendetwas anderes tippst:**
