@@ -44,3 +44,10 @@ cockpit/.env.local
 
 # Notizen zu Anbietern - gehoeren nicht ins oeffentliche Repo
 hetzner.txt
+
+# Persoenliche Betriebsunterlagen - beschreiben DIESEN Server, DIESE Konten,
+# DIESE Sicherheitslage. Das Repo ist oeffentlich; sie gehoeren nicht hinein.
+docs/VPS-UMZUG.md
+docs/UMZUG-HEUTE.md
+docs/HEUTE-21-11.md
+docs/STAND-UND-TODO.md

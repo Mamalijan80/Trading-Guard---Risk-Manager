@@ -16,7 +16,7 @@ steht es dabei.
 
 **Die API sieht deine Handelsdaten nicht.** Sie weiß nicht, ob MetaTrader läuft oder ob der EA
 etwas blockiert hat — nur ob der Server an ist. Für die Handelsdaten brauchst du RDP bzw. das
-Cockpit im Browser; das steht in [VPS-UMZUG.md](VPS-UMZUG.md) und
+Cockpit im Browser; das steht in der Umzugsanleitung (nicht veröffentlicht) und
 [../cockpit/REMOTE-ACCESS.md](../cockpit/REMOTE-ACCESS.md).
 
 Beides zusammen ergibt aber Sinn: Die API beantwortet „ist die Maschine überhaupt wach?", das
@@ -182,4 +182,4 @@ man** — eine laufende Maschine mit ausgeschaltetem AutoTrading sieht in der AP
 
 ---
 
-*Verwandt: [VPS-UMZUG.md](VPS-UMZUG.md) · [../cockpit/REMOTE-ACCESS.md](../cockpit/REMOTE-ACCESS.md)*
+*Verwandt: [../cockpit/REMOTE-ACCESS.md](../cockpit/REMOTE-ACCESS.md)*
